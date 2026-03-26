@@ -233,12 +233,20 @@ jobs:
           java-version: "17"
           distribution: "temurin"
 
+      - name: Login a GHCR (imagen pre-construida Ambiente A)
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Iniciar Ambiente A (docker-compose)
         run: |
           cd simulation
-          docker compose up -d --wait
+          docker compose pull microservice-a
+          docker compose up -d --no-build
           echo "⏳ Esperando que los servicios estén disponibles..."
-          sleep 20
+          sleep 30
           docker compose ps
 
       - name: Verificar salud del Microservicio A

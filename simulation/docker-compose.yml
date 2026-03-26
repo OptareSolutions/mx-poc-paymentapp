@@ -28,6 +28,7 @@ services:
 
   # ── Microservice A ───────────────────────────────────────────────────────────
   microservice-a:
+    image: ghcr.io/optaresolutions/att-poc-paymentbox/microservice-a:latest
     build:
       context: ../microservice-a
       dockerfile: src/Dockerfile
