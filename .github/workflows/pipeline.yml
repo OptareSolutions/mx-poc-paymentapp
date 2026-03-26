@@ -8,7 +8,9 @@ on:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_NAME: ${{ github.repository }}/microservice-a
+  IMAGE_NAME_A: ${{ github.repository }}/microservice-a
+  IMAGE_NAME_B: ${{ github.repository }}/microservice-b
+  IMAGE_NAME_UI: ${{ github.repository }}/ui-paymentbox
 
 # ══════════════════════════════════════════════════════════════════════════════
 # JOB 1 — Build & Quality (Shift-Left: unitarios + seguridad primero)
@@ -48,6 +50,21 @@ jobs:
           name: unit-test-results
           path: microservice-a/build/reports/
 
+      - name: "[microservice-b] Build y Tests Unitarios"
+        working-directory: microservice-b
+        run: gradle test jacocoTestReport --no-daemon
+
+      - name: "[microservice-b] Verificar Cobertura (≥ 80%)"
+        working-directory: microservice-b
+        run: gradle jacocoTestCoverageVerification --no-daemon
+
+      - name: Subir resultados de tests microservice-b
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: unit-test-results-b
+          path: microservice-b/build/reports/
+
       - name: "Seguridad: Veracode Pipeline Scan (simulado)"
         run: |
           echo "✅ [Shift-Left] Veracode SAST scan simulado para PoC."
@@ -58,15 +75,25 @@ jobs:
           echo "✅ [Shift-Left] SonarQube scan simulado para PoC."
           echo "En producción: usar SonarSource/sonarcloud-github-action."
 
-      - name: Build JAR (sin tests - ya ejecutados)
+      - name: Build JAR microservice-a (sin tests - ya ejecutados)
         working-directory: microservice-a
         run: gradle bootJar --no-daemon -x test
 
-      - name: Subir artefacto JAR
+      - name: Subir artefacto JAR microservice-a
         uses: actions/upload-artifact@v4
         with:
           name: app-jar
           path: microservice-a/build/libs/*.jar
+
+      - name: "[microservice-b] Build JAR"
+        working-directory: microservice-b
+        run: gradle bootJar --no-daemon -x test
+
+      - name: Subir artefacto JAR microservice-b
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-jar-b
+          path: microservice-b/build/libs/*.jar
 
 # ══════════════════════════════════════════════════════════════════════════════
 # JOB 2 — Integration & Contract (Ambiente A Simulado)
@@ -164,8 +191,40 @@ jobs:
             (echo "❌ FALLO DE CONTRATO: API Recibo no responde con 200" && exit 1)
           echo "✅ Contrato API Recibo validado."
 
+      - name: Download JAR microservice-b
+        uses: actions/download-artifact@v4
+        with:
+          name: app-jar-b
+          path: microservice-b/build/libs/
+
+      - name: Iniciar microservice-b para contrato inter-servicios
+        run: |
+          java -jar microservice-b/build/libs/*.jar \
+            --spring.datasource.url=jdbc:postgresql://localhost:5432/att_paymentbox \
+            --spring.datasource.username=att_user \
+            --spring.datasource.password=att_pass \
+            --server.port=8081 &
+          echo "⏳ Esperando arranque de microservice-b..."
+          for i in {1..12}; do
+            STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8081/actuator/health || echo "000")
+            echo "Intento $i: HTTP $STATUS"
+            [ "$STATUS" -eq "200" ] && echo "✅ microservice-b disponible" && break
+            sleep 5
+          done
+          if [ "$STATUS" -ne "200" ]; then
+            echo "❌ microservice-b no arrancó" && exit 1
+          fi
+
+      - name: "⚠️  DEMO BREAK 1 → Karate Contrato microservice-a↔microservice-b"
+        run: |
+          cd tests/functional-karate
+          echo "🔍 Validando contrato público de microservice-b (campos 'telefono', 'nombre', 'status')..."
+          mvn test -Dkarate.env=ci -Dtest=RecargaFlowRunner#testContratoMicroservicios \
+            --no-transfer-progress
+          echo "✅ Contrato inter-servicios validado."
+
 # ══════════════════════════════════════════════════════════════════════════════
-# JOB 3 — Image Ops (Build & Push Docker Image)
+# JOB 3 — Image Ops (Build & Push Docker Images)
 # ══════════════════════════════════════════════════════════════════════════════
   image-ops:
     name: "3 · Image Ops (Docker Build)"
@@ -179,11 +238,17 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Download JAR artifact
+      - name: Download JAR artifact microservice-a
         uses: actions/download-artifact@v4
         with:
           name: app-jar
           path: microservice-a/build/libs/
+
+      - name: Download JAR artifact microservice-b
+        uses: actions/download-artifact@v4
+        with:
+          name: app-jar-b
+          path: microservice-b/build/libs/
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -195,23 +260,70 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Extract Docker metadata
-        id: meta
+      - name: Extract Docker metadata (microservice-a)
+        id: meta-a
         uses: docker/metadata-action@v5
         with:
-          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_A }}
           tags: |
             type=sha,prefix=poc-
             type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
 
-      - name: Build and Push Docker Image
+      - name: Build and Push microservice-a
         uses: docker/build-push-action@v5
         with:
           context: microservice-a
           file: microservice-a/src/Dockerfile
           push: ${{ github.event_name != 'pull_request' }}
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
+          tags: ${{ steps.meta-a.outputs.tags }}
+          labels: ${{ steps.meta-a.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Extract Docker metadata (microservice-b)
+        id: meta-b
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_B }}
+          tags: |
+            type=sha,prefix=poc-
+            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
+
+      - name: Build and Push microservice-b
+        uses: docker/build-push-action@v5
+        with:
+          context: microservice-b
+          file: microservice-b/src/Dockerfile
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.meta-b.outputs.tags }}
+          labels: ${{ steps.meta-b.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Set up Node.js (para build Angular UI)
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: ui-paymentbox/package-lock.json
+
+      - name: Extract Docker metadata (ui-paymentbox)
+        id: meta-ui
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_UI }}
+          tags: |
+            type=sha,prefix=poc-
+            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
+
+      - name: Build and Push ui-paymentbox
+        uses: docker/build-push-action@v5
+        with:
+          context: ui-paymentbox
+          file: ui-paymentbox/Dockerfile
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.meta-ui.outputs.tags }}
+          labels: ${{ steps.meta-ui.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
@@ -243,15 +355,31 @@ jobs:
       - name: Iniciar Ambiente A (docker-compose)
         run: |
           cd simulation
-          docker compose pull microservice-a
+          docker compose pull microservice-a microservice-b || true
           docker compose up -d --no-build
-          echo "⏳ Esperando arranque de servicios (60s)..."
-          sleep 60
+          echo "⏳ Esperando arranque de servicios (90s)..."
+          sleep 90
           docker compose ps
+          echo "--- Logs microservice-b ---"
+          docker compose logs --tail=30 microservice-b || true
           echo "--- Logs microservice-a ---"
           docker compose logs --tail=50 microservice-a || true
           echo "--- Logs db-simulado ---"
           docker compose logs --tail=20 db-simulado || true
+
+      - name: Verificar salud de microservice-b
+        run: |
+          for i in {1..15}; do
+            STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8081/actuator/health || echo "000")
+            echo "Intento $i: HTTP $STATUS"
+            [ "$STATUS" -eq "200" ] && echo "✅ microservice-b disponible" && break
+            sleep 5
+          done
+          if [ "$STATUS" -ne "200" ]; then
+            echo "❌ microservice-b no arrancó - Mostrando logs:"
+            cd simulation && docker compose logs --tail=80 microservice-b
+            exit 1
+          fi
 
       - name: Verificar salud del Microservicio A
         run: |
@@ -267,7 +395,7 @@ jobs:
             exit 1
           fi
 
-      - name: "Karate DSL - Tests Funcionales (Pasos 2, 3, 4, 5, 7, 8)"
+      - name: "⚠️  DEMO BREAK 2 → Karate DSL - Tests Funcionales (Pasos 2, 3, 4, 5, 7, 8)"
         run: |
           cd tests/functional-karate
           mvn test -Dkarate.env=ci --no-transfer-progress

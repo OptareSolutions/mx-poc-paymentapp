@@ -42,8 +42,11 @@ services:
       DB_PASS: att_pass
       MOCK_OPERADOR_URL: http://mock-operador:4010
       MOCK_RECIBO_URL: http://mock-recibo:4010
+      CUSTOMER_PROFILE_URL: http://microservice-b:8081
     depends_on:
       db-simulado:
+        condition: service_healthy
+      microservice-b:
         condition: service_healthy
       mock-operador:
         condition: service_started
@@ -54,6 +57,42 @@ services:
       interval: 15s
       timeout: 5s
       retries: 5
+    networks: [att-poc-net]
+
+  # ── Microservice B (Customer Profile Service) ────────────────────────────────
+  microservice-b:
+    image: ghcr.io/optaresolutions/att-poc-paymentbox/microservice-b:latest
+    build:
+      context: ../microservice-b
+      dockerfile: src/Dockerfile
+    container_name: att-microservice-b
+    ports: ["8081:8081"]
+    environment:
+      DB_HOST: db-simulado
+      DB_PORT: 5432
+      DB_NAME: att_paymentbox
+      DB_USER: att_user
+      DB_PASS: att_pass
+    depends_on:
+      db-simulado:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8081/actuator/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+    networks: [att-poc-net]
+
+  # ── UI PaymentBox (Angular SPA via Nginx) ───────────────────────────────────
+  ui-paymentbox:
+    image: ghcr.io/optaresolutions/att-poc-paymentbox/ui-paymentbox:latest
+    build:
+      context: ../ui-paymentbox
+    container_name: att-ui-paymentbox
+    ports: ["4200:80"]
+    depends_on:
+      microservice-a:
+        condition: service_healthy
     networks: [att-poc-net]
 
   # ── Mock Operador - Paso 4 ───────────────────────────────────────────────────
@@ -71,7 +110,7 @@ services:
     container_name: att-mock-recibo
     command: mock -h 0.0.0.0 /public/api.yaml
     volumes: ['./prism-mocks/recibo.yaml:/public/api.yaml:ro']
-    ports: ["4011:4011"]
+    ports: ["4011:4010"]   # host:4011 → container:4010 (Prism default port)
     networks: [att-poc-net]
 
 volumes:

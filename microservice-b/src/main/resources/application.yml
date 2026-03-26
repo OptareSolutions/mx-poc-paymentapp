@@ -1,6 +1,6 @@
 spring:
   application:
-    name: paymentbox-microservice-a
+    name: paymentbox-customer-profile
 
   datasource:
     url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:att_paymentbox}
@@ -15,14 +15,7 @@ spring:
     open-in-view: false
 
 server:
-  port: ${SERVER_PORT:8080}
-
-att:
-  mocks:
-    operador-url: ${MOCK_OPERADOR_URL:http://localhost:4010}
-    recibo-url: ${MOCK_RECIBO_URL:http://localhost:4011}
-  services:
-    customer-profile-url: ${CUSTOMER_PROFILE_URL:http://localhost:8081}
+  port: ${SERVER_PORT:8081}
 
 management:
   endpoints:

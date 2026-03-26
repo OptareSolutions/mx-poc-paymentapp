@@ -13,3 +13,5 @@ att:
   mocks:
     operador-url: http://localhost:4010
     recibo-url: http://localhost:4011
+  services:
+    customer-profile-url: http://localhost:8081

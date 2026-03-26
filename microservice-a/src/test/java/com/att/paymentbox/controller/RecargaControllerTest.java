@@ -1,8 +1,8 @@
 package com.att.paymentbox.controller;
 
+import com.att.paymentbox.dto.CustomerProfileDto;
 import com.att.paymentbox.dto.PagoRequest;
 import com.att.paymentbox.dto.PagoResponse;
-import com.att.paymentbox.model.Cliente;
 import com.att.paymentbox.model.MontosRecarga;
 import com.att.paymentbox.service.RecargaService;
 import org.junit.jupiter.api.BeforeEach;
@@ -32,11 +32,11 @@ class RecargaControllerTest {
     @InjectMocks
     private RecargaController recargaController;
 
-    private Cliente billyUno;
+    private CustomerProfileDto billyUno;
 
     @BeforeEach
     void setUp() {
-        billyUno = new Cliente();
+        billyUno = new CustomerProfileDto();
         billyUno.setNombre("Billy 1 - Cortes");
         billyUno.setTelefono("4544");
         billyUno.setStatus("ACTIVO");
@@ -47,7 +47,7 @@ class RecargaControllerTest {
     void buscarCliente_retorna200() {
         when(recargaService.buscarClienteActivo("4544")).thenReturn(billyUno);
 
-        ResponseEntity<Cliente> response = recargaController.buscarCliente("4544");
+        ResponseEntity<CustomerProfileDto> response = recargaController.buscarCliente("4544");
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
         assertThat(response.getBody()).isNotNull();

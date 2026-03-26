@@ -1,13 +1,13 @@
 package com.att.paymentbox.service;
 
+import com.att.paymentbox.client.CustomerProfileClient;
 import com.att.paymentbox.client.OperadorApiClient;
 import com.att.paymentbox.client.ReciboApiClient;
+import com.att.paymentbox.dto.CustomerProfileDto;
 import com.att.paymentbox.dto.PagoRequest;
 import com.att.paymentbox.dto.PagoResponse;
-import com.att.paymentbox.model.Cliente;
 import com.att.paymentbox.model.MontosRecarga;
 import com.att.paymentbox.model.Pago;
-import com.att.paymentbox.repository.ClienteRepository;
 import com.att.paymentbox.repository.MontosRecargaRepository;
 import com.att.paymentbox.repository.PagoRepository;
 import org.junit.jupiter.api.BeforeEach;
@@ -22,7 +22,6 @@ import org.springframework.web.server.ResponseStatusException;
 import java.math.BigDecimal;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.*;
@@ -32,7 +31,7 @@ import static org.mockito.Mockito.*;
 @DisplayName("RecargaService - Flujo de 8 Pasos AT&T PaymentBox")
 class RecargaServiceTest {
 
-    @Mock private ClienteRepository clienteRepository;
+    @Mock private CustomerProfileClient customerProfileClient;
     @Mock private MontosRecargaRepository montosRepository;
     @Mock private PagoRepository pagoRepository;
     @Mock private OperadorApiClient operadorApiClient;
@@ -41,11 +40,11 @@ class RecargaServiceTest {
     @InjectMocks
     private RecargaService recargaService;
 
-    private Cliente billyUno;
+    private CustomerProfileDto billyUno;
 
     @BeforeEach
     void setUp() {
-        billyUno = new Cliente();
+        billyUno = new CustomerProfileDto();
         billyUno.setNombre("Billy 1 - Cortes");
         billyUno.setTelefono("4544");
         billyUno.setStatus("ACTIVO");
@@ -53,22 +52,23 @@ class RecargaServiceTest {
 
     // ── Paso 2 ────────────────────────────────────────────────────────────────
     @Test
-    @DisplayName("Paso 2: Debe encontrar el perfil Billy 1 activo por teléfono")
+    @DisplayName("Paso 2: Debe encontrar el perfil Billy 1 activo vía Customer Profile Service")
     void paso2_buscarClienteActivo_billyUnoExiste() {
-        when(clienteRepository.findByTelefonoAndStatus("4544", "ACTIVO"))
-                .thenReturn(Optional.of(billyUno));
+        when(customerProfileClient.getCustomerProfile("4544")).thenReturn(billyUno);
 
-        Cliente result = recargaService.buscarClienteActivo("4544");
+        CustomerProfileDto result = recargaService.buscarClienteActivo("4544");
 
         assertThat(result.getNombre()).isEqualTo("Billy 1 - Cortes");
         assertThat(result.getStatus()).isEqualTo("ACTIVO");
     }
 
     @Test
-    @DisplayName("Paso 2: Debe lanzar 404 si el cliente no existe (Fail Fast)")
-    void paso2_buscarClienteActivo_clienteNoExiste_lanza404() {
-        when(clienteRepository.findByTelefonoAndStatus("9999", "ACTIVO"))
-                .thenReturn(Optional.empty());
+    @DisplayName("Paso 2: Debe lanzar 404 si el Customer Profile Service retorna cliente inactivo")
+    void paso2_buscarClienteActivo_clienteInactivo_lanza404() {
+        CustomerProfileDto inactivo = new CustomerProfileDto();
+        inactivo.setTelefono("9999");
+        inactivo.setStatus("INACTIVO");
+        when(customerProfileClient.getCustomerProfile("9999")).thenReturn(inactivo);
 
         assertThatThrownBy(() -> recargaService.buscarClienteActivo("9999"))
                 .isInstanceOf(ResponseStatusException.class)
@@ -128,8 +128,7 @@ class RecargaServiceTest {
     @Test
     @DisplayName("Pasos 6&7: Debe registrar pago con folio y status APLICADO")
     void paso7_registrarPago_persisteEnDB() {
-        when(clienteRepository.findByTelefonoAndStatus("4544", "ACTIVO"))
-                .thenReturn(Optional.of(billyUno));
+        when(customerProfileClient.getCustomerProfile("4544")).thenReturn(billyUno);
         when(pagoRepository.save(any(Pago.class))).thenAnswer(inv -> inv.getArgument(0));
 
         PagoRequest request = new PagoRequest();

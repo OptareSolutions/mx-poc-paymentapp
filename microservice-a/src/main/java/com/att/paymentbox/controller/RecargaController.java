@@ -1,8 +1,8 @@
 package com.att.paymentbox.controller;
 
+import com.att.paymentbox.dto.CustomerProfileDto;
 import com.att.paymentbox.dto.PagoRequest;
 import com.att.paymentbox.dto.PagoResponse;
-import com.att.paymentbox.model.Cliente;
 import com.att.paymentbox.model.MontosRecarga;
 import com.att.paymentbox.service.RecargaService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -28,7 +28,7 @@ public class RecargaController {
     // ── Paso 2: Focalizar Cliente ─────────────────────────────────────────────
     @GetMapping("/clientes/buscar")
     @Operation(summary = "Paso 2 - Focalizar cliente por teléfono (Billy 1)")
-    public ResponseEntity<Cliente> buscarCliente(@RequestParam String telefono) {
+    public ResponseEntity<CustomerProfileDto> buscarCliente(@RequestParam String telefono) {
         return ResponseEntity.ok(recargaService.buscarClienteActivo(telefono));
     }
 

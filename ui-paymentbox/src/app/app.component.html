@@ -1,0 +1,258 @@
+<!-- ═══════════════════════════════════════════════════════
+     AT&T PaymentBox — UI de Demostración QA PoC
+     Bootstrap 5 + Bootstrap Icons (CDN en index.html)
+════════════════════════════════════════════════════════ -->
+<div class="min-vh-100 d-flex flex-column">
+
+  <!-- Header -->
+  <nav class="navbar navbar-dark bg-primary shadow-sm">
+    <div class="container">
+      <span class="navbar-brand fw-bold fs-5">
+        <i class="bi bi-wifi me-2"></i>AT&T PaymentBox
+      </span>
+      <span class="badge bg-light text-primary">QA PoC Demo</span>
+    </div>
+  </nav>
+
+  <!-- Progress bar -->
+  <div class="bg-light border-bottom py-2 sticky-top">
+    <div class="container">
+      <div class="d-flex align-items-center gap-1 flex-wrap justify-content-center">
+        <ng-container *ngFor="let s of steps; let last = last">
+          <div class="d-flex align-items-center">
+            <span class="badge rounded-pill px-3 py-2"
+              [class.bg-primary]="currentStep === s.n"
+              [class.bg-success]="currentStep > s.n"
+              [class.bg-secondary]="currentStep < s.n"
+              style="font-size:0.75rem; min-width:80px">
+              <i class="bi me-1"
+                [class.bi-circle-fill]="currentStep === s.n"
+                [class.bi-check-circle-fill]="currentStep > s.n"
+                [class.bi-circle]="currentStep < s.n"></i>
+              {{ s.n }}. {{ s.label }}
+            </span>
+            <i *ngIf="!last" class="bi bi-chevron-right text-muted mx-1" style="font-size:0.7rem"></i>
+          </div>
+        </ng-container>
+      </div>
+    </div>
+  </div>
+
+  <!-- Main content -->
+  <main class="flex-grow-1 container py-4" style="max-width:680px">
+
+    <!-- Error alert -->
+    <div *ngIf="error" class="alert alert-danger d-flex align-items-center gap-2 mb-3">
+      <i class="bi bi-exclamation-triangle-fill"></i>
+      <span>{{ error }}</span>
+      <button class="btn-close ms-auto" (click)="error = null"></button>
+    </div>
+
+    <!-- Loading overlay -->
+    <div *ngIf="loading" class="text-center py-5">
+      <div class="spinner-border text-primary"></div>
+      <p class="text-muted mt-2">Procesando…</p>
+    </div>
+
+    <!-- ── Paso 1: Seleccionar Operador ──────────────────────────────── -->
+    <div *ngIf="currentStep === 1 && !loading">
+      <div class="card shadow-sm">
+        <div class="card-header bg-primary text-white">
+          <i class="bi bi-1-circle me-2"></i>Paso 1 — Seleccionar Operador
+        </div>
+        <div class="card-body">
+          <p class="text-muted mb-3">Selecciona el operador de telefonía para la recarga.</p>
+          <div class="d-flex gap-3 flex-wrap">
+            <button *ngFor="let op of ['BLUE','ORANGE','GREEN']"
+              class="btn btn-outline-primary btn-lg"
+              [class.active]="operador === op"
+              (click)="operador = op">
+              <i class="bi bi-broadcast me-1"></i>{{ op }}
+            </button>
+          </div>
+          <div class="mt-4">
+            <span class="badge bg-success fs-6">
+              <i class="bi bi-check2 me-1"></i>Operador seleccionado: {{ operador }}
+            </span>
+          </div>
+        </div>
+        <div class="card-footer d-flex justify-content-end">
+          <button class="btn btn-primary" (click)="confirmarOperador()">
+            Siguiente <i class="bi bi-arrow-right ms-1"></i>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Paso 2: Buscar Cliente ─────────────────────────────────────── -->
+    <div *ngIf="currentStep === 2 && !loading">
+      <div class="card shadow-sm">
+        <div class="card-header bg-primary text-white">
+          <i class="bi bi-2-circle me-2"></i>Paso 2 — Focalizar Cliente
+        </div>
+        <div class="card-body">
+          <p class="text-muted mb-3">Ingresa el número de teléfono AT&amp;T del cliente.</p>
+          <div class="input-group input-group-lg">
+            <span class="input-group-text"><i class="bi bi-phone"></i></span>
+            <input type="text" class="form-control" placeholder="Ej: 4544"
+              [(ngModel)]="telefonoInput"
+              (keyup.enter)="buscarCliente()">
+            <button class="btn btn-primary" (click)="buscarCliente()">
+              <i class="bi bi-search me-1"></i>Buscar
+            </button>
+          </div>
+          <small class="text-muted mt-2 d-block">Perfiles Billy disponibles: 4544, 4545, 4546, 4547, 4548</small>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Paso 3: Seleccionar Monto ──────────────────────────────────── -->
+    <div *ngIf="currentStep === 3 && !loading">
+      <div class="alert alert-success d-flex align-items-center gap-2 mb-3">
+        <i class="bi bi-person-check-fill"></i>
+        <span>
+          <strong>{{ cliente?.nombre }}</strong> — Tel: {{ cliente?.telefono }}
+          <span class="badge bg-success ms-2">{{ cliente?.status }}</span>
+        </span>
+      </div>
+      <div class="card shadow-sm">
+        <div class="card-header bg-primary text-white">
+          <i class="bi bi-3-circle me-2"></i>Paso 3 — Seleccionar Monto ({{ operador }})
+        </div>
+        <div class="card-body">
+          <p class="text-muted mb-3">Montos disponibles desde la base de datos TDM:</p>
+          <div class="row g-3">
+            <div class="col-auto" *ngFor="let m of montos">
+              <button class="btn btn-outline-success btn-lg fw-bold"
+                [class.active]="montoSeleccionado?.id === m.id"
+                (click)="seleccionarMonto(m)">
+                ${{ m.monto | number:'1.0-0' }}
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Paso 4: Validando operador (automático) ────────────────────── -->
+    <div *ngIf="currentStep === 4 && !loading">
+      <div class="card shadow-sm border-info">
+        <div class="card-header bg-info text-white">
+          <i class="bi bi-4-circle me-2"></i>Paso 4 — Validando con API Operador…
+        </div>
+        <div class="card-body text-center py-4">
+          <div class="spinner-border text-info"></div>
+          <p class="mt-3 text-muted">Consultando mock Prism del operador <strong>{{ operador }}</strong>…</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Paso 5: Método de Pago ─────────────────────────────────────── -->
+    <div *ngIf="currentStep === 5 && !loading">
+      <div class="alert alert-success d-flex align-items-center gap-2 mb-3">
+        <i class="bi bi-patch-check-fill"></i>
+        <span>Operador <strong>{{ operador }}</strong> validado correctamente.</span>
+      </div>
+      <div class="card shadow-sm">
+        <div class="card-header bg-primary text-white">
+          <i class="bi bi-5-circle me-2"></i>Paso 5 — Método de Pago
+        </div>
+        <div class="card-body">
+          <p class="text-muted mb-3">Selecciona cómo realizará el pago el cliente.</p>
+          <div class="d-flex gap-3 flex-wrap">
+            <button *ngFor="let m of metodosPago"
+              class="btn btn-outline-primary btn-lg"
+              [class.active]="metodoPago === m"
+              (click)="seleccionarMetodo(m)">
+              <i class="bi me-1"
+                [class.bi-credit-card]="m === 'TARJETA'"
+                [class.bi-cash-coin]="m === 'EFECTIVO'"
+                [class.bi-phone]="m === 'OODI'"></i>
+              {{ m }}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Paso 6: Confirmar ──────────────────────────────────────────── -->
+    <div *ngIf="currentStep === 6 && !loading">
+      <div class="card shadow-sm">
+        <div class="card-header bg-primary text-white">
+          <i class="bi bi-6-circle me-2"></i>Paso 6 — Confirmar Operación
+        </div>
+        <div class="card-body">
+          <table class="table table-bordered mb-4">
+            <tbody>
+              <tr><th>Cliente</th><td>{{ cliente?.nombre }} ({{ cliente?.telefono }})</td></tr>
+              <tr><th>Operador</th><td>{{ operador }}</td></tr>
+              <tr><th>Monto</th><td class="text-success fw-bold">${{ montoSeleccionado?.monto | number:'1.0-0' }}</td></tr>
+              <tr><th>Método de Pago</th><td>{{ metodoPago }}</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="card-footer d-flex justify-content-between">
+          <button class="btn btn-outline-secondary" (click)="goTo(5)">
+            <i class="bi bi-arrow-left me-1"></i>Volver
+          </button>
+          <button class="btn btn-success btn-lg" (click)="confirmarPago()">
+            <i class="bi bi-check2-circle me-2"></i>Procesar Recarga
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Paso 7: Pago Aplicado ──────────────────────────────────────── -->
+    <div *ngIf="currentStep === 7 && !loading">
+      <div class="card shadow-sm border-success">
+        <div class="card-header bg-success text-white">
+          <i class="bi bi-7-circle me-2"></i>Paso 7 — Pago Aplicado
+        </div>
+        <div class="card-body text-center">
+          <i class="bi bi-check-circle-fill text-success" style="font-size:3rem"></i>
+          <h4 class="mt-3 fw-bold">{{ pagoResponse?.mensaje }}</h4>
+          <div class="mt-3">
+            <span class="badge bg-success fs-5 px-4 py-2">
+              <i class="bi bi-upc me-2"></i>Folio: {{ pagoResponse?.folio }}
+            </span>
+          </div>
+          <div class="text-muted mt-2">Orden: {{ pagoResponse?.numeroOrden }}</div>
+        </div>
+        <div class="card-footer d-flex justify-content-end">
+          <button class="btn btn-primary" (click)="emitirRecibo()">
+            <i class="bi bi-file-earmark-pdf me-2"></i>Emitir Recibo (Paso 8)
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Paso 8: Recibo ─────────────────────────────────────────────── -->
+    <div *ngIf="currentStep === 8 && !loading">
+      <div class="card shadow-sm border-primary">
+        <div class="card-header bg-primary text-white">
+          <i class="bi bi-8-circle me-2"></i>Paso 8 — Recibo Emitido
+        </div>
+        <div class="card-body text-center">
+          <i class="bi bi-file-earmark-check-fill text-primary" style="font-size:3rem"></i>
+          <h4 class="mt-3">Recibo generado con éxito</h4>
+          <div class="mt-2 text-muted">{{ reciboResponse?.status }}</div>
+          <a *ngIf="reciboResponse?.url_pdf" [href]="reciboResponse!.url_pdf"
+            class="btn btn-outline-primary mt-3" target="_blank">
+            <i class="bi bi-download me-2"></i>Descargar PDF
+          </a>
+        </div>
+        <div class="card-footer d-flex justify-content-center">
+          <button class="btn btn-success btn-lg" (click)="reiniciar()">
+            <i class="bi bi-arrow-counterclockwise me-2"></i>Nueva Recarga
+          </button>
+        </div>
+      </div>
+    </div>
+
+  </main>
+
+  <!-- Footer -->
+  <footer class="bg-dark text-white-50 text-center py-2 small">
+    AT&amp;T PaymentBox · QA PoC Demo · Optare Solutions
+  </footer>
+</div>
