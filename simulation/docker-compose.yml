@@ -41,7 +41,7 @@ services:
       DB_USER: att_user
       DB_PASS: att_pass
       MOCK_OPERADOR_URL: http://mock-operador:4010
-      MOCK_RECIBO_URL: http://mock-recibo:4011
+      MOCK_RECIBO_URL: http://mock-recibo:4010
     depends_on:
       db-simulado:
         condition: service_healthy
