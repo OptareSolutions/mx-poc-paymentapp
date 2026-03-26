@@ -4,7 +4,7 @@
 -- ============================================================
 
 CREATE TABLE IF NOT EXISTS clientes (
-    id        SERIAL PRIMARY KEY,
+    id        BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     nombre    VARCHAR(100) NOT NULL,
     telefono  VARCHAR(20)  NOT NULL UNIQUE,
     status    VARCHAR(20)  NOT NULL DEFAULT 'ACTIVO',
@@ -12,20 +12,20 @@ CREATE TABLE IF NOT EXISTS clientes (
 );
 
 CREATE TABLE IF NOT EXISTS montos_recarga (
-    id       SERIAL PRIMARY KEY,
+    id       BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     monto    NUMERIC(10, 2) NOT NULL,
     operador VARCHAR(50)    NOT NULL,
     CONSTRAINT chk_monto CHECK (monto > 0)
 );
 
 CREATE TABLE IF NOT EXISTS metodos_pago (
-    id     SERIAL PRIMARY KEY,
+    id     BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     nombre VARCHAR(50) NOT NULL UNIQUE,
     activo BOOLEAN     NOT NULL DEFAULT TRUE
 );
 
 CREATE TABLE IF NOT EXISTS pagos (
-    id               SERIAL PRIMARY KEY,
+    id               BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     numero_orden     VARCHAR(50),
     telefono_cliente VARCHAR(20)    NOT NULL,
     monto            NUMERIC(10, 2) NOT NULL,

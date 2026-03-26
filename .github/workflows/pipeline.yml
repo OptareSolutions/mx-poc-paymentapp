@@ -256,7 +256,7 @@ jobs:
       - name: Verificar salud del Microservicio A
         run: |
           for i in {1..15}; do
-            STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8080/actuator/health)
+            STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8080/actuator/health || echo "000")
             echo "Intento $i: HTTP $STATUS"
             [ "$STATUS" -eq "200" ] && echo "✅ Microservicio A disponible" && break
             sleep 5
