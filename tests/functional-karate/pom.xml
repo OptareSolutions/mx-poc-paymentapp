@@ -14,12 +14,12 @@
         <maven.compiler.source>17</maven.compiler.source>
         <maven.compiler.target>17</maven.compiler.target>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-        <karate.version>1.4.1</karate.version>
+        <karate.version>1.4.0</karate.version>
     </properties>
 
     <dependencies>
         <dependency>
-            <groupId>io.karatelabs</groupId>
+            <groupId>com.intuit.karate</groupId>
             <artifactId>karate-junit5</artifactId>
             <version>${karate.version}</version>
             <scope>test</scope>
