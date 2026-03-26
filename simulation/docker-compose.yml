@@ -1,0 +1,77 @@
+version: '3.8'
+
+networks:
+  att-poc-net:
+    driver: bridge
+
+services:
+
+  # ── Base de Datos Simulada (Ambiente A) ─────────────────────────────────────
+  db-simulado:
+    image: postgres:14-alpine
+    container_name: att-db-simulado
+    environment:
+      POSTGRES_DB: att_paymentbox
+      POSTGRES_USER: att_user
+      POSTGRES_PASSWORD: att_pass
+    ports: ["5432:5432"]
+    volumes:
+      - ./tdm-seeders/01_schema.sql:/docker-entrypoint-initdb.d/01_schema.sql
+      - ./tdm-seeders/02_billy_profiles.sql:/docker-entrypoint-initdb.d/02_billy_profiles.sql
+      - att-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U att_user -d att_paymentbox"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks: [att-poc-net]
+
+  # ── Microservice A ───────────────────────────────────────────────────────────
+  microservice-a:
+    build:
+      context: ../microservice-a
+      dockerfile: src/Dockerfile
+    container_name: att-microservice-a
+    ports: ["8080:8080"]
+    environment:
+      DB_HOST: db-simulado
+      DB_PORT: 5432
+      DB_NAME: att_paymentbox
+      DB_USER: att_user
+      DB_PASS: att_pass
+      MOCK_OPERADOR_URL: http://mock-operador:4010
+      MOCK_RECIBO_URL: http://mock-recibo:4011
+    depends_on:
+      db-simulado:
+        condition: service_healthy
+      mock-operador:
+        condition: service_started
+      mock-recibo:
+        condition: service_started
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8080/actuator/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+    networks: [att-poc-net]
+
+  # ── Mock Operador - Paso 4 ───────────────────────────────────────────────────
+  mock-operador:
+    image: stoplight/prism:4
+    container_name: att-mock-operador
+    command: mock -h 0.0.0.0 /public/api.yaml
+    volumes: ['./prism-mocks/operador.yaml:/public/api.yaml:ro']
+    ports: ["4010:4010"]
+    networks: [att-poc-net]
+
+  # ── Mock Recibo - Paso 8 ─────────────────────────────────────────────────────
+  mock-recibo:
+    image: stoplight/prism:4
+    container_name: att-mock-recibo
+    command: mock -h 0.0.0.0 /public/api.yaml
+    volumes: ['./prism-mocks/recibo.yaml:/public/api.yaml:ro']
+    ports: ["4011:4011"]
+    networks: [att-poc-net]
+
+volumes:
+  att-pgdata:

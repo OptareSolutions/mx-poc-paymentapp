@@ -1,0 +1,38 @@
+spring:
+  application:
+    name: paymentbox-microservice-a
+
+  datasource:
+    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:att_paymentbox}
+    username: ${DB_USER:att_user}
+    password: ${DB_PASS:att_pass}
+    driver-class-name: org.postgresql.Driver
+
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    show-sql: false
+    open-in-view: false
+
+server:
+  port: ${SERVER_PORT:8080}
+
+att:
+  mocks:
+    operador-url: ${MOCK_OPERADOR_URL:http://localhost:4010}
+    recibo-url: ${MOCK_RECIBO_URL:http://localhost:4011}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      show-details: always
+
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    path: /swagger-ui.html

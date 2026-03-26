@@ -1,0 +1,114 @@
+openapi: 3.0.3
+info:
+  title: API Operador AT&T - Mock (Paso 4)
+  description: |
+    Mock do serviço de Operador AT&T. Simulado via Prism CLI.
+    Valida se um número de telefono é elegível para recarga com um operador específico.
+  version: 1.0.0
+  contact:
+    name: Optare Solutions - AT&T QA PoC
+
+servers:
+  - url: http://localhost:4010
+    description: Prism Mock Server (local)
+  - url: http://mock-operador:4010
+    description: Prism Mock Server (Docker)
+
+paths:
+  /api/operador/validar:
+    post:
+      summary: Validar elegibilidade de recarga com o operador
+      operationId: validarOperador
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ValidarOperadorRequest'
+            example:
+              telefono: "4544"
+              operador: "BLUE"
+      responses:
+        '200':
+          description: Validação bem sucedida
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidarOperadorResponse'
+              example:
+                valido: true
+                operador: "BLUE"
+                codigo: "OP-200"
+                mensaje: "Número elegible para recarga"
+        '400':
+          description: Petición inválida
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                codigo: "OP-400"
+                mensaje: "Datos de validación incompletos"
+        '422':
+          description: Número no elegible para recarga
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidarOperadorResponse'
+              example:
+                valido: false
+                operador: "BLUE"
+                codigo: "OP-422"
+                mensaje: "Número no elegible para recarga"
+
+  /api/operador/health:
+    get:
+      summary: Health check del mock
+      operationId: healthOperador
+      responses:
+        '200':
+          description: Mock disponible
+          content:
+            application/json:
+              schema:
+                type: object
+              example:
+                status: "UP"
+                service: "mock-operador"
+
+components:
+  schemas:
+    ValidarOperadorRequest:
+      type: object
+      required: [telefono, operador]
+      properties:
+        telefono:
+          type: string
+          description: Número de teléfono del cliente
+          example: "4544"
+        operador:
+          type: string
+          description: Código del operador
+          example: "BLUE"
+          enum: [BLUE, TELCEL, MOVISTAR]
+
+    ValidarOperadorResponse:
+      type: object
+      properties:
+        valido:
+          type: boolean
+          description: Si el número es elegible para recarga
+        operador:
+          type: string
+        codigo:
+          type: string
+        mensaje:
+          type: string
+
+    ErrorResponse:
+      type: object
+      properties:
+        codigo:
+          type: string
+        mensaje:
+          type: string

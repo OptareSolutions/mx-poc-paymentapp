@@ -1,0 +1,144 @@
+openapi: 3.0.3
+info:
+  title: API Emissão de Recibo AT&T - Mock (Paso 8)
+  description: |
+    Mock do serviço de emissão de recibo AT&T. Simulado via Prism CLI.
+    Gera um recibo PDF sintético para um pagamento registado no Ambiente A.
+  version: 1.0.0
+  contact:
+    name: Optare Solutions - AT&T QA PoC
+
+servers:
+  - url: http://localhost:4011
+    description: Prism Mock Server (local)
+  - url: http://mock-recibo:4011
+    description: Prism Mock Server (Docker)
+
+paths:
+  /api/recibo/emitir:
+    post:
+      summary: Emitir recibo PDF para un pago registrado
+      operationId: emitirRecibo
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EmitirReciboRequest'
+            example:
+              folio: "B-89301"
+              numeroOrden: "111816681"
+      responses:
+        '200':
+          description: Recibo emitido exitosamente
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EmitirReciboResponse'
+              example:
+                status: "EMITIDO"
+                url_pdf: "/recibos/Recibo_order_111816681.pdf"
+                numero_folio: "B-89301"
+                numero_orden: "111816681"
+                importe: 50.00
+                fecha_emision: "2026-03-26T10:30:00Z"
+        '404':
+          description: Folio o orden no encontrado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                codigo: "REC-404"
+                mensaje: "Folio no encontrado en el sistema"
+        '500':
+          description: Error al generar el PDF
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                codigo: "REC-500"
+                mensaje: "Error interno al generar el recibo"
+
+  /api/recibo/descargar/{folio}:
+    get:
+      summary: Descargar PDF del recibo por folio
+      operationId: descargarRecibo
+      parameters:
+        - name: folio
+          in: path
+          required: true
+          schema:
+            type: string
+          example: "B-89301"
+      responses:
+        '200':
+          description: PDF del recibo (simulado como JSON en mock)
+          content:
+            application/json:
+              schema:
+                type: object
+              example:
+                folio: "B-89301"
+                content_type: "application/pdf"
+                size_kb: 17.4
+                status: "DISPONIBLE"
+
+  /api/recibo/health:
+    get:
+      summary: Health check del mock
+      operationId: healthRecibo
+      responses:
+        '200':
+          description: Mock disponible
+          content:
+            application/json:
+              schema:
+                type: object
+              example:
+                status: "UP"
+                service: "mock-recibo"
+
+components:
+  schemas:
+    EmitirReciboRequest:
+      type: object
+      required: [folio, numeroOrden]
+      properties:
+        folio:
+          type: string
+          description: Folio del pago registrado
+          example: "B-89301"
+        numeroOrden:
+          type: string
+          description: Número de orden en PaymentBox
+          example: "111816681"
+
+    EmitirReciboResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [EMITIDO, EN_PROCESO, FALLIDO]
+        url_pdf:
+          type: string
+          description: URL relativa al PDF generado
+        numero_folio:
+          type: string
+        numero_orden:
+          type: string
+        importe:
+          type: number
+          format: double
+        fecha_emision:
+          type: string
+          format: date-time
+
+    ErrorResponse:
+      type: object
+      properties:
+        codigo:
+          type: string
+        mensaje:
+          type: string

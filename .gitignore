@@ -1,0 +1,6 @@
+build/
+.gradle/
+*.jar
+*.class
+target/
+tests/k6/results/
