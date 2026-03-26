@@ -39,8 +39,21 @@ jacoco {
     toolVersion = '0.8.11'
 }
 
+def jacocoExclusions = [
+    // Clases de infraestructura sin lógica de negocio
+    '**/model/**',
+    '**/dto/**',
+    '**/config/**',
+    '**/PaymentBoxApplication.class',
+    // Clases generadas por Spring / JPA
+    '**/*$*',
+]
+
 jacocoTestReport {
     dependsOn test
+    classDirectories.setFrom(files(classDirectories.files.collect {
+        fileTree(dir: it, excludes: jacocoExclusions)
+    }))
     reports {
         xml.required = true
         html.required = true
@@ -48,10 +61,13 @@ jacocoTestReport {
 }
 
 jacocoTestCoverageVerification {
+    classDirectories.setFrom(files(classDirectories.files.collect {
+        fileTree(dir: it, excludes: jacocoExclusions)
+    }))
     violationRules {
         rule {
             limit {
-                minimum = 0.80 // 80% coverage gate
+                minimum = 0.80 // Gate de cobertura 80% sobre código de negocio
             }
         }
     }
