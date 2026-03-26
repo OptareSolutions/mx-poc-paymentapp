@@ -1,15 +1,15 @@
-# Plano de Implementação: Fluxo Recarga PaymentBox
+# Plan de Implementación: Flujo Recarga PaymentBox
 
-O agente deve implementar os seguintes passos de automação para cada commit:
+El agente debe implementar los siguientes pasos de automatización en cada commit:
 
 1. **Job: Build & Quality**
-   - Correr Gradle + SonarQube + Veracode (Pipeline Scan).
-2. **Job: Integration (The Simulation)**
-   - Levantar contentor Docker com Base de Dados.
-   - Executar scripts JDBC para validar o Passo 3 (Montantes) e Passo 5 (Métodos de Pagamento).
+   - Ejecutar Gradle + SonarQube + Veracode (Pipeline Scan).
+2. **Job: Integration (La Simulación)**
+   - Levantar contenedor Docker con Base de Datos.
+   - Ejecutar scripts JDBC para validar el Paso 3 (Montos) y Paso 5 (Métodos de Pago).
 3. **Job: Functional E2E (Karate DSL)**
-   - **Passo 2:** Validar busca de cliente (API Robusta) usando Billy 1.
-   - **Passo 4:** Validar integração com API Operador (via Mock).
-   - **Passo 7/8:** Validar persistência do pago e recibo.
+   - **Paso 2:** Validar búsqueda de cliente (API Robusta) usando Billy 1.
+   - **Paso 4:** Validar integración con API Operador (via Mock).
+   - **Paso 7/8:** Validar persistencia del pago y recibo.
 4. **Job: UI Validation (Selenium)**
-   - Validar Passo 1 (Menus visíveis) no ambiente deployado.
+   - Validar Paso 1 (Menús visibles) en el entorno desplegado.

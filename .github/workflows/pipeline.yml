@@ -11,64 +11,65 @@ env:
   IMAGE_NAME: ${{ github.repository }}/microservice-a
 
 # ══════════════════════════════════════════════════════════════════════════════
-# JOB 1 — Build & Quality (Shift-Left: unitários + segurança primeiro)
+# JOB 1 — Build & Quality (Shift-Left: unitarios + seguridad primero)
 # ══════════════════════════════════════════════════════════════════════════════
 jobs:
   build-and-quality:
     name: "1 · Build & Quality (Shift-Left)"
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: microservice-a
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Set up JDK 17
+      - name: Configurar JDK 17
         uses: actions/setup-java@v4
         with:
           java-version: "17"
           distribution: "temurin"
-          cache: gradle
 
-      - name: Grant Gradle execute permission
-        run: chmod +x gradlew || true
+      - name: Configurar Gradle (sin wrapper local)
+        uses: gradle/actions/setup-gradle@v3
+        with:
+          gradle-version: "8.7"
 
-      - name: Build & Unit Tests (JUnit + JaCoCo)
-        run: ./gradlew test jacocoTestReport --no-daemon
+      - name: Build y Tests Unitarios (JUnit + JaCoCo)
+        working-directory: microservice-a
+        run: gradle test jacocoTestReport --no-daemon
 
-      - name: Verify Coverage Gate (≥ 80%)
-        run: ./gradlew jacocoTestCoverageVerification --no-daemon
+      - name: Verificar Cobertura (≥ 80%)
+        working-directory: microservice-a
+        run: gradle jacocoTestCoverageVerification --no-daemon
 
-      - name: Upload test results
+      - name: Subir resultados de tests
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: unit-test-results
           path: microservice-a/build/reports/
 
-      - name: "Segurança: Veracode Pipeline Scan (simulado)"
+      - name: "Seguridad: Veracode Pipeline Scan (simulado)"
         run: |
           echo "✅ [Shift-Left] Veracode SAST scan simulado para PoC."
-          echo "Em produção: integrar com veracode/veracode-github-action."
+          echo "En producción: integrar con veracode/veracode-github-action."
 
-      - name: "Segurança: SonarQube Analysis (simulado)"
+      - name: "Seguridad: SonarQube Analysis (simulado)"
         run: |
           echo "✅ [Shift-Left] SonarQube scan simulado para PoC."
-          echo "Em produção: usar SonarSource/sonarcloud-github-action."
+          echo "En producción: usar SonarSource/sonarcloud-github-action."
 
-      - name: Build JAR (sem testes - já correram)
-        run: ./gradlew bootJar --no-daemon -x test
+      - name: Build JAR (sin tests - ya ejecutados)
+        working-directory: microservice-a
+        run: gradle bootJar --no-daemon -x test
 
-      - name: Upload JAR artifact
+      - name: Subir artefacto JAR
         uses: actions/upload-artifact@v4
         with:
           name: app-jar
           path: microservice-a/build/libs/*.jar
 
 # ══════════════════════════════════════════════════════════════════════════════
-# JOB 2 — Integration & Contract (Simulation Environment A)
+# JOB 2 — Integration & Contract (Ambiente A Simulado)
 # ══════════════════════════════════════════════════════════════════════════════
   integration-and-contract:
     name: "2 · Integration & Contract (Ambiente A)"
@@ -93,71 +94,74 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Set up JDK 17
+      - name: Configurar JDK 17
         uses: actions/setup-java@v4
         with:
           java-version: "17"
           distribution: "temurin"
 
-      - name: Apply TDM Schema & Seed Billy Profiles
+      - name: Instalar psql client
+        run: sudo apt-get install -y postgresql-client
+
+      - name: Aplicar Schema TDM y Perfiles Billy
         env:
           PGPASSWORD: att_pass
         run: |
-          echo "🌱 A aplicar schema e seeders TDM (perfis Billy)..."
+          echo "🌱 Aplicando schema y seeders TDM (perfiles Billy)..."
           psql -h localhost -U att_user -d att_paymentbox -f simulation/tdm-seeders/01_schema.sql
           psql -h localhost -U att_user -d att_paymentbox -f simulation/tdm-seeders/02_billy_profiles.sql
-          echo "✅ Perfis Billy 1-5 criados com sucesso."
+          echo "✅ Perfiles Billy 1-5 creados correctamente."
 
-      - name: Verify Billy 1 in DB (contrato TDM)
+      - name: Verificar Billy 1 en DB (contrato TDM)
         env:
           PGPASSWORD: att_pass
         run: |
           COUNT=$(psql -h localhost -U att_user -d att_paymentbox -t -c \
             "SELECT COUNT(*) FROM clientes WHERE telefono='4544' AND status='ACTIVO';")
           echo "Billy 1 count: $COUNT"
-          [ "$COUNT" -eq "1" ] || (echo "❌ FAIL: Billy 1 não encontrado na DB" && exit 1)
+          [ "$COUNT" -eq "1" ] || (echo "❌ FALLO: Billy 1 no encontrado en DB" && exit 1)
 
-      - name: Verify Montos in DB (Paso 3)
+      - name: Verificar Montos en DB (Paso 3)
         env:
           PGPASSWORD: att_pass
         run: |
           COUNT=$(psql -h localhost -U att_user -d att_paymentbox -t -c \
             "SELECT COUNT(*) FROM montos_recarga WHERE operador='BLUE';")
           echo "Montos BLUE count: $COUNT"
-          [ "$COUNT" -ge "5" ] || (echo "❌ FAIL: Montos insuficientes para BLUE" && exit 1)
+          [ "$COUNT" -ge "5" ] || (echo "❌ FALLO: Montos insuficientes para BLUE" && exit 1)
 
-      - name: Start Prism Mocks (Operador + Recibo)
+      - name: Iniciar Mocks Prism (Operador + Recibo)
         run: |
           npm install -g @stoplight/prism-cli
-          echo "🚀 A iniciar mock Operador (Paso 4) na porta 4010..."
+          echo "🚀 Iniciando mock Operador (Paso 4) en puerto 4010..."
           prism mock simulation/prism-mocks/operador.yaml --port 4010 &
-          echo "🚀 A iniciar mock Recibo (Paso 8) na porta 4011..."
+          echo "🚀 Iniciando mock Recibo (Paso 8) en puerto 4011..."
           prism mock simulation/prism-mocks/recibo.yaml --port 4011 &
           sleep 5
-          echo "✅ Mocks Prism iniciados."
+          echo "✅ Mocks Prism iniciados correctamente."
 
-      - name: Contract Validation - Operador Mock (Paso 4)
+      - name: Validación de Contrato - Mock Operador (Paso 4)
         run: |
-          echo "🔍 Validando contrato da API Operador via Prism..."
+          echo "🔍 Validando contrato API Operador via Prism..."
           STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
             -X POST http://localhost:4010/api/operador/validar \
             -H "Content-Type: application/json" \
             -d '{"telefono":"4544","operador":"BLUE"}')
           echo "HTTP Status: $STATUS"
           [ "$STATUS" -eq "200" ] || \
-            (echo "❌ FALHA DE CONTRATO: API Operador não responde com 200" && exit 1)
+            (echo "❌ FALLO DE CONTRATO: API Operador no responde con 200" && exit 1)
           echo "✅ Contrato API Operador validado."
 
-      - name: Contract Validation - Recibo Mock (Paso 8)
+      - name: Validación de Contrato - Mock Recibo (Paso 8)
         run: |
-          echo "🔍 Validando contrato da API Recibo via Prism..."
+          echo "🔍 Validando contrato API Recibo via Prism..."
           STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
             -X POST http://localhost:4011/api/recibo/emitir \
             -H "Content-Type: application/json" \
             -d '{"folio":"B-89301","numeroOrden":"111816681"}')
           echo "HTTP Status: $STATUS"
           [ "$STATUS" -eq "200" ] || \
-            (echo "❌ FALHA DE CONTRATO: API Recibo não responde com 200" && exit 1)
+            (echo "❌ FALLO DE CONTRATO: API Recibo no responde con 200" && exit 1)
           echo "✅ Contrato API Recibo validado."
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -229,50 +233,50 @@ jobs:
           java-version: "17"
           distribution: "temurin"
 
-      - name: Start Ambiente A (docker-compose)
+      - name: Iniciar Ambiente A (docker-compose)
         run: |
           cd simulation
           docker compose up -d --wait
-          echo "⏳ Aguardando serviços ficarem saudáveis..."
+          echo "⏳ Esperando que los servicios estén disponibles..."
           sleep 20
           docker compose ps
 
-      - name: Verify Microservice A health
+      - name: Verificar salud del Microservicio A
         run: |
           for i in {1..10}; do
             STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8080/actuator/health)
-            echo "Attempt $i: HTTP $STATUS"
-            [ "$STATUS" -eq "200" ] && echo "✅ Microservice A UP" && break
+            echo "Intento $i: HTTP $STATUS"
+            [ "$STATUS" -eq "200" ] && echo "✅ Microservicio A disponible" && break
             sleep 5
           done
-          [ "$STATUS" -eq "200" ] || (echo "❌ Microservice A não arrancou" && exit 1)
+          [ "$STATUS" -eq "200" ] || (echo "❌ Microservicio A no arrancó" && exit 1)
 
-      - name: "Karate DSL - Testes Funcionais (Passos 2, 3, 4, 5, 7, 8)"
+      - name: "Karate DSL - Tests Funcionales (Pasos 2, 3, 4, 5, 7, 8)"
         run: |
           cd tests/functional-karate
           mvn test -Dkarate.env=ci --no-transfer-progress
         continue-on-error: false
 
-      - name: Upload Karate Report
+      - name: Subir Reporte Karate
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: karate-report
           path: tests/functional-karate/target/surefire-reports/
 
-      - name: "Selenium Headless - Validação UI (Passos 1, 3, 5)"
+      - name: "Selenium Headless - Validación UI (Pasos 1, 3, 5)"
         run: |
           cd tests/ui-selenium
           mvn test -Dapp.url=http://localhost:8080 --no-transfer-progress
 
-      - name: Upload Selenium Report
+      - name: Subir Reporte Selenium
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: selenium-report
           path: tests/ui-selenium/target/surefire-reports/
 
-      - name: "k6 Smoke Test - Rota Crítica Performance (Paso 6)"
+      - name: "k6 Smoke Test - Ruta Crítica Performance (Paso 6)"
         run: |
           curl -fsSL https://dl.k6.io/key.gpg | sudo gpg --dearmor -o /usr/share/keyrings/k6-archive-keyring.gpg
           echo "deb [signed-by=/usr/share/keyrings/k6-archive-keyring.gpg] https://dl.k6.io/deb stable main" \
@@ -282,13 +286,13 @@ jobs:
           mkdir -p tests/k6/results
           k6 run --env BASE_URL=http://localhost:8080 tests/k6/smoke_recarga.js
 
-      - name: Upload k6 Results
+      - name: Subir Resultados k6
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: k6-smoke-results
           path: tests/k6/results/
 
-      - name: Stop Ambiente A
+      - name: Detener Ambiente A
         if: always()
         run: cd simulation && docker compose down -v

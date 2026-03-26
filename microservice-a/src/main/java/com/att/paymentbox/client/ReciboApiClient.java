@@ -7,7 +7,7 @@ import org.springframework.web.client.RestTemplate;
 import java.util.Map;
 
 /**
- * Cliente HTTP que solicita a emissão do recibo vía Prism Mock (Paso 8 do fluxo).
+ * Cliente HTTP que solicita la emisión del recibo vía Prism Mock (Paso 8 del flujo).
  * URL configurable via MOCK_RECIBO_URL (default: http://localhost:4011).
  */
 @Component

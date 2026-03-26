@@ -1,35 +1,35 @@
 /**
  * k6 Smoke Test - Ruta Crítica PaymentBox AT&T (Paso 6 - Performance)
- * Valida o caminho crítico do fluxo de 8 passos sob carga mínima.
+ * Valida la ruta crítica del flujo de 8 pasos bajo carga mínima.
  *
- * Execução local:  k6 run tests/k6/smoke_recarga.js
- * Execução CI:     k6 run --env BASE_URL=http://localhost:8080 tests/k6/smoke_recarga.js
+ * Ejecución local:  k6 run tests/k6/smoke_recarga.js
+ * Ejecución CI:     k6 run --env BASE_URL=http://localhost:8080 tests/k6/smoke_recarga.js
  */
 
 import http from 'k6/http';
 import { check, group, sleep } from 'k6';
 import { Rate, Trend } from 'k6/metrics';
 
-// ── Métricas customizadas ────────────────────────────────────────────────────
+// ── Métricas personalizadas ─────────────────────────────────────────────────
 const errorRate = new Rate('errors');
 const pagoLatencia = new Trend('pago_latencia_ms', true);
 
-// ── Configuração do Smoke Test ────────────────────────────────────────────────
+// ── Configuración del Smoke Test ─────────────────────────────────────────────
 export const options = {
-  // Smoke: 1 VU, 1 minuto — valida que a rota crítica não está quebrada
+  // Smoke: 1 VU, 1 minuto — valida que la ruta crítica no está rota
   vus: 1,
   duration: '1m',
   thresholds: {
-    http_req_duration: ['p(95)<2000'],  // 95% dos requests < 2s (DORA: MTTR)
-    http_req_failed: ['rate<0.01'],     // < 1% de erros (Change Failure Rate)
+    http_req_duration: ['p(95)<2000'],  // 95% de requests < 2s (DORA: MTTR)
+    http_req_failed: ['rate<0.01'],     // < 1% de errores (Change Failure Rate)
     errors: ['rate<0.01'],
-    pago_latencia_ms: ['p(95)<1500'],   // Rota de pagamento < 1.5s
+    pago_latencia_ms: ['p(95)<1500'],   // Ruta de pago < 1.5s
   },
 };
 
 const BASE_URL = __ENV.BASE_URL || 'http://localhost:8080';
 
-// ── Dados sintéticos (TDM - Perfil Billy 1) ───────────────────────────────────
+// ── Datos sintéticos (TDM - Perfil Billy 1) ────────────────────────────────────
 const BILLY_1_TELEFONO = '4544';
 const OPERADOR = 'BLUE';
 const MONTO = 20.00;
@@ -132,7 +132,7 @@ export default function () {
   sleep(1);
 }
 
-// ── Relatório final ───────────────────────────────────────────────────────────
+// ── Reporte final ─────────────────────────────────────────────────────────────
 export function handleSummary(data) {
   return {
     'tests/k6/results/smoke_summary.json': JSON.stringify(data, null, 2),

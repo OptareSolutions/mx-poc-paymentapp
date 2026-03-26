@@ -1,6 +1,6 @@
 -- ============================================================
 -- TDM Schema: att_paymentbox - Ambiente A Simulado
--- Executado automaticamente no arranque do contentor postgres
+-- Ejecutado automáticamente en el arranque del contenedor postgres
 -- ============================================================
 
 CREATE TABLE IF NOT EXISTS clientes (

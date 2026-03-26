@@ -1,21 +1,21 @@
-# Skills: Ambiente de Desenvolvimento & Simulação
+# Skills: Entorno de Desarrollo y Simulación
 
-## Skill 1: Mocking de Microserviços (Efeito Dominó)
-- Ao detetar uma alteração no "Microserviço A", o agente deve ser capaz de:
-  - Criar um mock da API do Operador (Passo 4 do fluxo) usando **Prism CLI**.
-  - Simular a API de Emissão de Recibo (Passo 8) para retornar PDFs sintéticos.
+## Skill 1: Mocking de Microservicios (Efecto Dominó)
+- Al detectar un cambio en el "Microservicio A", el agente debe ser capaz de:
+  - Crear un mock de la API del Operador (Paso 4 del flujo) usando **Prism CLI**.
+  - Simular la API de Emisión de Recibo (Paso 8) para retornar PDFs sintéticos.
 
-## Skill 2: Gestão de Repositórios GitHub
-- Estruturar o repositório com:
-  - `/app`: Código fonte do microserviço.
-  - `/mocks`: Definições OpenAPI/Swagger para simulação.
+## Skill 2: Gestión de Repositorios GitHub
+- Estructurar el repositorio con:
+  - `/app`: Código fuente del microservicio.
+  - `/mocks`: Definiciones OpenAPI/Swagger para simulación.
   - `/.github/workflows`: Pipeline multi-stage (Build -> Contract -> Image -> E2E).
 
-## Skill 3: Injeção de Dados Sintéticos (TDM)
-- Implementar lógica de "Seeders": antes dos testes funcionais, o agente deve popular uma base de dados temporária (GitHub Services) com os perfis "Billy" definidos na reunião com a AT&T.
+## Skill 3: Inyección de Datos Sintéticos (TDM)
+- Implementar lógica de "Seeders": antes de los tests funcionales, el agente debe poblar una base de datos temporal (GitHub Services) con los perfiles "Billy" definidos en la reunión con AT&T.
 
-## Skill 4: Validação Multinível
-- **Unitária:** JUnit + JaCoCo (Cobertura > 80%).
-- **Contrato:** Pact (verificar se o Microserviço A quebrou o contrato com o BSS).
-- **Funcional:** Karate DSL executando o fluxo de 8 passos.
-- **UI:** Selenium Headless validando os menus de recarga.
+## Skill 4: Validación Multinivel
+- **Unitaria:** JUnit + JaCoCo (Cobertura > 80%).
+- **Contrato:** Pact (verificar si el Microservicio A rompió el contrato con el BSS).
+- **Funcional:** Karate DSL ejecutando el flujo de 8 pasos.
+- **UI:** Selenium Headless validando los menús de recarga.
