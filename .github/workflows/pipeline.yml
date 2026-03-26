@@ -245,19 +245,27 @@ jobs:
           cd simulation
           docker compose pull microservice-a
           docker compose up -d --no-build
-          echo "⏳ Esperando que los servicios estén disponibles..."
-          sleep 30
+          echo "⏳ Esperando arranque de servicios (60s)..."
+          sleep 60
           docker compose ps
+          echo "--- Logs microservice-a ---"
+          docker compose logs --tail=50 microservice-a || true
+          echo "--- Logs db-simulado ---"
+          docker compose logs --tail=20 db-simulado || true
 
       - name: Verificar salud del Microservicio A
         run: |
-          for i in {1..10}; do
+          for i in {1..15}; do
             STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8080/actuator/health)
             echo "Intento $i: HTTP $STATUS"
             [ "$STATUS" -eq "200" ] && echo "✅ Microservicio A disponible" && break
             sleep 5
           done
-          [ "$STATUS" -eq "200" ] || (echo "❌ Microservicio A no arrancó" && exit 1)
+          if [ "$STATUS" -ne "200" ]; then
+            echo "❌ Microservicio A no arrancó - Mostrando logs:"
+            cd simulation && docker compose logs --tail=80 microservice-a
+            exit 1
+          fi
 
       - name: "Karate DSL - Tests Funcionales (Pasos 2, 3, 4, 5, 7, 8)"
         run: |
