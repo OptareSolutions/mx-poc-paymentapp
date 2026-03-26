@@ -1,172 +1,172 @@
-# AT&T PaymentBox — PoC de Qualidade Declarativa
+﻿# AT&T PaymentBox — PoC de Calidad Declarativa
 
 > **Optare Solutions** para AT&T | Arquitecto: QE & DevSecOps  
-> Validado com: Evelyn Pineda & Billy Cortes
+> Validado con: Evelyn Pineda & Billy Cortes
 
-[![Pipeline Status](../../actions/workflows/pipeline.yml/badge.svg)](../../actions/workflows/pipeline.yml)
-
----
-
-## Objectivo
-
-Demonstrar que **uma alteração no Microserviço A desencadeia automaticamente um ciclo completo de validação** sem intervenção humana (UAT manual eliminado), cobrindo os 8 passos do fluxo "Recarga por PaymentBox".
+[![Estado del Pipeline](../../actions/workflows/pipeline.yml/badge.svg)](../../actions/workflows/pipeline.yml)
 
 ---
 
-## Fluxo de 8 Passos Automatizado
+## Objetivo
 
-| Passo | Tipo | Ferramenta | Descrição |
-|-------|------|-----------|-----------|
-| **1** | UI | Selenium Headless | Menus de Recarga visíveis |
-| **2** | API | Karate DSL | Focalizar Cliente (Billy 1 — `tel: 4544`) |
-| **3** | UI/DB | Karate DSL + SQL | Selecionar Montante (consistência DB) |
-| **4** | Mock/Contrato | Prism CLI | API Operador BLUE (validação de contrato) |
-| **5** | UI | Selenium Headless | Selecionar Método de Pagamento |
-| **6** | Performance | k6 Smoke Test | Rota Crítica — thresholds p95 < 2s |
-| **7** | DB | Karate DSL | Persistência do pagamento no Ambiente A |
-| **8** | Mock/API | Prism CLI | Emissão do recibo (PDF sintético) |
+Demostrar que **un cambio en el Microservicio A desencadena automáticamente un ciclo completo de validación** sin intervención humana (UAT manual eliminado), cubriendo los 8 pasos del flujo "Recarga por PaymentBox".
 
 ---
 
-## Estrutura do Repositório
+## Flujo de 8 Pasos Automatizado
+
+| Paso | Tipo | Herramienta | Descripción |
+|------|------|-------------|-------------|
+| **1** | UI | Selenium Headless | Menús de Recarga visibles |
+| **2** | API | Karate DSL | Localizar Cliente (Billy 1 — `tel: 4544`) |
+| **3** | UI/DB | Karate DSL + SQL | Seleccionar Monto (coherencia con BD) |
+| **4** | Mock/Contrato | Prism CLI | API Operador BLUE (validación de contrato) |
+| **5** | UI | Selenium Headless | Seleccionar Método de Pago |
+| **6** | Performance | k6 Smoke Test | Ruta Crítica — umbrales p95 < 2s |
+| **7** | DB | Karate DSL | Persistencia del pago en Ambiente A |
+| **8** | Mock/API | Prism CLI | Emisión del recibo (PDF sintético) |
+
+---
+
+## Estructura del Repositorio
 
 ```
 att-poc-paymentbox/
 ├── .github/workflows/
-│   └── pipeline.yml          # Pipeline declarativo de 4 estágios
+│   └── pipeline.yml          # Pipeline declarativo de 4 etapas
 ├── microservice-a/
 │   ├── src/
 │   │   ├── main/java/        # Spring Boot (controller, service, model)
-│   │   ├── test/java/        # JUnit 5 + Mockito (cobertura ≥ 80%)
+│   │   ├── test/java/        # JUnit 5 + Mockito (cobertura >= 80%)
 │   │   ├── main/resources/
 │   │   │   └── application.yml
-│   │   └── Dockerfile        # Multi-stage (gradle build → JRE alpine)
+│   │   └── Dockerfile        # Multi-stage (gradle build -> JRE alpine)
 │   ├── build.gradle          # Gradle + JaCoCo
 │   └── settings.gradle
 ├── simulation/
-│   ├── docker-compose.yml    # Ambiente A completo (4 serviços)
+│   ├── docker-compose.yml    # Ambiente A completo (4 servicios)
 │   ├── prism-mocks/
-│   │   ├── operador.yaml     # OpenAPI mock — Passo 4
-│   │   └── recibo.yaml       # OpenAPI mock — Passo 8
+│   │   ├── operador.yaml     # OpenAPI mock — Paso 4
+│   │   └── recibo.yaml       # OpenAPI mock — Paso 8
 │   └── tdm-seeders/
-│       ├── 01_schema.sql     # Schema da BD simulada
-│       └── 02_billy_profiles.sql  # Perfis Billy 1-5 (dados sintéticos)
+│       ├── 01_schema.sql     # Esquema de la BD simulada
+│       └── 02_billy_profiles.sql  # Perfiles Billy 1-5 (datos sintéticos)
 └── tests/
-    ├── functional-karate/    # Karate DSL — passos 2, 3, 4, 5, 7, 8
+    ├── functional-karate/    # Karate DSL — pasos 2, 3, 4, 5, 7, 8
     │   └── src/test/resources/features/recarga_flow.feature
-    ├── ui-selenium/          # Selenium Headless — passos 1, 3, 5
+    ├── ui-selenium/          # Selenium Headless — pasos 1, 3, 5
     │   └── src/test/java/.../RecargaUiTest.java
     └── k6/
-        └── smoke_recarga.js  # Performance Smoke — Passo 6 (rota crítica)
+        └── smoke_recarga.js  # Performance Smoke — Paso 6 (ruta crítica)
 ```
 
 ---
 
-## Pipeline GitHub Actions (4 Estágios)
+## Pipeline GitHub Actions (4 Etapas)
 
 ```
 Push/PR
-  │
-  ▼
-┌─────────────────────────────────┐
-│  1 · Build & Quality (Shift-Left)│  ← JUnit + JaCoCo (≥80%) + SAST simulado
-└────────────────┬────────────────┘
-                 │ needs
-                 ▼
-┌─────────────────────────────────┐
-│  2 · Integration & Contract     │  ← TDM Seed + Prism mock validation
-└────────────────┬────────────────┘
-                 │ needs
-                 ▼
-┌─────────────────────────────────┐
-│  3 · Image Ops                  │  ← Docker Build + Push para GHCR
-└────────────────┬────────────────┘
-                 │ needs
-                 ▼
-┌─────────────────────────────────┐
-│  4 · Functional E2E & Deploy    │  ← Karate + Selenium + k6 Smoke
-└─────────────────────────────────┘
+  |
+  v
++---------------------------------+
+|  1 · Build & Quality (Shift-Left)|  <- JUnit + JaCoCo (>=80%) + SAST simulado
++----------------+----------------+
+                 | needs
+                 v
++---------------------------------+
+|  2 · Integration & Contract     |  <- TDM Seed + validación contratos Prism
++----------------+----------------+
+                 | needs
+                 v
++---------------------------------+
+|  3 · Image Ops                  |  <- Docker Build + Push a GHCR
++----------------+----------------+
+                 | needs
+                 v
++---------------------------------+
+|  4 · Functional E2E & Deploy    |  <- Karate + Selenium + k6 Smoke
++---------------------------------+
 ```
 
-**Artefactos publicados por cada run:**
-- `unit-test-results` — relatórios JUnit + JaCoCo HTML
+**Artefactos publicados por cada ejecución:**
+- `unit-test-results` — informes JUnit + JaCoCo HTML
 - `karate-report` — resultados Karate DSL
 - `selenium-report` — resultados Selenium
-- `k6-smoke-results` — sumário JSON do teste de performance
+- `k6-smoke-results` — resumen JSON del test de performance
 
 ---
 
-## Como Testar no GitHub
+## Cómo Probar en GitHub
 
-### 1. Criar repositório e fazer push
+### 1. Crear repositorio y hacer push
 
 ```bash
-# Dentro da pasta att-poc-paymentbox/
+# Dentro de la carpeta att-poc-paymentbox/
 git init
 git add .
-git commit -m "feat: PoC AT&T PaymentBox - Fluxo 8 passos automatizado"
+git commit -m "feat: PoC AT&T PaymentBox - Flujo 8 pasos automatizado"
 git branch -M main
-git remote add origin https://github.com/<SEU-USER>/att-poc-paymentbox.git
+git remote add origin https://github.com/<TU-USER>/att-poc-paymentbox.git
 git push -u origin main
 ```
 
-### 2. Verificar o pipeline
+### 2. Verificar el pipeline
 
-1. Ir a **Actions** no repositório GitHub
-2. Clicar no workflow **"AT&T PaymentBox - Pipeline Declarativo PoC"**
-3. Cada push dispara os 4 estágios automaticamente
+1. Ir a **Actions** en el repositorio GitHub
+2. Hacer clic en el workflow **"AT&T PaymentBox - Pipeline Declarativo PoC"**
+3. Cada push dispara las 4 etapas automáticamente
 
 ### 3. Ver artefactos
 
-Após cada run, descarregar os relatórios em **Actions → run → Artifacts**.
+Tras cada ejecución, descargar los informes en **Actions → ejecución → Artifacts**.
 
 ---
 
-## Testar Localmente (Ambiente A Completo)
+## Probar Localmente (Ambiente A Completo)
 
 ```bash
-# 1. Subir o Ambiente A simulado
+# 1. Levantar el Ambiente A simulado
 cd simulation
 docker compose up -d --wait
-docker compose ps   # todos os serviços devem estar "healthy"
+docker compose ps   # todos los servicios deben estar "healthy"
 
-# 2. Testar a API via Swagger
+# 2. Probar la API via Swagger
 open http://localhost:8080/swagger-ui.html
 
-# 3. Correr testes Karate
+# 3. Ejecutar tests Karate
 cd tests/functional-karate
 mvn test
 
-# 4. Correr testes Selenium (headless)
+# 4. Ejecutar tests Selenium (headless)
 cd tests/ui-selenium
 mvn test -Dapp.url=http://localhost:8080
 
-# 5. Correr smoke test k6 (requer k6 instalado)
+# 5. Ejecutar smoke test k6 (requiere k6 instalado)
 k6 run --env BASE_URL=http://localhost:8080 tests/k6/smoke_recarga.js
 
-# 6. Parar o ambiente
+# 6. Detener el ambiente
 cd simulation && docker compose down -v
 ```
 
 ---
 
-## Dados Sintéticos (TDM)
+## Datos Sintéticos (TDM)
 
-| Perfil | Telefone | Status | Uso |
+| Perfil | Teléfono | Estado | Uso |
 |--------|----------|--------|-----|
-| Billy 1 - Cortes | `4544` | ACTIVO | Cenário principal |
-| Billy 2 - Cortes | `4545` | ACTIVO | Cenários alternativos |
-| Billy 3 - Cortes | `4546` | ACTIVO | Cenários alternativos |
-| Billy 4 - Pineda | `4547` | INACTIVO | Teste negativo |
-| Billy 5 - Bloqueado | `4548` | BLOQUEADO | Teste negativo |
+| Billy 1 - Cortes | `4544` | ACTIVO | Escenario principal |
+| Billy 2 - Cortes | `4545` | ACTIVO | Escenarios alternativos |
+| Billy 3 - Cortes | `4546` | ACTIVO | Escenarios alternativos |
+| Billy 4 - Pineda | `4547` | INACTIVO | Test negativo |
+| Billy 5 - Bloqueado | `4548` | BLOQUEADO | Test negativo |
 
 ---
 
-## DORA Metrics — Objectivos desta PoC
+## Métricas DORA — Objetivos de esta PoC
 
-| Métrica | Objectivo | Mecanismo |
+| Métrica | Objetivo | Mecanismo |
 |---------|----------|-----------|
 | **Deployment Frequency** | Cada push | Pipeline automático on push |
-| **Lead Time for Changes** | < 10 min pipeline | Jobs paralelos onde possível |
-| **Change Failure Rate** | < 1% | JaCoCo ≥80% + Karate E2E + k6 threshold |
-| **MTTR** | Automático | Rollback via `docker compose down -v` |
+| **Lead Time for Changes** | < 10 min pipeline | Jobs secuenciales con dependencias |
+| **Change Failure Rate** | < 1% | JaCoCo >=80% + Karate E2E + umbral k6 |
+| **MTTR** | Automático | Rollback vía `docker compose down -v` |
