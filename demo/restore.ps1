@@ -1,4 +1,4 @@
-# ══════════════════════════════════════════════════════════════════════════════
+﻿# ══════════════════════════════════════════════════════════════════════════════
 # DEMO RESTORE: Revertir todos los cambios de demo
 # ══════════════════════════════════════════════════════════════════════════════
 #
@@ -24,10 +24,10 @@ Write-Host "✅ Archivos restaurados al estado original" -ForegroundColor Green
 Write-Host ""
 Write-Host "📋 Ahora ejecuta:" -ForegroundColor Cyan
 Write-Host "   # Para restaurar env-e (develop):"
-Write-Host "   git add . && git commit -m 'demo: restaurar estado verde' && git push origin develop"
+Write-Host "   git add . ; git commit -m 'demo: restaurar estado verde' ; git push origin develop"
 Write-Host ""
 Write-Host "   # Para restaurar env-a (qa) si se corrió BREAK 2 en branch qa:"
-Write-Host "   git add . && git commit -m 'demo: restaurar estado verde' && git push origin qa"
+Write-Host "   git add . ; git commit -m 'demo: restaurar estado verde' ; git push origin qa"
 Write-Host ""
 Write-Host "🔍 Pipeline volverá a verde en todos los jobs ✅"
 Write-Host "   BREAK 1: pipeline-microservice-b + pipeline-integration (develop→qa)"

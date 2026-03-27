@@ -1,4 +1,4 @@
-# ══════════════════════════════════════════════════════════════════════════════
+﻿# ══════════════════════════════════════════════════════════════════════════════
 # DEMO BREAK 2: Ruptura de Comportamiento (Regla de Negocio)
 # ══════════════════════════════════════════════════════════════════════════════
 # Efecto:    pipeline-microservice-a.yml Job 4 (E2E Karate) FALLA en env-a (QA)
@@ -43,7 +43,7 @@ $content = $content `
 Write-Host "✅ Validación de monto mínimo `$100 activada en RecargaService" -ForegroundColor Green
 Write-Host ""
 Write-Host "📋 Pasos a seguir para la demo:" -ForegroundColor Cyan
-Write-Host "   1. git add . && git commit -m 'demo: BREAK 2 - validación monto mínimo' && git push origin qa"
+Write-Host "   1. git add . ; git commit -m 'demo: BREAK 2 - validación monto mínimo' ; git push origin qa"
 Write-Host "   2. pipeline-microservice-a.yml dispara automáticamente en branch 'qa'"
 Write-Host "   3. Jobs 1-3 PASAN ✅ — imagen env-a-{sha} construida"
 Write-Host "   4. Job 4 '⚠️ DEMO BREAK 2 → Karate E2E' FALLA ❌"

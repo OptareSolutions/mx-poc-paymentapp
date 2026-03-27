@@ -1,4 +1,4 @@
-# ══════════════════════════════════════════════════════════════════════════════
+﻿# ══════════════════════════════════════════════════════════════════════════════
 # DEMO BREAK 1: Ruptura de Contrato Inter-Servicios
 # ══════════════════════════════════════════════════════════════════════════════
 # Efecto:    pipeline-integration.yml Job 2 (Testes Contrato) FALLA
@@ -66,7 +66,7 @@ Write-Host "✅ Test unitario actualizado — seguirá compilando y pasando" -Fo
 # ── Indicaciones ─────────────────────────────────────────────────────────────
 Write-Host ""
 Write-Host "📋 Pasos a seguir para la demo:" -ForegroundColor Cyan
-Write-Host "   1. git add . && git commit -m 'demo: BREAK 1 - romper contrato DTO' && git push origin develop"
+Write-Host "   1. git add . ; git commit -m 'demo: BREAK 1 - romper contrato DTO' ; git push origin develop"
 Write-Host "   2. Esperar pipeline-microservice-b.yml → PASA ✅ (imagen env-e-{sha} en GHCR)"
 Write-Host "   3. GitHub Actions → Run workflow → pipeline-integration.yml"
 Write-Host "      promote_from: develop  |  promote_to: qa"
