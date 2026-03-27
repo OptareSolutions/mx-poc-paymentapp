@@ -4,3 +4,5 @@ build/
 *.class
 target/
 tests/k6/results/
+bin/
+~/
