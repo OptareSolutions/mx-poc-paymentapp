@@ -1,14 +1,14 @@
-name: "[microservice-b] CI — Build · Qualidade · Segurança · Deploy"
+﻿name: "[microservice-b] CI — Build · Calidad · Seguridad · Deploy"
 
 # ══════════════════════════════════════════════════════════════════════════════
-# Equipa: Customer Profile (Team B)
-# Trigger: push em qualquer branch quando microservice-b/** muda
+# Equipo: Customer Profile (Team B)
+# Trigger: push en cualquier rama cuando cambia microservice-b/**
 #
 # Nota DEMO BREAK 1:
-#   Quando um developer renomeia os campos do DTO (telefono→phone, nombre→fullName)
-#   E também atualiza os seus próprios testes, este pipeline PASSA (Job 1 verde).
-#   A quebra de contrato é detetada no pipeline-integration.yml (contract tests).
-#   Isto demonstra o valor dos testes de contrato declarativos.
+#   Cuando un desarrollador renombra los campos del DTO (telefono→phone, nombre→fullName)
+#   Y también actualiza sus propios tests, este pipeline PASA (Job 1 verde).
+#   La rotura de contrato se detecta en pipeline-integration.yml (contract tests).
+#   Esto demuestra el valor de los tests de contrato declarativos.
 # ══════════════════════════════════════════════════════════════════════════════
 
 on:
@@ -60,16 +60,16 @@ jobs:
         working-directory: microservice-b
         run: gradle jacocoTestCoverageVerification --no-daemon
 
-      - name: Subir relatório de testes
+      - name: Subir informe de tests
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: microservice-b-test-results-${{ github.ref_name }}
           path: microservice-b/build/reports/
 
-      - name: "SonarCloud — Análise de Qualidade de Código"
+      - name: "SonarCloud — Análisis de Calidad de Código"
         uses: SonarSource/sonarcloud-github-action@v3
-        continue-on-error: true  # ⚠️ PLACEHOLDER: configurar SONAR_TOKEN na organização
+        continue-on-error: true  # ⚠️ PLACEHOLDER: configurar SONAR_TOKEN en la organización
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
@@ -90,7 +90,7 @@ jobs:
 # JOB 2 — Security Scan (Trivy Filesystem)
 # ══════════════════════════════════════════════════════════════════════════════
   security-scan:
-    name: "2 · Segurança — Trivy Scan [microservice-b]"
+    name: "2 · Seguridad — Trivy Scan [microservice-b]"
     runs-on: ubuntu-latest
     needs: build-quality
     permissions:
@@ -106,7 +106,7 @@ jobs:
           name: microservice-b-jar-${{ github.run_id }}
           path: microservice-b/build/libs/
 
-      - name: "Trivy — Scan Filesystem (JAR + dependências)"
+      - name: "Trivy — Scan Filesystem (JAR + dependencias)"
         uses: aquasecurity/trivy-action@master
         with:
           scan-type: fs
@@ -151,18 +151,18 @@ jobs:
           name: microservice-b-jar-${{ github.run_id }}
           path: microservice-b/build/libs/
 
-      - name: Mapear branch → ambiente
+      - name: Mapear rama → ambiente
         id: env-info
         run: |
           case "${{ github.ref_name }}" in
-            develop) echo "overlay=env-e" >> $GITHUB_OUTPUT ; echo "name=E (Desenvolvimento)" >> $GITHUB_OUTPUT ; echo "prefix=env-e" >> $GITHUB_OUTPUT ;;
+            develop) echo "overlay=env-e" >> $GITHUB_OUTPUT ; echo "name=E (Desarrollo)" >> $GITHUB_OUTPUT ; echo "prefix=env-e" >> $GITHUB_OUTPUT ;;
             qa)      echo "overlay=env-a" >> $GITHUB_OUTPUT ; echo "name=A (QA)"              >> $GITHUB_OUTPUT ; echo "prefix=env-a" >> $GITHUB_OUTPUT ;;
             uat)     echo "overlay=env-u" >> $GITHUB_OUTPUT ; echo "name=U (UAT)"             >> $GITHUB_OUTPUT ; echo "prefix=env-u" >> $GITHUB_OUTPUT ;;
-            main)    echo "overlay=prod"  >> $GITHUB_OUTPUT ; echo "name=Produção"            >> $GITHUB_OUTPUT ; echo "prefix=prod"  >> $GITHUB_OUTPUT ;;
+            main)    echo "overlay=prod"  >> $GITHUB_OUTPUT ; echo "name=Producción"            >> $GITHUB_OUTPUT ; echo "prefix=prod"  >> $GITHUB_OUTPUT ;;
             *)       echo "overlay=env-e" >> $GITHUB_OUTPUT ; echo "name=E (manual)"          >> $GITHUB_OUTPUT ; echo "prefix=env-e" >> $GITHUB_OUTPUT ;;
           esac
 
-      - name: Calcular tag de imagem
+      - name: Calcular tag de imagen
         id: image-tag
         run: |
           SHORT_SHA=$(echo "${{ github.sha }}" | cut -c1-7)
@@ -192,7 +192,7 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      - name: "Trivy — Scan Imagem Docker (CRITICAL bloqueante)"
+      - name: "Trivy — Scan Imagen Docker (CRITICAL bloqueante)"
         uses: aquasecurity/trivy-action@master
         with:
           scan-type: image
@@ -210,7 +210,7 @@ jobs:
           sarif_file: trivy-image-results.sarif
           category: trivy-image-microservice-b
 
-      - name: Push → GHCR com tag ${{ steps.image-tag.outputs.tag }}
+      - name: Push → GHCR con tag ${{ steps.image-tag.outputs.tag }}
         uses: docker/build-push-action@v5
         with:
           context: microservice-b
@@ -263,7 +263,7 @@ jobs:
           java-version: "17"
           distribution: temurin
 
-      - name: Aplicar schema TDM e seeders Billy
+      - name: Aplicar schema TDM y seeders Billy
         env:
           PGPASSWORD: att_pass
         run: |
@@ -284,13 +284,13 @@ jobs:
             --spring.datasource.username=att_user \
             --spring.datasource.password=att_pass \
             --server.port=8081 &
-          echo "⏳ Aguardando arranque do microservice-b..."
+          echo "⏳ Esperando arranque de microservice-b..."
           for i in {1..12}; do
             STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8081/actuator/health || echo "000")
             [ "$STATUS" -eq "200" ] && echo "✅ microservice-b UP" && break
             sleep 5
           done
-          if [ "$STATUS" -ne "200" ]; then echo "❌ microservice-b não arrancou" && exit 1; fi
+          if [ "$STATUS" -ne "200" ]; then echo "❌ microservice-b no arrancó" && exit 1; fi
 
       - name: "Smoke Test — Verificar contrato público (/api/customers/4544)"
         run: |
@@ -304,14 +304,14 @@ jobs:
           echo "$RESP" | python3 -c "
           import sys, json
           data = json.load(sys.stdin)
-          assert 'telefono' in data, 'FAIL: campo telefono ausente (contrato quebrado?)'
-          assert 'nombre'   in data, 'FAIL: campo nombre ausente (contrato quebrado?)'
+          assert 'telefono' in data, 'FAIL: campo telefono ausente (¿contrato roto?)'
+          assert 'nombre'   in data, 'FAIL: campo nombre ausente (¿contrato roto?)'
           assert 'status'   in data, 'FAIL: campo status ausente'
           assert data['telefono'] == '4544', f'FAIL: telefono={data[\"telefono\"]}'
-          print('✅ Smoke test OK - campos do contrato presentes')
+          print('✅ Smoke test OK - campos del contrato presentes')
           "
 
-      - name: "GitOps — Atualizar manifesto: microservice-b → ${{ env.IMAGE_TAG }} em ${{ env.OVERLAY }}"
+      - name: "GitOps — Actualizar manifiesto: microservice-b → ${{ env.IMAGE_TAG }} en ${{ env.OVERLAY }}"
         run: |
           python3 - << 'EOF'
           import re, os, sys
@@ -329,7 +329,7 @@ jobs:
           new_content = re.sub(pattern, replacement, content)
 
           if new_content == content:
-              print(f'⚠️  Padrão não encontrado em {filepath}', file=sys.stderr)
+              print(f'⚠️  Patrón no encontrado en {filepath}', file=sys.stderr)
               sys.exit(1)
 
           with open(filepath, 'w') as f:
@@ -337,23 +337,23 @@ jobs:
           print(f'✅ {service}: {new_tag} → k8s/overlays/{overlay}/kustomization.yaml')
           EOF
 
-      - name: "Git commit + push — manifesto atualizado [skip ci]"
+      - name: "Git commit + push — manifiesto actualizado [skip ci]"
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add k8s/overlays/${{ env.OVERLAY }}/kustomization.yaml
-          git diff --staged --quiet && echo "Sem alterações" && exit 0
+          git diff --staged --quiet && echo "Sin cambios" && exit 0
           git commit -m "gitops(microservice-b): ${IMAGE_TAG} → ${ENV_NAME} [skip ci]"
           git push
 
       - name: "ArgoCD (simulado) — Sync ${{ env.ENV_NAME }}"
         run: |
           echo "═══════════════════════════════════════════════════════════════"
-          echo "🔄 [ArgoCD] Alteração detetada em k8s/overlays/${OVERLAY}/"
+          echo "🔄 [ArgoCD] Cambio detectado en k8s/overlays/${OVERLAY}/"
           echo "🔄 [ArgoCD] Application: att-paymentbox-${OVERLAY}"
-          echo "🔄 [ArgoCD] Serviço:     microservice-b"
-          echo "🔄 [ArgoCD] Nova imagem: ghcr.io/.../microservice-b:${IMAGE_TAG}"
-          echo "🔄 [ArgoCD] Ambiente:    ${ENV_NAME}"
+          echo "🔄 [ArgoCD] Servicio:    microservice-b"
+          echo "🔄 [ArgoCD] Nueva imagen: ghcr.io/.../microservice-b:${IMAGE_TAG}"
+          echo "🔄 [ArgoCD] Entorno:     ${ENV_NAME}"
           sleep 2
-          echo "✅ [ArgoCD] Sync concluído — microservice-b deployado em ${ENV_NAME}"
+          echo "✅ [ArgoCD] Sync completado — microservice-b desplegado en ${ENV_NAME}"
           echo "═══════════════════════════════════════════════════════════════"

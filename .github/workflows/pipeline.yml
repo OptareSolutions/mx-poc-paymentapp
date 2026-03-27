@@ -1,21 +1,21 @@
-name: "AT&T PaymentBox - Pipeline Declarativo PoC"
+﻿name: "AT&T PaymentBox - Pipeline Declarativo PoC"
 
 # ══════════════════════════════════════════════════════════════════════════════
-# LEGACY — substituído pelos pipelines por microserviço. Mantido como referência.
+# LEGACY — sustituido por los pipelines por microservicio. Mantenido como referencia.
 #
 # Pipelines activos:
 #   .github/workflows/pipeline-microservice-a.yml  (path trigger: microservice-a/**)
 #   .github/workflows/pipeline-microservice-b.yml  (path trigger: microservice-b/**)
-#   .github/workflows/pipeline-integration.yml     (workflow_dispatch — promoção manual)
+#   .github/workflows/pipeline-integration.yml     (workflow_dispatch — promoción manual)
 # ══════════════════════════════════════════════════════════════════════════════
 
 on:
   workflow_dispatch:
     inputs:
       reason:
-        description: "Motivo da execução manual (referência/debug)"
+        description: "Motivo de ejecución manual (referencia/debug)"
         required: false
-        default: "execução manual de referência"
+        default: "ejecución manual de referencia"
 
 env:
   REGISTRY: ghcr.io

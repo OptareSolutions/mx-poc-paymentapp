@@ -1,12 +1,12 @@
-name: "[microservice-a] CI — Build · Qualidade · Segurança · Deploy"
+﻿name: "[microservice-a] CI — Build · Calidad · Seguridad · Deploy"
 
 # ══════════════════════════════════════════════════════════════════════════════
-# Equipa: PaymentBox Core (Team A)
-# Trigger: push em qualquer branch quando microservice-a/** muda
-# Objetivo: Build × Qualidade (JaCoCo+SonarCloud) × Segurança (Trivy) × E2E × GitOps
+# Equipo: PaymentBox Core (Team A)
+# Trigger: push en cualquier rama cuando cambia microservice-a/**
+# Objetivo: Build × Calidad (JaCoCo+SonarCloud) × Seguridad (Trivy) × E2E × GitOps
 #
-# Ambientes por branch:
-#   develop → env-e (Desenvolvimento)  [DEMO BREAK 2 falha neste pipeline, branch qa]
+# Ambientes por rama:
+#   develop → env-e (Desarrollo)  [DEMO BREAK 2 falla en este pipeline, rama qa]
 #   qa      → env-a (QA)
 #   uat     → env-u (UAT)
 #   main    → prod  (Produção)
@@ -40,7 +40,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0  # SonarCloud precisa de histórico completo
+          fetch-depth: 0  # SonarCloud necesita historial completo
 
       - name: Configurar JDK 17
         uses: actions/setup-java@v4
@@ -61,16 +61,16 @@ jobs:
         working-directory: microservice-a
         run: gradle jacocoTestCoverageVerification --no-daemon
 
-      - name: Subir relatório de testes
+      - name: Subir informe de tests
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: microservice-a-test-results-${{ github.ref_name }}
           path: microservice-a/build/reports/
 
-      - name: "SonarCloud — Análise de Qualidade de Código"
+      - name: "SonarCloud — Análisis de Calidad de Código"
         uses: SonarSource/sonarcloud-github-action@v3
-        continue-on-error: true  # ⚠️ PLACEHOLDER: configurar SONAR_TOKEN na organização
+        continue-on-error: true  # ⚠️ PLACEHOLDER: configurar SONAR_TOKEN en la organización
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
@@ -91,7 +91,7 @@ jobs:
 # JOB 2 — Security Scan (Trivy Filesystem)
 # ══════════════════════════════════════════════════════════════════════════════
   security-scan:
-    name: "2 · Segurança — Trivy Scan [microservice-a]"
+    name: "2 · Seguridad — Trivy Scan [microservice-a]"
     runs-on: ubuntu-latest
     needs: build-quality
     permissions:
@@ -107,7 +107,7 @@ jobs:
           name: microservice-a-jar-${{ github.run_id }}
           path: microservice-a/build/libs/
 
-      - name: "Trivy — Scan Filesystem (JAR + dependências)"
+      - name: "Trivy — Scan Filesystem (JAR + dependencias)"
         uses: aquasecurity/trivy-action@master
         with:
           scan-type: fs
@@ -152,18 +152,18 @@ jobs:
           name: microservice-a-jar-${{ github.run_id }}
           path: microservice-a/build/libs/
 
-      - name: Mapear branch → ambiente
+      - name: Mapear rama → ambiente
         id: env-info
         run: |
           case "${{ github.ref_name }}" in
-            develop) echo "overlay=env-e" >> $GITHUB_OUTPUT ; echo "name=E (Desenvolvimento)" >> $GITHUB_OUTPUT ; echo "prefix=env-e" >> $GITHUB_OUTPUT ;;
+            develop) echo "overlay=env-e" >> $GITHUB_OUTPUT ; echo "name=E (Desarrollo)" >> $GITHUB_OUTPUT ; echo "prefix=env-e" >> $GITHUB_OUTPUT ;;
             qa)      echo "overlay=env-a" >> $GITHUB_OUTPUT ; echo "name=A (QA)"              >> $GITHUB_OUTPUT ; echo "prefix=env-a" >> $GITHUB_OUTPUT ;;
             uat)     echo "overlay=env-u" >> $GITHUB_OUTPUT ; echo "name=U (UAT)"             >> $GITHUB_OUTPUT ; echo "prefix=env-u" >> $GITHUB_OUTPUT ;;
-            main)    echo "overlay=prod"  >> $GITHUB_OUTPUT ; echo "name=Produção"            >> $GITHUB_OUTPUT ; echo "prefix=prod"  >> $GITHUB_OUTPUT ;;
+            main)    echo "overlay=prod"  >> $GITHUB_OUTPUT ; echo "name=Producción"            >> $GITHUB_OUTPUT ; echo "prefix=prod"  >> $GITHUB_OUTPUT ;;
             *)       echo "overlay=env-e" >> $GITHUB_OUTPUT ; echo "name=E (manual)"          >> $GITHUB_OUTPUT ; echo "prefix=env-e" >> $GITHUB_OUTPUT ;;
           esac
 
-      - name: Calcular tag de imagem  (${{ steps.env-info.outputs.prefix }}-{sha})
+      - name: Calcular tag de imagen (${{ steps.env-info.outputs.prefix }}-{sha})
         id: image-tag
         run: |
           SHORT_SHA=$(echo "${{ github.sha }}" | cut -c1-7)
@@ -193,7 +193,7 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      - name: "Trivy — Scan Imagem Docker (CRITICAL bloqueante)"
+      - name: "Trivy — Scan Imagen Docker (CRITICAL bloqueante)"
         uses: aquasecurity/trivy-action@master
         with:
           scan-type: image
@@ -211,7 +211,7 @@ jobs:
           sarif_file: trivy-image-results.sarif
           category: trivy-image-microservice-a
 
-      - name: Push → GHCR com tag ${{ steps.image-tag.outputs.tag }}
+      - name: Push → GHCR con tag ${{ steps.image-tag.outputs.tag }}
         uses: docker/build-push-action@v5
         with:
           context: microservice-a
@@ -225,7 +225,7 @@ jobs:
 
 # ══════════════════════════════════════════════════════════════════════════════
 # JOB 4 — E2E Tests + GitOps Deploy
-# ⚠️  DEMO BREAK 2: falha neste job quando branch=qa com monto mínimo $100
+# ⚠️  DEMO BREAK 2: falla en este job cuando rama=qa con monto mínimo $100
 # ══════════════════════════════════════════════════════════════════════════════
   e2e-gitops:
     name: "4 · E2E Tests + GitOps Deploy [${{ needs.image-ops.outputs.env-name }}]"
@@ -258,12 +258,12 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Iniciar Ambiente Simulado (docker-compose)
+      - name: Iniciar Entorno Simulado (docker-compose)
         run: |
           cd simulation
           docker compose pull microservice-a microservice-b || true
           docker compose up -d --no-build
-          echo "⏳ Aguardando arranque dos serviços (90s)..."
+          echo "⏳ Esperando arranque de los servicios (90s)..."
           sleep 90
           docker compose ps
           echo "--- Logs microservice-b ---"
@@ -280,7 +280,7 @@ jobs:
             sleep 5
           done
           if [ "$STATUS" -ne "200" ]; then
-            echo "❌ microservice-b não arrancou"
+            echo "❌ microservice-b no arrancó"
             cd simulation && docker compose logs microservice-b
             exit 1
           fi
@@ -294,7 +294,7 @@ jobs:
             sleep 5
           done
           if [ "$STATUS" -ne "200" ]; then
-            echo "❌ microservice-a não arrancou"
+            echo "❌ microservice-a no arrancó"
             cd simulation && docker compose logs microservice-a
             exit 1
           fi
@@ -305,14 +305,14 @@ jobs:
           mvn test -Dkarate.env=ci -Dtest=RecargaFlowRunner#testRecargaFlow \
             --no-transfer-progress
 
-      - name: Subir Relatório Karate
+      - name: Subir Informe Karate
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: karate-e2e-report-${{ env.OVERLAY }}-${{ github.run_id }}
           path: tests/functional-karate/target/surefire-reports/
 
-      - name: "Selenium — Validação UI"
+      - name: "Selenium — Validación UI"
         run: |
           cd tests/ui-selenium
           mvn test -Dapp.url=http://localhost:8080 --no-transfer-progress
@@ -331,7 +331,7 @@ jobs:
         if: always()
         run: cd simulation && docker compose down -v
 
-      - name: "GitOps — Atualizar manifesto: microservice-a → ${{ env.IMAGE_TAG }} em ${{ env.OVERLAY }}"
+      - name: "GitOps — Actualizar manifiesto: microservice-a → ${{ env.IMAGE_TAG }} en ${{ env.OVERLAY }}"
         run: |
           python3 - << 'EOF'
           import re, os, sys
@@ -349,7 +349,7 @@ jobs:
           new_content = re.sub(pattern, replacement, content)
 
           if new_content == content:
-              print(f'⚠️  Padrão não encontrado em {filepath}', file=sys.stderr)
+              print(f'⚠️  Patrón no encontrado en {filepath}', file=sys.stderr)
               sys.exit(1)
 
           with open(filepath, 'w') as f:
@@ -357,25 +357,25 @@ jobs:
           print(f'✅ {service}: {new_tag} → k8s/overlays/{overlay}/kustomization.yaml')
           EOF
 
-      - name: "Git commit + push — manifesto atualizado [skip ci]"
+      - name: "Git commit + push — manifiesto actualizado [skip ci]"
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add k8s/overlays/${{ env.OVERLAY }}/kustomization.yaml
-          git diff --staged --quiet && echo "Sem alterações" && exit 0
+          git diff --staged --quiet && echo "Sin cambios" && exit 0
           git commit -m "gitops(microservice-a): ${IMAGE_TAG} → ${ENV_NAME} [skip ci]"
           git push
 
       - name: "ArgoCD (simulado) — Sync ${{ env.ENV_NAME }}"
         run: |
           echo "═══════════════════════════════════════════════════════════════"
-          echo "🔄 [ArgoCD] Alteração detetada em k8s/overlays/${OVERLAY}/"
+          echo "🔄 [ArgoCD] Cambio detectado en k8s/overlays/${OVERLAY}/"
           echo "🔄 [ArgoCD] Application: att-paymentbox-${OVERLAY}"
-          echo "🔄 [ArgoCD] Serviço:     microservice-a"
-          echo "🔄 [ArgoCD] Nova imagem: ghcr.io/.../microservice-a:${IMAGE_TAG}"
-          echo "🔄 [ArgoCD] Ambiente:    ${ENV_NAME}"
+          echo "🔄 [ArgoCD] Servicio:    microservice-a"
+          echo "🔄 [ArgoCD] Nueva imagen: ghcr.io/.../microservice-a:${IMAGE_TAG}"
+          echo "🔄 [ArgoCD] Entorno:     ${ENV_NAME}"
           echo "🔄 [ArgoCD] Sync strategy: Apply (Prune=true, SelfHeal=true)"
           sleep 2
-          echo "✅ [ArgoCD] Sync concluído — microservice-a deployado em ${ENV_NAME}"
+          echo "✅ [ArgoCD] Sync completado — microservice-a desplegado en ${ENV_NAME}"
           echo "🌐 [ArgoCD] Endpoint: http://microservice-a.${OVERLAY}.att-paymentbox.internal"
           echo "═══════════════════════════════════════════════════════════════"
