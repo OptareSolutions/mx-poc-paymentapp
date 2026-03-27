@@ -1,0 +1,26 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# ── Ambiente A — QA (Testes) ──────────────────────────────────────────────────
+# Branch: qa  |  Deploy: via pipeline-integration.yml (promoção manual develop→qa)
+# ArgoCD app: att-paymentbox-env-a
+
+namespace: att-paymentbox-env-a
+
+commonLabels:
+  environment: env-a
+  managed-by: argocd
+
+resources:
+  - ../../base/microservice-a
+  - ../../base/microservice-b
+  - ../../base/ui-paymentbox
+
+# Tags promovidas automaticamente pelo pipeline-integration.yml (develop→qa)
+images:
+  - name: ghcr.io/optaresolutions/att-poc-paymentbox/microservice-a
+    newTag: "env-e-0000000"
+  - name: ghcr.io/optaresolutions/att-poc-paymentbox/microservice-b
+    newTag: "env-e-0000000"
+  - name: ghcr.io/optaresolutions/att-poc-paymentbox/ui-paymentbox
+    newTag: "env-e-0000000"

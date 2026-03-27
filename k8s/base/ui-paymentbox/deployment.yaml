@@ -1,0 +1,60 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ui-paymentbox
+  labels:
+    app: ui-paymentbox
+    team: frontend
+    component: ui
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ui-paymentbox
+  template:
+    metadata:
+      labels:
+        app: ui-paymentbox
+        team: frontend
+    spec:
+      containers:
+        - name: ui-paymentbox
+          image: ghcr.io/optaresolutions/att-poc-paymentbox/ui-paymentbox
+          ports:
+            - name: http
+              containerPort: 80
+          readinessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 20
+            periodSeconds: 15
+          resources:
+            requests:
+              memory: "64Mi"
+              cpu: "50m"
+            limits:
+              memory: "128Mi"
+              cpu: "100m"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ui-paymentbox
+  labels:
+    app: ui-paymentbox
+    team: frontend
+spec:
+  selector:
+    app: ui-paymentbox
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
+  type: ClusterIP

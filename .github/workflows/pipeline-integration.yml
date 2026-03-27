@@ -1,0 +1,382 @@
+name: "🔄 Pipeline Integração — Contrato · E2E · Promoção entre Ambientes"
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Trigger: MANUAL (workflow_dispatch) — promoção deliberada entre ambientes
+#
+# Fluxo de promoção:
+#   develop → qa    (env-e → env-a)   Equipa valida no E e promove para QA
+#   qa      → uat   (env-a → env-u)   QA valida e promove para UAT
+#   uat     → main  (env-u → prod)    UAT valida e promove para Produção
+#
+# Gates declarativos:
+#   Job 2 — Testes de Contrato inter-serviços  (⚠️ DEMO BREAK 1: falha aqui)
+#   Job 3 — E2E completo com ambiente simulado
+#   Job 4 — Promoção GitOps + ArgoCD simulado  (só executa se Jobs 2+3 verdes)
+# ══════════════════════════════════════════════════════════════════════════════
+
+on:
+  workflow_dispatch:
+    inputs:
+      promote_from:
+        description: "Ambiente de ORIGEM (branch)"
+        required: true
+        type: choice
+        options: [develop, qa, uat]
+      promote_to:
+        description: "Ambiente de DESTINO (branch)"
+        required: true
+        type: choice
+        options: [qa, uat, main]
+
+env:
+  REGISTRY: ghcr.io
+
+# ══════════════════════════════════════════════════════════════════════════════
+# JOB 1 — Validar inputs de promoção
+# ══════════════════════════════════════════════════════════════════════════════
+jobs:
+  validate:
+    name: "0 · Validar Promoção ${{ inputs.promote_from }} → ${{ inputs.promote_to }}"
+    runs-on: ubuntu-latest
+    outputs:
+      from-overlay: ${{ steps.mapping.outputs.from_overlay }}
+      to-overlay:   ${{ steps.mapping.outputs.to_overlay }}
+      from-name:    ${{ steps.mapping.outputs.from_name }}
+      to-name:      ${{ steps.mapping.outputs.to_name }}
+
+    steps:
+      - name: Validar combinação de ambientes
+        run: |
+          FROM="${{ inputs.promote_from }}"
+          TO="${{ inputs.promote_to }}"
+          VALID=false
+          [ "$FROM" = "develop" ] && [ "$TO" = "qa"   ] && VALID=true
+          [ "$FROM" = "qa"      ] && [ "$TO" = "uat"  ] && VALID=true
+          [ "$FROM" = "uat"     ] && [ "$TO" = "main" ] && VALID=true
+          if [ "$VALID" = "false" ]; then
+            echo "❌ Combinação inválida: ${FROM} → ${TO}"
+            echo "   Combinações válidas: develop→qa | qa→uat | uat→main"
+            exit 1
+          fi
+          echo "✅ Promoção válida: ${FROM} → ${TO}"
+
+      - name: Mapear ambientes e overlays
+        id: mapping
+        run: |
+          case "${{ inputs.promote_from }}" in
+            develop) echo "from_overlay=env-e" >> $GITHUB_OUTPUT ; echo "from_name=E (Desenvolvimento)" >> $GITHUB_OUTPUT ;;
+            qa)      echo "from_overlay=env-a" >> $GITHUB_OUTPUT ; echo "from_name=A (QA)"              >> $GITHUB_OUTPUT ;;
+            uat)     echo "from_overlay=env-u" >> $GITHUB_OUTPUT ; echo "from_name=U (UAT)"             >> $GITHUB_OUTPUT ;;
+          esac
+          case "${{ inputs.promote_to }}" in
+            qa)   echo "to_overlay=env-a" >> $GITHUB_OUTPUT ; echo "to_name=A (QA)"    >> $GITHUB_OUTPUT ;;
+            uat)  echo "to_overlay=env-u" >> $GITHUB_OUTPUT ; echo "to_name=U (UAT)"   >> $GITHUB_OUTPUT ;;
+            main) echo "to_overlay=prod"  >> $GITHUB_OUTPUT ; echo "to_name=Produção"  >> $GITHUB_OUTPUT ;;
+          esac
+
+# ══════════════════════════════════════════════════════════════════════════════
+# JOB 2 — Testes de Contrato Inter-Serviços
+# ⚠️  DEMO BREAK 1: falha aqui quando microservice-b tem campos renomeados
+#     (telefono→phone / nombre→fullName) e a imagem env-e está no GHCR
+# ══════════════════════════════════════════════════════════════════════════════
+  contract-tests:
+    name: "1 · ⚠️ DEMO BREAK 1 → Testes Contrato [${{ needs.validate.outputs.from-name }}]"
+    runs-on: ubuntu-latest
+    needs: validate
+
+    env:
+      FROM_OVERLAY: ${{ needs.validate.outputs.from-overlay }}
+      FROM_NAME:    ${{ needs.validate.outputs.from-name }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configurar JDK 17 (Karate)
+        uses: actions/setup-java@v4
+        with:
+          java-version: "17"
+          distribution: temurin
+
+      - name: Login GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: "Ler tags de imagem do overlay ${{ env.FROM_OVERLAY }}"
+        id: read-tags
+        run: |
+          KUSTOMIZE="k8s/overlays/${FROM_OVERLAY}/kustomization.yaml"
+          echo "=== Manifesto atual de ${FROM_OVERLAY} ==="
+          cat "$KUSTOMIZE"
+          echo ""
+          TAG_A=$(grep -A1 'att-poc-paymentbox/microservice-a' "$KUSTOMIZE" | grep newTag | sed 's/.*newTag: *"//' | sed 's/".*//' | tr -d ' ')
+          TAG_B=$(grep -A1 'att-poc-paymentbox/microservice-b' "$KUSTOMIZE" | grep newTag | sed 's/.*newTag: *"//' | sed 's/".*//' | tr -d ' ')
+          echo "microservice-a tag: ${TAG_A}"
+          echo "microservice-b tag: ${TAG_B}"
+          echo "tag_a=${TAG_A}" >> $GITHUB_OUTPUT
+          echo "tag_b=${TAG_B}" >> $GITHUB_OUTPUT
+
+      - name: Pull imagens do ambiente ${{ env.FROM_NAME }} para teste de contrato
+        run: |
+          docker pull ${{ env.REGISTRY }}/${{ github.repository }}/microservice-a:${{ steps.read-tags.outputs.tag_a }} || \
+            docker pull ${{ env.REGISTRY }}/${{ github.repository }}/microservice-a:latest
+          docker pull ${{ env.REGISTRY }}/${{ github.repository }}/microservice-b:${{ steps.read-tags.outputs.tag_b }} || \
+            docker pull ${{ env.REGISTRY }}/${{ github.repository }}/microservice-b:latest
+
+      - name: Iniciar Ambiente para Contrato (docker-compose)
+        env:
+          MSVC_A_TAG: ${{ steps.read-tags.outputs.tag_a }}
+          MSVC_B_TAG: ${{ steps.read-tags.outputs.tag_b }}
+        run: |
+          cd simulation
+          # Sobrepor as tags específicas do ambiente de origem
+          MSVC_A_IMAGE="${{ env.REGISTRY }}/${{ github.repository }}/microservice-a:${MSVC_A_TAG:-latest}"
+          MSVC_B_IMAGE="${{ env.REGISTRY }}/${{ github.repository }}/microservice-b:${MSVC_B_TAG:-latest}"
+          echo "Usando microservice-a: ${MSVC_A_IMAGE}"
+          echo "Usando microservice-b: ${MSVC_B_IMAGE}"
+          # Override das imagens via variáveis de ambiente do docker compose
+          MICROSERVICE_A_IMAGE="$MSVC_A_IMAGE" MICROSERVICE_B_IMAGE="$MSVC_B_IMAGE" \
+            docker compose up -d db-simulado mock-operador mock-recibo microservice-b microservice-a --no-build
+          echo "⏳ Aguardando arranque dos serviços (90s)..."
+          sleep 90
+          docker compose ps
+
+      - name: Health Check microservice-b (imagem ${{ env.FROM_NAME }})
+        run: |
+          for i in {1..15}; do
+            STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8081/actuator/health || echo "000")
+            [ "$STATUS" -eq "200" ] && echo "✅ microservice-b UP" && break
+            sleep 5
+          done
+          if [ "$STATUS" -ne "200" ]; then
+            cd simulation && docker compose logs microservice-b
+            exit 1
+          fi
+
+      - name: Health Check microservice-a
+        run: |
+          for i in {1..15}; do
+            STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8080/actuator/health || echo "000")
+            [ "$STATUS" -eq "200" ] && echo "✅ microservice-a UP" && break
+            sleep 5
+          done
+          if [ "$STATUS" -ne "200" ]; then
+            cd simulation && docker compose logs microservice-a
+            exit 1
+          fi
+
+      - name: "⚠️  DEMO BREAK 1 → Karate Contrato — microservice-a ↔ microservice-b"
+        run: |
+          echo "🔍 Validando contrato público de microservice-b..."
+          echo "   Campos esperados: 'telefono', 'nombre', 'status'"
+          cd tests/functional-karate
+          mvn test -Dkarate.env=ci \
+            -Dtest=RecargaFlowRunner#testContratoMicroservicios \
+            --no-transfer-progress
+
+      - name: Subir Relatório Contrato
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: contract-test-report-${{ github.run_id }}
+          path: tests/functional-karate/target/surefire-reports/
+
+      - name: Parar Ambiente
+        if: always()
+        run: cd simulation && docker compose down -v
+
+# ══════════════════════════════════════════════════════════════════════════════
+# JOB 3 — E2E Completo
+# ══════════════════════════════════════════════════════════════════════════════
+  e2e-full:
+    name: "2 · E2E Completo — Karate 8 Pasos + k6 [${{ needs.validate.outputs.from-name }}]"
+    runs-on: ubuntu-latest
+    needs: [validate, contract-tests]
+
+    env:
+      FROM_OVERLAY: ${{ needs.validate.outputs.from-overlay }}
+      FROM_NAME:    ${{ needs.validate.outputs.from-name }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configurar JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: "17"
+          distribution: temurin
+
+      - name: Login GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Iniciar Ambiente Completo (docker-compose)
+        run: |
+          cd simulation
+          docker compose pull microservice-a microservice-b || true
+          docker compose up -d --no-build
+          echo "⏳ Aguardando arranque (90s)..."
+          sleep 90
+          docker compose ps
+
+      - name: Health Checks
+        run: |
+          for SVC_URL in http://localhost:8081/actuator/health http://localhost:8080/actuator/health; do
+            for i in {1..15}; do
+              STATUS=$(curl -s -o /dev/null -w "%{http_code}" "$SVC_URL" || echo "000")
+              [ "$STATUS" -eq "200" ] && echo "✅ ${SVC_URL} UP" && break
+              sleep 5
+            done
+            [ "$STATUS" -ne "200" ] && echo "❌ ${SVC_URL} não respondeu" && exit 1
+          done
+
+      - name: "Karate E2E — Flujo Completo 8 Pasos"
+        run: |
+          cd tests/functional-karate
+          mvn test -Dkarate.env=ci \
+            -Dtest=RecargaFlowRunner#testRecargaFlow \
+            --no-transfer-progress
+
+      - name: Subir Relatório E2E
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-full-report-${{ github.run_id }}
+          path: tests/functional-karate/target/surefire-reports/
+
+      - name: "k6 Smoke Test — Performance"
+        run: |
+          curl -fsSL https://dl.k6.io/key.gpg \
+            | sudo gpg --dearmor -o /usr/share/keyrings/k6-archive-keyring.gpg
+          echo "deb [signed-by=/usr/share/keyrings/k6-archive-keyring.gpg] https://dl.k6.io/deb stable main" \
+            | sudo tee /etc/apt/sources.list.d/k6.list
+          sudo apt-get update -qq && sudo apt-get install -y k6
+          k6 run --env BASE_URL=http://localhost:8080 tests/k6/smoke_recarga.js
+
+      - name: Parar Ambiente
+        if: always()
+        run: cd simulation && docker compose down -v
+
+# ══════════════════════════════════════════════════════════════════════════════
+# JOB 4 — Promoção GitOps
+# Só executa se Jobs 2 e 3 passarem — proteção total do ambiente destino
+# ══════════════════════════════════════════════════════════════════════════════
+  promote:
+    name: "3 · GitOps Promoção ${{ needs.validate.outputs.from-name }} → ${{ needs.validate.outputs.to-name }}"
+    runs-on: ubuntu-latest
+    needs: [validate, contract-tests, e2e-full]
+    permissions:
+      contents: write
+
+    env:
+      FROM_OVERLAY: ${{ needs.validate.outputs.from-overlay }}
+      TO_OVERLAY:   ${{ needs.validate.outputs.to-overlay }}
+      FROM_NAME:    ${{ needs.validate.outputs.from-name }}
+      TO_NAME:      ${{ needs.validate.outputs.to-name }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: "Copiar tags de ${{ env.FROM_OVERLAY }} → ${{ env.TO_OVERLAY }}"
+        run: |
+          python3 - << 'EOF'
+          import re, os, sys
+
+          REGISTRY = 'ghcr.io/optaresolutions/att-poc-paymentbox'
+          SERVICES = ['microservice-a', 'microservice-b', 'ui-paymentbox']
+          from_ovl = os.environ['FROM_OVERLAY']
+          to_ovl   = os.environ['TO_OVERLAY']
+          from_name = os.environ['FROM_NAME']
+          to_name   = os.environ['TO_NAME']
+
+          src_path = f'k8s/overlays/{from_ovl}/kustomization.yaml'
+          tgt_path = f'k8s/overlays/{to_ovl}/kustomization.yaml'
+
+          with open(src_path) as f:
+              src = f.read()
+          with open(tgt_path) as f:
+              tgt = f.read()
+
+          print(f'📋 Promovendo {from_name} → {to_name}')
+          print(f'   Origem:  {src_path}')
+          print(f'   Destino: {tgt_path}')
+          print()
+
+          for svc in SERVICES:
+              m = re.search(
+                  rf'- name: {re.escape(REGISTRY)}/{svc}\n\s+newTag: "?([^"\n]+)"?',
+                  src
+              )
+              if m:
+                  tag = m.group(1)
+                  pattern     = rf'(- name: {re.escape(REGISTRY)}/{svc}\n\s+newTag:)[^\n]*'
+                  replacement = rf'\1 "{tag}"'
+                  new_tgt     = re.sub(pattern, replacement, tgt)
+                  if new_tgt != tgt:
+                      tgt = new_tgt
+                      print(f'  ✅ {svc}: {tag}')
+                  else:
+                      print(f'  ⚠️  {svc}: padrão não encontrado no destino', file=sys.stderr)
+              else:
+                  print(f'  ⚠️  {svc}: tag não encontrada na origem', file=sys.stderr)
+
+          with open(tgt_path, 'w') as f:
+              f.write(tgt)
+
+          print()
+          print('=== Manifesto destino atualizado ===')
+          print(tgt)
+          EOF
+
+      - name: "Git commit + push — promoção GitOps [skip ci]"
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add k8s/overlays/${{ env.TO_OVERLAY }}/kustomization.yaml
+          git diff --staged --quiet && echo "Sem alterações" && exit 0
+          git commit -m "gitops: promover ${FROM_OVERLAY} → ${TO_OVERLAY} (${FROM_NAME} → ${TO_NAME}) [skip ci]"
+          git push
+
+      - name: "ArgoCD (simulado) — Sync ${{ env.TO_NAME }}"
+        run: |
+          echo "═══════════════════════════════════════════════════════════════"
+          echo "🔄 [ArgoCD] Promoção detetada:"
+          echo "   Origem:  ${FROM_NAME} (${FROM_OVERLAY})"
+          echo "   Destino: ${TO_NAME} (${TO_OVERLAY})"
+          echo ""
+          echo "🔄 [ArgoCD] Sincronizando application att-paymentbox-${TO_OVERLAY}..."
+          echo "🔄 [ArgoCD] Strategy: Sync (Prune=true, SelfHeal=true)"
+          sleep 3
+          echo ""
+          echo "✅ [ArgoCD] Sync CONCLUÍDO"
+          echo "   microservice-a → deployado em ${TO_NAME}"
+          echo "   microservice-b → deployado em ${TO_NAME}"
+          echo "   ui-paymentbox  → deployado em ${TO_NAME}"
+          echo ""
+          echo "🌐 Endpoints simulados ${TO_NAME}:"
+          echo "   API:  http://microservice-a.${TO_OVERLAY}.att-paymentbox.internal"
+          echo "   UI:   http://ui.${TO_OVERLAY}.att-paymentbox.internal"
+          echo "═══════════════════════════════════════════════════════════════"
+
+      - name: Sumário da Promoção
+        run: |
+          echo "## 🚀 Promoção Concluída" >> $GITHUB_STEP_SUMMARY
+          echo ""                          >> $GITHUB_STEP_SUMMARY
+          echo "| Campo | Valor |"         >> $GITHUB_STEP_SUMMARY
+          echo "|-------|-------|"         >> $GITHUB_STEP_SUMMARY
+          echo "| Origem | ${{ env.FROM_NAME }} (\`${{ env.FROM_OVERLAY }}\`) |" >> $GITHUB_STEP_SUMMARY
+          echo "| Destino | ${{ env.TO_NAME }} (\`${{ env.TO_OVERLAY }}\`) |"    >> $GITHUB_STEP_SUMMARY
+          echo "| Testes Contrato | ✅ Passaram |"  >> $GITHUB_STEP_SUMMARY
+          echo "| E2E Completo | ✅ Passaram |"     >> $GITHUB_STEP_SUMMARY
+          echo "| GitOps | ✅ Manifesto atualizado |" >> $GITHUB_STEP_SUMMARY
+          echo "| ArgoCD | ✅ Sync simulado |"       >> $GITHUB_STEP_SUMMARY

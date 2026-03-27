@@ -1,0 +1,26 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# ── Produção ──────────────────────────────────────────────────────────────────
+# Branch: main  |  Deploy: via pipeline-integration.yml (promoção manual uat→main)
+# ArgoCD app: att-paymentbox-prod
+
+namespace: att-paymentbox-prod
+
+commonLabels:
+  environment: prod
+  managed-by: argocd
+
+resources:
+  - ../../base/microservice-a
+  - ../../base/microservice-b
+  - ../../base/ui-paymentbox
+
+# Tags promovidas automaticamente pelo pipeline-integration.yml (uat→main)
+images:
+  - name: ghcr.io/optaresolutions/att-poc-paymentbox/microservice-a
+    newTag: "env-e-0000000"
+  - name: ghcr.io/optaresolutions/att-poc-paymentbox/microservice-b
+    newTag: "env-e-0000000"
+  - name: ghcr.io/optaresolutions/att-poc-paymentbox/ui-paymentbox
+    newTag: "env-e-0000000"

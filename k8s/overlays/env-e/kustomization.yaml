@@ -1,0 +1,26 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# ── Ambiente E — Desenvolvimento ─────────────────────────────────────────────
+# Branch: develop  |  Deploy: automático (pipeline-microservice-*.yml)
+# ArgoCD app: att-paymentbox-env-e
+
+namespace: att-paymentbox-env-e
+
+commonLabels:
+  environment: env-e
+  managed-by: argocd
+
+resources:
+  - ../../base/microservice-a
+  - ../../base/microservice-b
+  - ../../base/ui-paymentbox
+
+# Tags atualizadas automaticamente pelos pipelines CI/CD
+images:
+  - name: ghcr.io/optaresolutions/att-poc-paymentbox/microservice-a
+    newTag: "env-e-0000000"
+  - name: ghcr.io/optaresolutions/att-poc-paymentbox/microservice-b
+    newTag: "env-e-0000000"
+  - name: ghcr.io/optaresolutions/att-poc-paymentbox/ui-paymentbox
+    newTag: "env-e-0000000"
