@@ -1,0 +1,31 @@
+# Normalize line endings and strip BOM on all text files
+* text=auto eol=lf
+
+# Java source — enforce UTF-8 without BOM
+*.java text eol=lf encoding=UTF-8
+*.kt   text eol=lf encoding=UTF-8
+
+# Build / config files
+*.gradle     text eol=lf
+*.properties text eol=lf
+*.yml        text eol=lf
+*.yaml       text eol=lf
+*.xml        text eol=lf
+*.json       text eol=lf
+*.sql        text eol=lf
+*.feature    text eol=lf
+*.md         text eol=lf
+
+# Shell scripts
+*.sh text eol=lf
+
+# Web / UI
+*.ts   text eol=lf encoding=UTF-8
+*.html text eol=lf encoding=UTF-8
+*.scss text eol=lf encoding=UTF-8
+*.css  text eol=lf encoding=UTF-8
+
+# Binaries — do not touch
+*.jar  binary
+*.png  binary
+*.jpg  binary
