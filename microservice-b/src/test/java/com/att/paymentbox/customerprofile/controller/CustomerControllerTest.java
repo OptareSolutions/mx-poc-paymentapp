@@ -1,4 +1,4 @@
-package com.att.paymentbox.customerprofile.controller;
+﻿package com.att.paymentbox.customerprofile.controller;
 
 import com.att.paymentbox.customerprofile.dto.CustomerProfileDto;
 import com.att.paymentbox.customerprofile.model.Cliente;
@@ -47,9 +47,9 @@ class CustomerControllerTest {
         assertThat(response.getStatusCode()).isEqualTo(org.springframework.http.HttpStatus.OK);
         CustomerProfileDto dto = response.getBody();
         assertThat(dto).isNotNull();
-        // ⚠️ CONTRATO: estos campos deben existir — si se renombran rompe microservice-a
-        assertThat(dto.getTelefono()).isEqualTo("4544");
-        assertThat(dto.getNombre()).isEqualTo("Billy 1 - Cortes");
+        // âš ï¸ CONTRATO: estos campos deben existir â€” si se renombran rompe microservice-a
+        assertThat(dto.getPhone()).isEqualTo("4544");
+        assertThat(dto.getFullName()).isEqualTo("Billy 1 - Cortes");
         assertThat(dto.getStatus()).isEqualTo("ACTIVO");
     }
 
@@ -75,6 +75,6 @@ class CustomerControllerTest {
         var result = customerController.getAll();
 
         assertThat(result).hasSize(2);
-        assertThat(result.get(0).getTelefono()).isEqualTo("4544");
+        assertThat(result.get(0).getPhone()).isEqualTo("4544");
     }
 }

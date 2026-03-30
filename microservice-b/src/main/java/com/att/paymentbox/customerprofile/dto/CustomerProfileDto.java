@@ -1,35 +1,35 @@
-package com.att.paymentbox.customerprofile.dto;
+﻿package com.att.paymentbox.customerprofile.dto;
 
-// ══════════════════════════════════════════════════════════════════════════════
-// CONTRATO PÚBLICO de microservice-b → consumido por microservice-a
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// CONTRATO PÃšBLICO de microservice-b â†’ consumido por microservice-a
 //
-// ⚠️  DEMO BREAK 1: renombrar 'telefono' → 'phone' y 'nombre' → 'fullName'
+// âš ï¸  DEMO BREAK 1: renombrar 'telefono' â†’ 'phone' y 'nombre' â†’ 'fullName'
 //     para romper el contrato y que el pipeline falle en Job 2.
-// ══════════════════════════════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 public class CustomerProfileDto {
 
     private Long id;
-    private String telefono;   // CAMPO DE CONTRATO — no renombrar sin actualizar consumidores
-    private String nombre;     // CAMPO DE CONTRATO — no renombrar sin actualizar consumidores
+    private String phone;       // BROKEN: era "telefono"   // CAMPO DE CONTRATO â€” no renombrar sin actualizar consumidores
+    private String fullName;    // BROKEN: era "nombre"     // CAMPO DE CONTRATO â€” no renombrar sin actualizar consumidores
     private String status;
 
     public CustomerProfileDto() {}
 
     public CustomerProfileDto(Long id, String telefono, String nombre, String status) {
         this.id = id;
-        this.telefono = telefono;
-        this.nombre = nombre;
+        this.phone = phone;
+        this.fullName = fullName;
         this.status = status;
     }
 
     public Long getId() { return id; }
     public void setId(Long id) { this.id = id; }
 
-    public String getTelefono() { return telefono; }
-    public void setTelefono(String telefono) { this.telefono = telefono; }
+    public String getPhone() { return phone; }
+    public void setPhone(String phone) { this.phone = phone; }
 
-    public String getNombre() { return nombre; }
-    public void setNombre(String nombre) { this.nombre = nombre; }
+    public String getFullName() { return fullName; }
+    public void setFullName(String fullName) { this.fullName = fullName; }
 
     public String getStatus() { return status; }
     public void setStatus(String status) { this.status = status; }
