@@ -3,7 +3,7 @@ package com.att.paymentbox;
 import com.intuit.karate.junit5.Karate;
 import org.junit.jupiter.api.DisplayName;
 
-@DisplayName("AT&T PaymentBox - Karate Functional Tests (8 Pasos + Contratos)")
+@DisplayName("Telco Operator PaymentBox - Karate Functional Tests (8 Pasos + Contratos)")
 public class RecargaFlowRunner {
 
     @Karate.Test

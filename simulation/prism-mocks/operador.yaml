@@ -1,12 +1,12 @@
 openapi: 3.0.3
 info:
-  title: API Operador AT&T - Mock (Paso 4)
+  title: API Operador Telco Operator - Mock (Paso 4)
   description: |
-    Mock do serviço de Operador AT&T. Simulado via Prism CLI.
+    Mock do serviço de Operador Telco Operator. Simulado via Prism CLI.
     Valida se um número de telefono é elegível para recarga com um operador específico.
   version: 1.0.0
   contact:
-    name: Optare Solutions - AT&T QA PoC
+    name: Optare Solutions - Telco Operator QA PoC
 
 servers:
   - url: http://localhost:4010

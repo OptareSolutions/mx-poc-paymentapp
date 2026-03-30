@@ -23,7 +23,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
-@DisplayName("RecargaController - Endpoints PaymentBox AT&T")
+@DisplayName("RecargaController - Endpoints PaymentBox Telco Operator")
 class RecargaControllerTest {
 
     @Mock

@@ -28,7 +28,7 @@ import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
-@DisplayName("RecargaService - Flujo de 8 Pasos AT&T PaymentBox")
+@DisplayName("RecargaService - Flujo de 8 Pasos Telco Operator PaymentBox")
 class RecargaServiceTest {
 
     @Mock private CustomerProfileClient customerProfileClient;

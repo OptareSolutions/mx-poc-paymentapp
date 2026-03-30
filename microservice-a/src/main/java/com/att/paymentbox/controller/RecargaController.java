@@ -16,7 +16,7 @@ import java.util.Map;
 
 @RestController
 @RequestMapping("/api")
-@Tag(name = "Recarga PaymentBox", description = "Flujo de 8 pasos - Recarga por PaymentBox AT&T")
+@Tag(name = "Recarga PaymentBox", description = "Flujo de 8 pasos - Recarga por PaymentBox Telco Operator")
 public class RecargaController {
 
     private final RecargaService recargaService;

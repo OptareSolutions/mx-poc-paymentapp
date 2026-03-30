@@ -1,5 +1,5 @@
 -- ============================================================
--- TDM Seeder: Perfiles Billy (Datos Sintéticos AT&T)
+-- TDM Seeder: Perfiles Billy (Datos Sintéticos Telco Operator)
 -- Evelyn Pineda & Billy Cortes - Perfiles validados para la PoC
 -- ============================================================
 

@@ -18,9 +18,9 @@ resources:
 
 # Tags promovidas automaticamente pelo pipeline-integration.yml (uat→main)
 images:
-  - name: ghcr.io/optaresolutions/att-poc-paymentbox/microservice-a
+  - name: ghcr.io/optaresolutions/mx-poc-paymentapp/microservice-a
     newTag: "env-e-0000000"
-  - name: ghcr.io/optaresolutions/att-poc-paymentbox/microservice-b
+  - name: ghcr.io/optaresolutions/mx-poc-paymentapp/microservice-b
     newTag: "env-e-0000000"
-  - name: ghcr.io/optaresolutions/att-poc-paymentbox/ui-paymentbox
+  - name: ghcr.io/optaresolutions/mx-poc-paymentapp/ui-paymentbox
     newTag: "env-e-0000000"

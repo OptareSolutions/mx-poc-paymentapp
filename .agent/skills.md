@@ -12,7 +12,7 @@
   - `/.github/workflows`: Pipeline multi-stage (Build -> Contract -> Image -> E2E).
 
 ## Skill 3: Inyección de Datos Sintéticos (TDM)
-- Implementar lógica de "Seeders": antes de los tests funcionales, el agente debe poblar una base de datos temporal (GitHub Services) con los perfiles "Billy" definidos en la reunión con AT&T.
+- Implementar lógica de "Seeders": antes de los tests funcionales, el agente debe poblar una base de datos temporal (GitHub Services) con los perfiles "Billy" definidos en la reunión con Telco Operator.
 
 ## Skill 4: Validación Multinivel
 - **Unitaria:** JUnit + JaCoCo (Cobertura > 80%).

@@ -26,7 +26,7 @@ services:
 
   # ── Microservice A ───────────────────────────────────────────────────────────
   microservice-a:
-    image: ghcr.io/optaresolutions/att-poc-paymentbox/microservice-a:latest
+    image: ghcr.io/optaresolutions/mx-poc-paymentapp/microservice-a:latest
     build:
       context: ../microservice-a
       dockerfile: src/Dockerfile
@@ -59,7 +59,7 @@ services:
 
   # ── Microservice B (Customer Profile Service) ────────────────────────────────
   microservice-b:
-    image: ghcr.io/optaresolutions/att-poc-paymentbox/microservice-b:latest
+    image: ghcr.io/optaresolutions/mx-poc-paymentapp/microservice-b:latest
     build:
       context: ../microservice-b
       dockerfile: src/Dockerfile
@@ -83,7 +83,7 @@ services:
 
   # ── UI PaymentBox (Angular SPA via Nginx) ───────────────────────────────────
   ui-paymentbox:
-    image: ghcr.io/optaresolutions/att-poc-paymentbox/ui-paymentbox:latest
+    image: ghcr.io/optaresolutions/mx-poc-paymentapp/ui-paymentbox:latest
     build:
       context: ../ui-paymentbox
     container_name: att-ui-paymentbox

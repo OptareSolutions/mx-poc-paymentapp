@@ -1,5 +1,5 @@
 /**
- * k6 Smoke Test - Ruta Crítica PaymentBox AT&T (Paso 6 - Performance)
+ * k6 Smoke Test - Ruta Crítica PaymentBox Telco Operator (Paso 6 - Performance)
  * Valida la ruta crítica del flujo de 8 pasos bajo carga mínima.
  *
  * Ejecución local:  k6 run tests/k6/smoke_recarga.js
@@ -136,6 +136,6 @@ export default function () {
 export function handleSummary(data) {
   return {
     'tests/k6/results/smoke_summary.json': JSON.stringify(data, null, 2),
-    stdout: '\n=== AT&T PaymentBox - Smoke Test Completo ===\n',
+    stdout: '\n=== Telco Operator PaymentBox - Smoke Test Completo ===\n',
   };
 }

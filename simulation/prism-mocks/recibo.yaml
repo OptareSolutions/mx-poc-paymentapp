@@ -1,12 +1,12 @@
 openapi: 3.0.3
 info:
-  title: API Emissão de Recibo AT&T - Mock (Paso 8)
+  title: API Emissão de Recibo Telco Operator - Mock (Paso 8)
   description: |
-    Mock do serviço de emissão de recibo AT&T. Simulado via Prism CLI.
+    Mock do serviço de emissão de recibo Telco Operator. Simulado via Prism CLI.
     Gera um recibo PDF sintético para um pagamento registado no Ambiente A.
   version: 1.0.0
   contact:
-    name: Optare Solutions - AT&T QA PoC
+    name: Optare Solutions - Telco Operator QA PoC
 
 servers:
   - url: http://localhost:4011

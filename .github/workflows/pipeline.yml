@@ -1,21 +1,21 @@
-﻿name: "AT&T PaymentBox - Pipeline Declarativo PoC"
+name: "Telco Operator PaymentBox - Pipeline Declarativo PoC"
 
-# ══════════════════════════════════════════════════════════════════════════════
-# LEGACY — sustituido por los pipelines por microservicio. Mantenido como referencia.
+# ------------------------------------------------------------------------------
+# LEGACY � sustituido por los pipelines por microservicio. Mantenido como referencia.
 #
 # Pipelines activos:
 #   .github/workflows/pipeline-microservice-a.yml  (path trigger: microservice-a/**)
 #   .github/workflows/pipeline-microservice-b.yml  (path trigger: microservice-b/**)
-#   .github/workflows/pipeline-integration.yml     (workflow_dispatch — promoción manual)
-# ══════════════════════════════════════════════════════════════════════════════
+#   .github/workflows/pipeline-integration.yml     (workflow_dispatch � promoci�n manual)
+# ------------------------------------------------------------------------------
 
 on:
   workflow_dispatch:
     inputs:
       reason:
-        description: "Motivo de ejecución manual (referencia/debug)"
+        description: "Motivo de ejecuci�n manual (referencia/debug)"
         required: false
-        default: "ejecución manual de referencia"
+        default: "ejecuci�n manual de referencia"
 
 env:
   REGISTRY: ghcr.io
@@ -23,12 +23,12 @@ env:
   IMAGE_NAME_B: ${{ github.repository }}/microservice-b
   IMAGE_NAME_UI: ${{ github.repository }}/ui-paymentbox
 
-# ══════════════════════════════════════════════════════════════════════════════
-# JOB 1 — Build & Quality (Shift-Left: unitarios + seguridad primero)
-# ══════════════════════════════════════════════════════════════════════════════
+# ------------------------------------------------------------------------------
+# JOB 1 � Build & Quality (Shift-Left: unitarios + seguridad primero)
+# ------------------------------------------------------------------------------
 jobs:
   build-and-quality:
-    name: "1 · Build & Quality (Shift-Left)"
+    name: "1 � Build & Quality (Shift-Left)"
     runs-on: ubuntu-latest
 
     steps:
@@ -50,7 +50,7 @@ jobs:
         working-directory: microservice-a
         run: gradle test jacocoTestReport --no-daemon
 
-      - name: Verificar Cobertura (≥ 80%)
+      - name: Verificar Cobertura (= 80%)
         working-directory: microservice-a
         run: gradle jacocoTestCoverageVerification --no-daemon
 
@@ -65,7 +65,7 @@ jobs:
         working-directory: microservice-b
         run: gradle test jacocoTestReport --no-daemon
 
-      - name: "[microservice-b] Verificar Cobertura (≥ 80%)"
+      - name: "[microservice-b] Verificar Cobertura (= 80%)"
         working-directory: microservice-b
         run: gradle jacocoTestCoverageVerification --no-daemon
 
@@ -78,13 +78,13 @@ jobs:
 
       - name: "Seguridad: Veracode Pipeline Scan (simulado)"
         run: |
-          echo "✅ [Shift-Left] Veracode SAST scan simulado para PoC."
-          echo "En producción: integrar con veracode/veracode-github-action."
+          echo "? [Shift-Left] Veracode SAST scan simulado para PoC."
+          echo "En producci�n: integrar con veracode/veracode-github-action."
 
       - name: "Seguridad: SonarQube Analysis (simulado)"
         run: |
-          echo "✅ [Shift-Left] SonarQube scan simulado para PoC."
-          echo "En producción: usar SonarSource/sonarcloud-github-action."
+          echo "? [Shift-Left] SonarQube scan simulado para PoC."
+          echo "En producci�n: usar SonarSource/sonarcloud-github-action."
 
       - name: Build JAR microservice-a (sin tests - ya ejecutados)
         working-directory: microservice-a
@@ -106,11 +106,11 @@ jobs:
           name: app-jar-b
           path: microservice-b/build/libs/*.jar
 
-# ══════════════════════════════════════════════════════════════════════════════
-# JOB 2 — Integration & Contract (Ambiente A Simulado)
-# ══════════════════════════════════════════════════════════════════════════════
+# ------------------------------------------------------------------------------
+# JOB 2 � Integration & Contract (Ambiente A Simulado)
+# ------------------------------------------------------------------------------
   integration-and-contract:
-    name: "2 · Integration & Contract (Ambiente A)"
+    name: "2 � Integration & Contract (Ambiente A)"
     runs-on: ubuntu-latest
     needs: build-and-quality
 
@@ -145,10 +145,10 @@ jobs:
         env:
           PGPASSWORD: att_pass
         run: |
-          echo "🌱 Aplicando schema y seeders TDM (perfiles Billy)..."
+          echo "?? Aplicando schema y seeders TDM (perfiles Billy)..."
           psql -h localhost -U att_user -d att_paymentbox -f simulation/tdm-seeders/01_schema.sql
           psql -h localhost -U att_user -d att_paymentbox -f simulation/tdm-seeders/02_billy_profiles.sql
-          echo "✅ Perfiles Billy 1-5 creados correctamente."
+          echo "? Perfiles Billy 1-5 creados correctamente."
 
       - name: Verificar Billy 1 en DB (contrato TDM)
         env:
@@ -157,7 +157,7 @@ jobs:
           COUNT=$(psql -h localhost -U att_user -d att_paymentbox -t -c \
             "SELECT COUNT(*) FROM clientes WHERE telefono='4544' AND status='ACTIVO';")
           echo "Billy 1 count: $COUNT"
-          [ "$COUNT" -eq "1" ] || (echo "❌ FALLO: Billy 1 no encontrado en DB" && exit 1)
+          [ "$COUNT" -eq "1" ] || (echo "? FALLO: Billy 1 no encontrado en DB" && exit 1)
 
       - name: Verificar Montos en DB (Paso 3)
         env:
@@ -166,41 +166,41 @@ jobs:
           COUNT=$(psql -h localhost -U att_user -d att_paymentbox -t -c \
             "SELECT COUNT(*) FROM montos_recarga WHERE operador='BLUE';")
           echo "Montos BLUE count: $COUNT"
-          [ "$COUNT" -ge "5" ] || (echo "❌ FALLO: Montos insuficientes para BLUE" && exit 1)
+          [ "$COUNT" -ge "5" ] || (echo "? FALLO: Montos insuficientes para BLUE" && exit 1)
 
       - name: Iniciar Mocks Prism (Operador + Recibo)
         run: |
           npm install -g @stoplight/prism-cli
-          echo "🚀 Iniciando mock Operador (Paso 4) en puerto 4010..."
+          echo "?? Iniciando mock Operador (Paso 4) en puerto 4010..."
           prism mock simulation/prism-mocks/operador.yaml --port 4010 &
-          echo "🚀 Iniciando mock Recibo (Paso 8) en puerto 4011..."
+          echo "?? Iniciando mock Recibo (Paso 8) en puerto 4011..."
           prism mock simulation/prism-mocks/recibo.yaml --port 4011 &
           sleep 5
-          echo "✅ Mocks Prism iniciados correctamente."
+          echo "? Mocks Prism iniciados correctamente."
 
-      - name: Validación de Contrato - Mock Operador (Paso 4)
+      - name: Validaci�n de Contrato - Mock Operador (Paso 4)
         run: |
-          echo "🔍 Validando contrato API Operador via Prism..."
+          echo "?? Validando contrato API Operador via Prism..."
           STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
             -X POST http://localhost:4010/api/operador/validar \
             -H "Content-Type: application/json" \
             -d '{"telefono":"4544","operador":"BLUE"}')
           echo "HTTP Status: $STATUS"
           [ "$STATUS" -eq "200" ] || \
-            (echo "❌ FALLO DE CONTRATO: API Operador no responde con 200" && exit 1)
-          echo "✅ Contrato API Operador validado."
+            (echo "? FALLO DE CONTRATO: API Operador no responde con 200" && exit 1)
+          echo "? Contrato API Operador validado."
 
-      - name: Validación de Contrato - Mock Recibo (Paso 8)
+      - name: Validaci�n de Contrato - Mock Recibo (Paso 8)
         run: |
-          echo "🔍 Validando contrato API Recibo via Prism..."
+          echo "?? Validando contrato API Recibo via Prism..."
           STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
             -X POST http://localhost:4011/api/recibo/emitir \
             -H "Content-Type: application/json" \
             -d '{"folio":"B-89301","numeroOrden":"111816681"}')
           echo "HTTP Status: $STATUS"
           [ "$STATUS" -eq "200" ] || \
-            (echo "❌ FALLO DE CONTRATO: API Recibo no responde con 200" && exit 1)
-          echo "✅ Contrato API Recibo validado."
+            (echo "? FALLO DE CONTRATO: API Recibo no responde con 200" && exit 1)
+          echo "? Contrato API Recibo validado."
 
       - name: Download JAR microservice-b
         uses: actions/download-artifact@v4
@@ -215,30 +215,30 @@ jobs:
             --spring.datasource.username=att_user \
             --spring.datasource.password=att_pass \
             --server.port=8081 &
-          echo "⏳ Esperando arranque de microservice-b..."
+          echo "? Esperando arranque de microservice-b..."
           for i in {1..12}; do
             STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8081/actuator/health || echo "000")
             echo "Intento $i: HTTP $STATUS"
-            [ "$STATUS" -eq "200" ] && echo "✅ microservice-b disponible" && break
+            [ "$STATUS" -eq "200" ] && echo "? microservice-b disponible" && break
             sleep 5
           done
           if [ "$STATUS" -ne "200" ]; then
-            echo "❌ microservice-b no arrancó" && exit 1
+            echo "? microservice-b no arranc�" && exit 1
           fi
 
-      - name: "⚠️  DEMO BREAK 1 → Karate Contrato microservice-a↔microservice-b"
+      - name: "??  DEMO BREAK 1 ? Karate Contrato microservice-a?microservice-b"
         run: |
           cd tests/functional-karate
-          echo "🔍 Validando contrato público de microservice-b (campos 'telefono', 'nombre', 'status')..."
+          echo "?? Validando contrato p�blico de microservice-b (campos 'telefono', 'nombre', 'status')..."
           mvn test -Dkarate.env=ci -Dtest=RecargaFlowRunner#testContratoMicroservicios \
             --no-transfer-progress
-          echo "✅ Contrato inter-servicios validado."
+          echo "? Contrato inter-servicios validado."
 
-# ══════════════════════════════════════════════════════════════════════════════
-# JOB 3 — Image Ops (Build & Push Docker Images)
-# ══════════════════════════════════════════════════════════════════════════════
+# ------------------------------------------------------------------------------
+# JOB 3 � Image Ops (Build & Push Docker Images)
+# ------------------------------------------------------------------------------
   image-ops:
-    name: "3 · Image Ops (Docker Build)"
+    name: "3 � Image Ops (Docker Build)"
     runs-on: ubuntu-latest
     needs: integration-and-contract
     permissions:
@@ -338,11 +338,11 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-# ══════════════════════════════════════════════════════════════════════════════
-# JOB 4 — Functional E2E & Deploy (Karate + Selenium + k6)
-# ══════════════════════════════════════════════════════════════════════════════
+# ------------------------------------------------------------------------------
+# JOB 4 � Functional E2E & Deploy (Karate + Selenium + k6)
+# ------------------------------------------------------------------------------
   functional-e2e:
-    name: "4 · Functional E2E & Deploy (Karate + Selenium + k6)"
+    name: "4 � Functional E2E & Deploy (Karate + Selenium + k6)"
     runs-on: ubuntu-latest
     needs: image-ops
 
@@ -368,7 +368,7 @@ jobs:
           cd simulation
           docker compose pull microservice-a microservice-b || true
           docker compose up -d --no-build
-          echo "⏳ Esperando arranque de servicios (90s)..."
+          echo "? Esperando arranque de servicios (90s)..."
           sleep 90
           docker compose ps
           echo "--- Logs microservice-b ---"
@@ -383,11 +383,11 @@ jobs:
           for i in {1..15}; do
             STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8081/actuator/health || echo "000")
             echo "Intento $i: HTTP $STATUS"
-            [ "$STATUS" -eq "200" ] && echo "✅ microservice-b disponible" && break
+            [ "$STATUS" -eq "200" ] && echo "? microservice-b disponible" && break
             sleep 5
           done
           if [ "$STATUS" -ne "200" ]; then
-            echo "❌ microservice-b no arrancó - Mostrando logs:"
+            echo "? microservice-b no arranc� - Mostrando logs:"
             cd simulation && docker compose logs --tail=80 microservice-b
             exit 1
           fi
@@ -397,16 +397,16 @@ jobs:
           for i in {1..15}; do
             STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8080/actuator/health || echo "000")
             echo "Intento $i: HTTP $STATUS"
-            [ "$STATUS" -eq "200" ] && echo "✅ Microservicio A disponible" && break
+            [ "$STATUS" -eq "200" ] && echo "? Microservicio A disponible" && break
             sleep 5
           done
           if [ "$STATUS" -ne "200" ]; then
-            echo "❌ Microservicio A no arrancó - Mostrando logs:"
+            echo "? Microservicio A no arranc� - Mostrando logs:"
             cd simulation && docker compose logs --tail=80 microservice-a
             exit 1
           fi
 
-      - name: "⚠️  DEMO BREAK 2 → Karate DSL - Tests Funcionales (Pasos 2, 3, 4, 5, 7, 8)"
+      - name: "??  DEMO BREAK 2 ? Karate DSL - Tests Funcionales (Pasos 2, 3, 4, 5, 7, 8)"
         run: |
           cd tests/functional-karate
           mvn test -Dkarate.env=ci --no-transfer-progress
@@ -419,7 +419,7 @@ jobs:
           name: karate-report
           path: tests/functional-karate/target/surefire-reports/
 
-      - name: "Selenium Headless - Validación UI (Pasos 1, 3, 5)"
+      - name: "Selenium Headless - Validaci�n UI (Pasos 1, 3, 5)"
         run: |
           cd tests/ui-selenium
           mvn test -Dapp.url=http://localhost:8080 --no-transfer-progress
@@ -431,7 +431,7 @@ jobs:
           name: selenium-report
           path: tests/ui-selenium/target/surefire-reports/
 
-      - name: "k6 Smoke Test - Ruta Crítica Performance (Paso 6)"
+      - name: "k6 Smoke Test - Ruta Cr�tica Performance (Paso 6)"
         run: |
           curl -fsSL https://dl.k6.io/key.gpg | sudo gpg --dearmor -o /usr/share/keyrings/k6-archive-keyring.gpg
           echo "deb [signed-by=/usr/share/keyrings/k6-archive-keyring.gpg] https://dl.k6.io/deb stable main" \

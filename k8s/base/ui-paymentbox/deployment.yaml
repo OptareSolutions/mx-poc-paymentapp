@@ -19,7 +19,7 @@ spec:
     spec:
       containers:
         - name: ui-paymentbox
-          image: ghcr.io/optaresolutions/att-poc-paymentbox/ui-paymentbox
+          image: ghcr.io/optaresolutions/mx-poc-paymentapp/ui-paymentbox
           ports:
             - name: http
               containerPort: 80

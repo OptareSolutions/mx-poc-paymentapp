@@ -14,7 +14,7 @@ import java.util.List;
 
 @RestController
 @RequestMapping("/api/customers")
-@Tag(name = "Customer Profile", description = "Microservice B — Perfiles de clientes AT&T")
+@Tag(name = "Customer Profile", description = "Microservice B — Perfiles de clientes Telco Operator")
 public class CustomerController {
 
     private final ClienteRepository clienteRepository;

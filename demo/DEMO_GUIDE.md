@@ -1,4 +1,4 @@
-# Guía de Demo — AT&T PaymentBox QA PoC
+# Guía de Demo — Telco Operator PaymentBox QA PoC
 
 ## Arquitectura del Entorno
 
@@ -129,7 +129,7 @@ git push
 
 ---
 
-## Mensaje Clave para AT&T
+## Mensaje Clave para Telco Operator
 
 > *"El mismo repositorio contiene la lógica de negocio, los tests, el contrato
 > entre servicios, y la UI. Cualquier cambio que rompa el contrato **se detecta

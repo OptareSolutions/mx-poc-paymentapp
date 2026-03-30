@@ -18,7 +18,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * Siempre ejecutado en modo Headless para CI/CD (GitHub Actions).
  */
 @TestMethodOrder(MethodOrderer.OrderAnnotation.class)
-@DisplayName("UI Selenium Headless - Recarga PaymentBox AT&T")
+@DisplayName("UI Selenium Headless - Recarga PaymentBox Telco Operator")
 class RecargaUiTest {
 
     private static WebDriver driver;

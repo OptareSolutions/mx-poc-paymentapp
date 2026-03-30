@@ -1,5 +1,5 @@
 Feature: Recarga PaymentBox - Flujo Completo (8 Pasos)
-  Como agente de AT&T
+  Como agente de Telco Operator
   Quiero procesar una recarga completa en PaymentBox
   Para validar el ciclo end-to-end sin intervención manual
 
