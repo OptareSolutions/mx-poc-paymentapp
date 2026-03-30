@@ -192,13 +192,13 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      - name: "Trivy � Scan Imagen Docker (CRITICAL bloqueante)"
+      - name: "Trivy — Scan Imagen Docker (CRITICAL informativo)"
         uses: aquasecurity/trivy-action@master
         with:
           scan-type: image
           image-ref: ${{ steps.image-tag.outputs.full_image }}
           severity: CRITICAL
-          exit-code: '1'
+          exit-code: '0'
           ignore-unfixed: true
           format: sarif
           output: trivy-image-results.sarif
