@@ -1,4 +1,4 @@
-name: "[microservice-b] CI — Build · Calidad · Seguridad · Deploy"
+name: "[microservice-b] CI ï¿½ Build ï¿½ Calidad ï¿½ Seguridad ï¿½ Deploy"
 
 # ------------------------------------------------------------------------------
 # Equipo: Customer Profile (Team B)
@@ -6,7 +6,7 @@ name: "[microservice-b] CI — Build · Calidad · Seguridad · Deploy"
 #
 # Nota DEMO BREAK 1:
 #   Cuando un desarrollador renombra los campos del DTO (telefono?phone, nombre?fullName)
-#   Y también actualiza sus propios tests, este pipeline PASA (Job 1 verde).
+#   Y tambiï¿½n actualiza sus propios tests, este pipeline PASA (Job 1 verde).
 #   La rotura de contrato se detecta en pipeline-integration.yml (contract tests).
 #   Esto demuestra el valor de los tests de contrato declarativos.
 # ------------------------------------------------------------------------------
@@ -25,14 +25,14 @@ concurrency:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_NAME: ${{ github.repository }}/microservice-b
+  IMAGE_NAME: optaresolutions/mx-poc-paymentapp/microservice-b
 
 # ------------------------------------------------------------------------------
-# JOB 1 — Build & Quality (Shift-Left)
+# JOB 1 ï¿½ Build & Quality (Shift-Left)
 # ------------------------------------------------------------------------------
 jobs:
   build-quality:
-    name: "1 · Build & Quality — Shift-Left [microservice-b]"
+    name: "1 ï¿½ Build & Quality ï¿½ Shift-Left [microservice-b]"
     runs-on: ubuntu-latest
 
     steps:
@@ -67,7 +67,7 @@ jobs:
           name: microservice-b-test-results-${{ github.ref_name }}
           path: microservice-b/build/reports/
 
-      - name: "SonarCloud — Análisis de Calidad de Código"
+      - name: "SonarCloud ï¿½ Anï¿½lisis de Calidad de Cï¿½digo"
         uses: SonarSource/sonarcloud-github-action@v3
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -86,10 +86,10 @@ jobs:
           path: microservice-b/build/libs/*.jar
 
 # ------------------------------------------------------------------------------
-# JOB 2 — Security Scan (Trivy Filesystem)
+# JOB 2 ï¿½ Security Scan (Trivy Filesystem)
 # ------------------------------------------------------------------------------
   security-scan:
-    name: "2 · Seguridad — Trivy Scan [microservice-b]"
+    name: "2 ï¿½ Seguridad ï¿½ Trivy Scan [microservice-b]"
     runs-on: ubuntu-latest
     needs: build-quality
     permissions:
@@ -105,7 +105,7 @@ jobs:
           name: microservice-b-jar-${{ github.run_id }}
           path: microservice-b/build/libs/
 
-      - name: "Trivy — Scan Filesystem (JAR + dependencias)"
+      - name: "Trivy ï¿½ Scan Filesystem (JAR + dependencias)"
         uses: aquasecurity/trivy-action@master
         with:
           scan-type: fs
@@ -124,10 +124,10 @@ jobs:
           category: trivy-fs-microservice-b
 
 # ------------------------------------------------------------------------------
-# JOB 3 — Image Ops (Build ? Scan ? Push GHCR)
+# JOB 3 ï¿½ Image Ops (Build ? Scan ? Push GHCR)
 # ------------------------------------------------------------------------------
   image-ops:
-    name: "3 · Image Ops — Build · Scan · Push [microservice-b]"
+    name: "3 ï¿½ Image Ops ï¿½ Build ï¿½ Scan ï¿½ Push [microservice-b]"
     runs-on: ubuntu-latest
     needs: security-scan
     permissions:
@@ -157,7 +157,7 @@ jobs:
             develop) echo "overlay=env-e" >> $GITHUB_OUTPUT ; echo "name=E (Desarrollo)" >> $GITHUB_OUTPUT ; echo "prefix=env-e" >> $GITHUB_OUTPUT ;;
             qa)      echo "overlay=env-a" >> $GITHUB_OUTPUT ; echo "name=A (QA)"              >> $GITHUB_OUTPUT ; echo "prefix=env-a" >> $GITHUB_OUTPUT ;;
             uat)     echo "overlay=env-u" >> $GITHUB_OUTPUT ; echo "name=U (UAT)"             >> $GITHUB_OUTPUT ; echo "prefix=env-u" >> $GITHUB_OUTPUT ;;
-            main)    echo "overlay=prod"  >> $GITHUB_OUTPUT ; echo "name=Producción"            >> $GITHUB_OUTPUT ; echo "prefix=prod"  >> $GITHUB_OUTPUT ;;
+            main)    echo "overlay=prod"  >> $GITHUB_OUTPUT ; echo "name=Producciï¿½n"            >> $GITHUB_OUTPUT ; echo "prefix=prod"  >> $GITHUB_OUTPUT ;;
             *)       echo "overlay=env-e" >> $GITHUB_OUTPUT ; echo "name=E (manual)"          >> $GITHUB_OUTPUT ; echo "prefix=env-e" >> $GITHUB_OUTPUT ;;
           esac
 
@@ -180,7 +180,7 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build Docker Image (local — para scan)
+      - name: Build Docker Image (local ï¿½ para scan)
         uses: docker/build-push-action@v5
         with:
           context: microservice-b
@@ -191,7 +191,7 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      - name: "Trivy — Scan Imagen Docker (CRITICAL bloqueante)"
+      - name: "Trivy ï¿½ Scan Imagen Docker (CRITICAL bloqueante)"
         uses: aquasecurity/trivy-action@master
         with:
           scan-type: image
@@ -222,10 +222,10 @@ jobs:
           cache-to: type=gha,mode=max
 
 # ------------------------------------------------------------------------------
-# JOB 4 — Smoke Test + GitOps Deploy
+# JOB 4 ï¿½ Smoke Test + GitOps Deploy
 # ------------------------------------------------------------------------------
   smoke-gitops:
-    name: "4 · Smoke Test + GitOps Deploy [${{ needs.image-ops.outputs.env-name }}]"
+    name: "4 ï¿½ Smoke Test + GitOps Deploy [${{ needs.image-ops.outputs.env-name }}]"
     runs-on: ubuntu-latest
     needs: image-ops
     permissions:
@@ -289,9 +289,9 @@ jobs:
             [ "$STATUS" -eq "200" ] && echo "? microservice-b UP" && break
             sleep 5
           done
-          if [ "$STATUS" -ne "200" ]; then echo "? microservice-b no arrancó" && exit 1; fi
+          if [ "$STATUS" -ne "200" ]; then echo "? microservice-b no arrancï¿½" && exit 1; fi
 
-      - name: "Smoke Test — Verificar contrato público (/api/customers/4544)"
+      - name: "Smoke Test ï¿½ Verificar contrato pï¿½blico (/api/customers/4544)"
         run: |
           RESP=$(curl -sf http://localhost:8081/api/customers/4544)
           echo "Response: $RESP"
@@ -303,14 +303,14 @@ jobs:
           echo "$RESP" | python3 -c "
           import sys, json
           data = json.load(sys.stdin)
-          assert 'telefono' in data, 'FAIL: campo telefono ausente (¿contrato roto?)'
-          assert 'nombre'   in data, 'FAIL: campo nombre ausente (¿contrato roto?)'
+          assert 'telefono' in data, 'FAIL: campo telefono ausente (ï¿½contrato roto?)'
+          assert 'nombre'   in data, 'FAIL: campo nombre ausente (ï¿½contrato roto?)'
           assert 'status'   in data, 'FAIL: campo status ausente'
           assert data['telefono'] == '4544', f'FAIL: telefono={data[\"telefono\"]}'
           print('? Smoke test OK - campos del contrato presentes')
           "
 
-      - name: "GitOps — Actualizar manifiesto: microservice-b ? ${{ env.IMAGE_TAG }} en ${{ env.OVERLAY }}"
+      - name: "GitOps ï¿½ Actualizar manifiesto: microservice-b ? ${{ env.IMAGE_TAG }} en ${{ env.OVERLAY }}"
         run: |
           python3 - << 'EOF'
           import re, os, sys
@@ -328,7 +328,7 @@ jobs:
           new_content = re.sub(pattern, replacement, content)
 
           if new_content == content:
-              print(f'??  Patrón no encontrado en {filepath}', file=sys.stderr)
+              print(f'??  Patrï¿½n no encontrado en {filepath}', file=sys.stderr)
               sys.exit(1)
 
           with open(filepath, 'w') as f:
@@ -336,7 +336,7 @@ jobs:
           print(f'? {service}: {new_tag} ? k8s/overlays/{overlay}/kustomization.yaml')
           EOF
 
-      - name: "Git commit + push — manifiesto actualizado [skip ci]"
+      - name: "Git commit + push ï¿½ manifiesto actualizado [skip ci]"
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
@@ -345,7 +345,7 @@ jobs:
           git commit -m "gitops(microservice-b): ${IMAGE_TAG} ? ${ENV_NAME} [skip ci]"
           git push
 
-      - name: "ArgoCD (simulado) — Sync ${{ env.ENV_NAME }}"
+      - name: "ArgoCD (simulado) ï¿½ Sync ${{ env.ENV_NAME }}"
         run: |
           echo "---------------------------------------------------------------"
           echo "?? [ArgoCD] Cambio detectado en k8s/overlays/${OVERLAY}/"
@@ -354,5 +354,5 @@ jobs:
           echo "?? [ArgoCD] Nueva imagen: ghcr.io/.../microservice-b:${IMAGE_TAG}"
           echo "?? [ArgoCD] Entorno:     ${ENV_NAME}"
           sleep 2
-          echo "? [ArgoCD] Sync completado — microservice-b desplegado en ${ENV_NAME}"
+          echo "? [ArgoCD] Sync completado ï¿½ microservice-b desplegado en ${ENV_NAME}"
           echo "---------------------------------------------------------------"
