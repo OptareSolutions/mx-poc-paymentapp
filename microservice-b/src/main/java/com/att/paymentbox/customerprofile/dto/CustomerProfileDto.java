@@ -1,4 +1,4 @@
-﻿package com.att.paymentbox.customerprofile.dto;
+package com.att.paymentbox.customerprofile.dto;
 
 // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 // CONTRATO PÃšBLICO de microservice-b â†’ consumido por microservice-a
