@@ -17,8 +17,8 @@ public class CustomerProfileDto {
 
     public CustomerProfileDto(Long id, String telefono, String nombre, String status) {
         this.id = id;
-        this.phone = phone;
-        this.fullName = fullName;
+        this.phone = telefono;
+        this.fullName = nombre;
         this.status = status;
     }
 

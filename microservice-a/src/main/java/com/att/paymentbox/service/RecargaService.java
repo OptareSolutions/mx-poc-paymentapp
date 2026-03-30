@@ -1,4 +1,4 @@
-﻿package com.att.paymentbox.service;
+package com.att.paymentbox.service;
 
 import com.att.paymentbox.client.CustomerProfileClient;
 import com.att.paymentbox.client.OperadorApiClient;
@@ -42,7 +42,7 @@ public class RecargaService {
         this.reciboApiClient = reciboApiClient;
     }
 
-    // â”€â”€ Paso 2: Focalizar Cliente (via microservice-b) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    // ── Paso 2: Focalizar Cliente (via microservice-b) ────────────────────────
     public CustomerProfileDto buscarClienteActivo(String telefono) {
         CustomerProfileDto profile = customerProfileClient.getCustomerProfile(telefono);
         if (!"ACTIVO".equals(profile.getStatus())) {
@@ -52,7 +52,7 @@ public class RecargaService {
         return profile;
     }
 
-    // â”€â”€ Paso 3: Montos desde DB â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    // ── Paso 3: Montos desde DB ───────────────────────────────────────────────
     public List<MontosRecarga> obtenerMontos(String operador) {
         List<MontosRecarga> montos = montosRepository.findByOperadorOrderByMontoAsc(operador);
         if (montos.isEmpty()) {
@@ -62,21 +62,21 @@ public class RecargaService {
         return montos;
     }
 
-    // â”€â”€ Paso 4: Validar con API Operador (Prism Mock) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    // ── Paso 4: Validar con API Operador (Prism Mock) ─────────────────────────
     public Map<String, Object> validarOperador(String telefono, String operador) {
         return operadorApiClient.validarOperador(telefono, operador);
     }
 
-    // â”€â”€ Paso 5: MÃ©todos de Pago disponibles â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    // ── Paso 5: Métodos de Pago disponibles ───────────────────────────────────
     public List<String> obtenerMetodosPago() {
         return METODOS_PAGO;
     }
 
-    // â”€â”€ Pasos 6 & 7: Procesar y registrar pago en DB â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-    // âš ï¸  DEMO BREAK 2: agregar aquÃ­ validaciÃ³n de monto mÃ­nimo
-    if (request.getMonto().compareTo(new java.math.BigDecimal("100")) < 0)
-    //         throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Monto mÃ­nimo $100");
-    //     â†’ el test de Karate falla en Job 4 porque Billy usa $20
+    // ── Pasos 6 & 7: Procesar y registrar pago en DB ─────────────────────────
+    // ⚠️  DEMO BREAK 2: agregar aquí validación de monto mínimo
+    // if (request.getMonto().compareTo(new java.math.BigDecimal("100")) < 0)
+    //         throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Monto mínimo $100");
+    //     → el test de Karate falla en Job 4 porque Billy usa $20
     public PagoResponse registrarPago(PagoRequest request) {
         // Verify client still active before persisting
         buscarClienteActivo(request.getTelefonoCliente());
@@ -98,7 +98,7 @@ public class RecargaService {
                 "Pago aplicado exitosamente con folio: " + folio);
     }
 
-    // â”€â”€ Paso 8: Emitir Recibo (Prism Mock) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    // ── Paso 8: Emitir Recibo (Prism Mock) ───────────────────────────────────
     public Map<String, Object> emitirRecibo(String folio, String numeroOrden) {
         return reciboApiClient.emitirRecibo(folio, numeroOrden);
     }
