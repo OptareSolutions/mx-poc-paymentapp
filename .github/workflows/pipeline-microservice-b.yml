@@ -69,7 +69,6 @@ jobs:
 
       - name: "SonarCloud — Análisis de Calidad de Código"
         uses: SonarSource/sonarcloud-github-action@v3
-        continue-on-error: true  # ⚠️ PLACEHOLDER: configurar SONAR_TOKEN en la organización
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
