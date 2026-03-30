@@ -37,8 +37,8 @@ class RecargaControllerTest {
     @BeforeEach
     void setUp() {
         billyUno = new CustomerProfileDto();
-        billyUno.setNombre("Billy 1 - Cortes");
-        billyUno.setTelefono("4544");
+        billyUno.setFullName("Billy 1 - Cortes");
+        billyUno.setPhone("4544");
         billyUno.setStatus("ACTIVO");
     }
 
@@ -51,7 +51,7 @@ class RecargaControllerTest {
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
         assertThat(response.getBody()).isNotNull();
-        assertThat(response.getBody().getTelefono()).isEqualTo("4544");
+        assertThat(response.getBody().getPhone()).isEqualTo("4544");
         verify(recargaService, times(1)).buscarClienteActivo("4544");
     }
 

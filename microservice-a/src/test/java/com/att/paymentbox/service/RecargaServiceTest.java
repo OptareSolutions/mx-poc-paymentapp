@@ -45,8 +45,8 @@ class RecargaServiceTest {
     @BeforeEach
     void setUp() {
         billyUno = new CustomerProfileDto();
-        billyUno.setNombre("Billy 1 - Cortes");
-        billyUno.setTelefono("4544");
+        billyUno.setFullName("Billy 1 - Cortes");
+        billyUno.setPhone("4544");
         billyUno.setStatus("ACTIVO");
     }
 
@@ -58,7 +58,7 @@ class RecargaServiceTest {
 
         CustomerProfileDto result = recargaService.buscarClienteActivo("4544");
 
-        assertThat(result.getNombre()).isEqualTo("Billy 1 - Cortes");
+        assertThat(result.getFullName()).isEqualTo("Billy 1 - Cortes");
         assertThat(result.getStatus()).isEqualTo("ACTIVO");
     }
 
@@ -66,7 +66,7 @@ class RecargaServiceTest {
     @DisplayName("Paso 2: Debe lanzar 404 si el Customer Profile Service retorna cliente inactivo")
     void paso2_buscarClienteActivo_clienteInactivo_lanza404() {
         CustomerProfileDto inactivo = new CustomerProfileDto();
-        inactivo.setTelefono("9999");
+        inactivo.setPhone("9999");
         inactivo.setStatus("INACTIVO");
         when(customerProfileClient.getCustomerProfile("9999")).thenReturn(inactivo);
 

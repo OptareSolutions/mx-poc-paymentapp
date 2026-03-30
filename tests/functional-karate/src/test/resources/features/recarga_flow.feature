@@ -19,9 +19,9 @@ Feature: Recarga PaymentBox - Flujo Completo (8 Pasos)
     And param telefono = telefonoBilly1
     When method GET
     Then status 200
-    And match response.telefono == telefonoBilly1
+    And match response.phone == telefonoBilly1
     And match response.status == 'ACTIVO'
-    And match response.nombre contains 'Billy'
+    And match response.fullName contains 'Billy'
 
   # ─────────────────────────────────────────────────────────────────────────────
   # PASO 3: Selección de Monto (validado con DB)

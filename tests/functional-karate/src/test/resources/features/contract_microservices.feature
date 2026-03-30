@@ -15,12 +15,12 @@ Feature: Contrato entre Microservicios — microservice-a consume microservice-b
   Background:
     * url customerProfileUrl
 
-  Scenario: CONTRATO - Perfil Billy 1 debe contener campos 'telefono', 'nombre', 'status'
+  Scenario: CONTRATO - Perfil Billy 1 debe contener campos 'phone', 'fullName', 'status'
     Given path '/api/customers/4544'
     When method GET
     Then status 200
-    And match response.telefono == '4544'
-    And match response.nombre  == '#string'
+    And match response.phone == '4544'
+    And match response.fullName  == '#string'
     And match response.status  == '#string'
 
   Scenario: CONTRATO - Campo 'status' del perfil activo debe ser 'ACTIVO'
