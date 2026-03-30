@@ -6,7 +6,7 @@ function fn() {
   };
   if (env === 'ci') {
     config.baseUrl = 'http://localhost:8080';
-    config.customerProfileUrl = 'http://localhost:8081';
+    config.customerProfileUrl = 'http://localhost:18081';
   }
   return config;
 }

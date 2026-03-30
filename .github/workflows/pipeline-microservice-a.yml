@@ -272,7 +272,7 @@ jobs:
       - name: Health Check microservice-b
         run: |
           for i in {1..15}; do
-            STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8081/actuator/health || echo "000")
+            STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:18081/actuator/health || echo "000")
             echo "Intento $i: HTTP $STATUS"
             [ "$STATUS" -eq "200" ] && echo "? microservice-b UP" && break
             sleep 5
