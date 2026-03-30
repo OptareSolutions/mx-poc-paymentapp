@@ -17,4 +17,25 @@ public class RecargaFlowRunner {
         return Karate.run("classpath:features/contract_microservices.feature")
                 .relativeTo(getClass());
     }
+
+    @Karate.Test
+    Karate testSmoke() {
+        return Karate.run("classpath:features")
+                .tags("@smoke")
+                .relativeTo(getClass());
+    }
+
+    @Karate.Test
+    Karate testNegative() {
+        return Karate.run("classpath:features")
+                .tags("@negative")
+                .relativeTo(getClass());
+    }
+
+    @Karate.Test
+    Karate testDemoBreak() {
+        return Karate.run("classpath:features")
+                .tags("@demo-break")
+                .relativeTo(getClass());
+    }
 }

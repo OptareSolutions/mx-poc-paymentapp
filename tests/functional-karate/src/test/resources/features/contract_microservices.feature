@@ -1,35 +1,51 @@
-Feature: Contrato entre Microservicios — microservice-a consume microservice-b
-
-  # ══════════════════════════════════════════════════════════════════════════
-  # Este test valida el CONTRATO PÚBLICO de microservice-b (Customer Profile).
-  #
-  # ⚠️  DEMO BREAK 1 → falla aquí (Job 2) cuando un desarrollador renombra en
-  #     microservice-b los campos del DTO:
-  #       'telefono' → 'phone'
-  #       'nombre'   → 'fullName'
-  #
-  # microservice-a depende de estos nombres exactos para deserializar la
-  # respuesta de CustomerProfileClient.getCustomerProfile().
-  # ══════════════════════════════════════════════════════════════════════════
+@contract
+Feature: Contrato entre Microservicios - microservice-a consume microservice-b
 
   Background:
     * url customerProfileUrl
 
-  Scenario: CONTRATO - Perfil Billy 1 debe contener campos 'phone', 'fullName', 'status'
-    Given path '/api/customers/4544'
+  @contract @demo-break
+  Scenario Outline: CONTRATO - Perfil <nombre> contiene todos los campos requeridos
+    Given path "/api/customers/<telefono>"
     When method GET
     Then status 200
-    And match response.phone == '4544'
-    And match response.fullName  == '#string'
-    And match response.status  == '#string'
+    And match response.phone    == "<telefono>"
+    And match response.fullName == "#string"
+    And match response.status   == "#string"
 
-  Scenario: CONTRATO - Campo 'status' del perfil activo debe ser 'ACTIVO'
-    Given path '/api/customers/4544'
+    Examples:
+      | telefono | nombre  |
+      | 4544     | Billy 1 |
+      | 4545     | Billy 2 |
+      | 4546     | Billy 3 |
+
+  @contract @smoke
+  Scenario Outline: CONTRATO - Clientes activos tienen status ACTIVO
+    Given path "/api/customers/<telefono>"
     When method GET
     Then status 200
-    And match response.status == 'ACTIVO'
+    And match response.status == "ACTIVO"
 
+    Examples:
+      | telefono |
+      | 4544     |
+      | 4545     |
+      | 4546     |
+
+  @contract @negative
   Scenario: CONTRATO - Cliente inexistente debe retornar 404
-    Given path '/api/customers/0000'
+    Given path "/api/customers/0000"
     When method GET
     Then status 404
+
+  @contract @negative
+  Scenario Outline: CONTRATO - Clientes no activos devuelven su status real
+    Given path "/api/customers/<telefono>"
+    When method GET
+    Then status 200
+    And match response.status == "<status>"
+
+    Examples:
+      | telefono | status    |
+      | 4547     | INACTIVO  |
+      | 4548     | BLOQUEADO |
