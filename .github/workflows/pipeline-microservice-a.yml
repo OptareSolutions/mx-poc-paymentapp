@@ -260,8 +260,7 @@ jobs:
       - name: Iniciar Entorno Simulado (docker-compose)
         run: |
           cd simulation
-          docker compose pull microservice-a microservice-b || true
-          docker compose up -d --no-build
+          docker compose up -d --build
           echo "? Esperando arranque de los servicios (90s)..."
           sleep 90
           docker compose ps
