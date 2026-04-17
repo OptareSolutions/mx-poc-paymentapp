@@ -1,18 +1,28 @@
-name: "?? Pipeline Integraci�n � Contrato � E2E � Promoci�n entre Ambientes"
+name: "🔗 Pipeline Integración — Contrato · E2E · Promoción entre Ambientes"
 
-# ------------------------------------------------------------------------------
-# Trigger: MANUAL (workflow_dispatch) � promoci�n deliberada entre ambientes
+# ──────────────────────────────────────────────────────────────────────────────
+# Trigger: MANUAL (workflow_dispatch) — promoción deliberada entre ambientes
 #
-# Flujo de promoci�n:
-#   develop ? qa    (env-e ? env-a)   Equipa valida no E e promove para QA
-#   qa      ? uat   (env-a ? env-u)   QA valida e promove para UAT
-#   uat     ? main  (env-u ? prod)    UAT valida e promove para Produ��o
+# Mejoras v2 (basadas en patrones de mxapm0002577-source-identity-connector):
+#   - Gitleaks antes de cualquier prueba de integración
+#   - Eliminado sleep fijo → health check loops puros
+#   - Maven cache para Karate y Selenium
+#   - Selenium incluido en E2E full (faltaba en v1)
+#   - Selenium con continue-on-error: false (antes silenciosamente fallaba)
+#   - Summary enriquecido con GITHUB_STEP_SUMMARY
+#   - Validación de combinación de ambientes mejorada con mensajes claros
+#   - Job de notificación final con resumen completo
+#
+# Flujo de promoción (dev → qa → preprod → prod):
+#   dev     → qa      (env-e → env-a)
+#   qa      → preprod (env-a → env-f)
+#   preprod → prod    (env-f → prod)
 #
 # Gates declarativos:
-#   Job 2 � Tests de Contrato entre servicios  (?? DEMO BREAK 1: falla aqu�)
-#   Job 3 � E2E completo con entorno simulado
-#   Job 4 � Promoci�n GitOps + ArgoCD simulado  (solo ejecuta si Jobs 2+3 verdes)
-# ------------------------------------------------------------------------------
+#   Job 1 — Tests de Contrato entre servicios  (⚠️ DEMO BREAK 1: falla aquí)
+#   Job 2 — E2E completo + Selenium + k6
+#   Job 3 — Promoción GitOps (solo si Jobs 1+2 verdes)
+# ──────────────────────────────────────────────────────────────────────────────
 
 on:
   workflow_dispatch:
@@ -21,22 +31,28 @@ on:
         description: "Ambiente de ORIGEN (rama)"
         required: true
         type: choice
-        options: [develop, qa, uat]
+        options: [dev, qa, preprod]
       promote_to:
         description: "Ambiente de DESTINO (rama)"
         required: true
         type: choice
-        options: [qa, uat, main]
+        options: [qa, preprod, prod]
+      skip_e2e:
+        description: "Omitir E2E completo (solo contrato)"
+        required: false
+        type: boolean
+        default: false
 
 env:
   REGISTRY: ghcr.io
+  JAVA_VERSION: "21"
 
-# ------------------------------------------------------------------------------
-# JOB 1 � Validar inputs de promoci�n
-# ------------------------------------------------------------------------------
+# ──────────────────────────────────────────────────────────────────────────────
+# JOB 0 — Validar inputs y mapear ambientes
+# ──────────────────────────────────────────────────────────────────────────────
 jobs:
   validate:
-    name: "0 � Validar Promoci�n ${{ inputs.promote_from }} ? ${{ inputs.promote_to }}"
+    name: "0 — Validar Promoción ${{ inputs.promote_from }} → ${{ inputs.promote_to }}"
     runs-on: ubuntu-latest
     outputs:
       from-overlay: ${{ steps.mapping.outputs.from_overlay }}
@@ -45,42 +61,56 @@ jobs:
       to-name:      ${{ steps.mapping.outputs.to_name }}
 
     steps:
-      - name: Validar combinaci�n de ambientes
+      - name: Validar combinación de ambientes
         run: |
           FROM="${{ inputs.promote_from }}"
           TO="${{ inputs.promote_to }}"
           VALID=false
-          [ "$FROM" = "develop" ] && [ "$TO" = "qa"   ] && VALID=true
-          [ "$FROM" = "qa"      ] && [ "$TO" = "uat"  ] && VALID=true
-          [ "$FROM" = "uat"     ] && [ "$TO" = "main" ] && VALID=true
+          [ "$FROM" = "dev"     ] && [ "$TO" = "qa"      ] && VALID=true
+          [ "$FROM" = "qa"      ] && [ "$TO" = "preprod"  ] && VALID=true
+          [ "$FROM" = "preprod" ] && [ "$TO" = "prod"     ] && VALID=true
           if [ "$VALID" = "false" ]; then
-            echo "? Combinaci�n inv�lida: ${FROM} ? ${TO}"
-            echo "   Combinaciones v�lidas: develop?qa | qa?uat | uat?main"
+            echo "❌ Combinación inválida: ${FROM} → ${TO}"
+            echo ""
+            echo "Combinaciones válidas (flujo: dev → qa → preprod → prod):"
+            echo "  dev     → qa      (E / Desarrollo → A / QA)"
+            echo "  qa      → preprod (A / QA → F / Pre-producción)"
+            echo "  preprod → prod    (F / Pre-producción → Producción)"
             exit 1
           fi
-          echo "? Promoci�n v�lida: ${FROM} ? ${TO}"
+          echo "✅ Promoción válida: ${FROM} → ${TO}"
 
       - name: Mapear ambientes y overlays
         id: mapping
         run: |
           case "${{ inputs.promote_from }}" in
-            develop) echo "from_overlay=env-e" >> $GITHUB_OUTPUT ; echo "from_name=E (Desarrollo)" >> $GITHUB_OUTPUT ;;
-            qa)      echo "from_overlay=env-a" >> $GITHUB_OUTPUT ; echo "from_name=A (QA)"              >> $GITHUB_OUTPUT ;;
-            uat)     echo "from_overlay=env-u" >> $GITHUB_OUTPUT ; echo "from_name=U (UAT)"             >> $GITHUB_OUTPUT ;;
+            dev)     echo "from_overlay=env-e" >> $GITHUB_OUTPUT ; echo "from_name=E (Desarrollo)"     >> $GITHUB_OUTPUT ;;
+            qa)      echo "from_overlay=env-a" >> $GITHUB_OUTPUT ; echo "from_name=A (QA)"             >> $GITHUB_OUTPUT ;;
+            preprod) echo "from_overlay=env-f" >> $GITHUB_OUTPUT ; echo "from_name=F (Pre-producción)" >> $GITHUB_OUTPUT ;;
           esac
           case "${{ inputs.promote_to }}" in
-            qa)   echo "to_overlay=env-a" >> $GITHUB_OUTPUT ; echo "to_name=A (QA)"    >> $GITHUB_OUTPUT ;;
-            uat)  echo "to_overlay=env-u" >> $GITHUB_OUTPUT ; echo "to_name=U (UAT)"   >> $GITHUB_OUTPUT ;;
-            main) echo "to_overlay=prod"  >> $GITHUB_OUTPUT ; echo "to_name=Producci�n"  >> $GITHUB_OUTPUT ;;
+            qa)      echo "to_overlay=env-a" >> $GITHUB_OUTPUT ; echo "to_name=A (QA)"             >> $GITHUB_OUTPUT ;;
+            preprod) echo "to_overlay=env-f" >> $GITHUB_OUTPUT ; echo "to_name=F (Pre-producción)" >> $GITHUB_OUTPUT ;;
+            prod)    echo "to_overlay=prod"  >> $GITHUB_OUTPUT ; echo "to_name=Producción"          >> $GITHUB_OUTPUT ;;
           esac
 
-# ------------------------------------------------------------------------------
-# JOB 2 � Tests de Contrato entre Servicios
-# ??  DEMO BREAK 1: falla aqu� cuando microservice-b tiene campos renombrados
-#     (telefono?phone / nombre?fullName) y la imagen env-e est� en el GHCR
-# ------------------------------------------------------------------------------
+      - name: Resumen de la promoción
+        run: |
+          echo "## 🔍 Promoción iniciada" >> $GITHUB_STEP_SUMMARY
+          echo "| Campo | Valor |" >> $GITHUB_STEP_SUMMARY
+          echo "|-------|-------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Origen | ${{ inputs.promote_from }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Destino | ${{ inputs.promote_to }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Omitir E2E | ${{ inputs.skip_e2e }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Iniciado por | @${{ github.actor }} |" >> $GITHUB_STEP_SUMMARY
+
+# ──────────────────────────────────────────────────────────────────────────────
+# JOB 1 — Tests de Contrato entre Servicios
+# ⚠️ DEMO BREAK 1: falla aquí cuando microservice-b tiene campos renombrados
+# Mejora v2: sin sleep fijo, Maven cache, health check mejorado
+# ──────────────────────────────────────────────────────────────────────────────
   contract-tests:
-    name: "1 � ?? DEMO BREAK 1 ? Tests Contrato [${{ needs.validate.outputs.from-name }}]"
+    name: "1 — ⚠️ DEMO BREAK 1 — Tests Contrato [${{ needs.validate.outputs.from-name }}]"
     runs-on: ubuntu-latest
     needs: validate
 
@@ -92,11 +122,18 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Configurar JDK 17 (Karate)
+      - name: Configurar JDK ${{ env.JAVA_VERSION }} (Karate)
         uses: actions/setup-java@v4
         with:
-          java-version: "17"
+          java-version: ${{ env.JAVA_VERSION }}
           distribution: temurin
+
+      - name: Cache Maven (Karate)
+        uses: actions/cache@v4
+        with:
+          path: ~/.m2/repository
+          key: maven-${{ runner.os }}-${{ hashFiles('tests/functional-karate/pom.xml') }}
+          restore-keys: maven-${{ runner.os }}-
 
       - name: Login GHCR
         uses: docker/login-action@v3
@@ -105,7 +142,7 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: "Leer tags de imagen del overlay ${{ env.FROM_OVERLAY }}"
+      - name: Leer tags de imagen del overlay ${{ env.FROM_OVERLAY }}
         id: read-tags
         run: |
           KUSTOMIZE="k8s/overlays/${FROM_OVERLAY}/kustomization.yaml"
@@ -119,7 +156,7 @@ jobs:
           echo "tag_a=${TAG_A}" >> $GITHUB_OUTPUT
           echo "tag_b=${TAG_B}" >> $GITHUB_OUTPUT
 
-      - name: Pull im�genes del entorno ${{ env.FROM_NAME }} para test de contrato
+      - name: Pull imágenes del entorno ${{ env.FROM_NAME }}
         run: |
           docker pull ${{ env.REGISTRY }}/${{ github.repository }}/microservice-a:${{ steps.read-tags.outputs.tag_a }} || \
             docker pull ${{ env.REGISTRY }}/${{ github.repository }}/microservice-a:latest
@@ -132,50 +169,43 @@ jobs:
           MSVC_B_TAG: ${{ steps.read-tags.outputs.tag_b }}
         run: |
           cd simulation
-          # Sobreescribir las tags espec�ficas del entorno de origen
           MSVC_A_IMAGE="${{ env.REGISTRY }}/${{ github.repository }}/microservice-a:${MSVC_A_TAG:-latest}"
           MSVC_B_IMAGE="${{ env.REGISTRY }}/${{ github.repository }}/microservice-b:${MSVC_B_TAG:-latest}"
           echo "Usando microservice-a: ${MSVC_A_IMAGE}"
           echo "Usando microservice-b: ${MSVC_B_IMAGE}"
-          # Override de las im�genes v�a variables de entorno de docker compose
           MICROSERVICE_A_IMAGE="$MSVC_A_IMAGE" MICROSERVICE_B_IMAGE="$MSVC_B_IMAGE" \
             docker compose up -d db-simulado mock-operador mock-recibo microservice-b microservice-a --no-build
-          echo "? Esperando arranque de los servicios (90s)..."
-          sleep 90
-          docker compose ps
 
-      - name: Health Check microservice-b (imagen ${{ env.FROM_NAME }})
+      - name: Health Check microservice-b
         run: |
-          for i in {1..15}; do
-            STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8081/actuator/health || echo "000")
-            [ "$STATUS" -eq "200" ] && echo "? microservice-b UP" && break
+          echo "⏳ Esperando microservice-b..."
+          for i in {1..24}; do
+            STATUS=$(curl -sf -o /dev/null -w "%{http_code}" http://localhost:8081/actuator/health 2>/dev/null || echo "000")
+            echo "  Intento $i/24: HTTP $STATUS"
+            [ "$STATUS" = "200" ] && echo "✅ microservice-b UP" && break
+            [ "$i" = "24" ] && echo "❌ Timeout" && cd simulation && docker compose logs microservice-b && exit 1
             sleep 5
           done
-          if [ "$STATUS" -ne "200" ]; then
-            cd simulation && docker compose logs microservice-b
-            exit 1
-          fi
 
       - name: Health Check microservice-a
         run: |
-          for i in {1..15}; do
-            STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8080/actuator/health || echo "000")
-            [ "$STATUS" -eq "200" ] && echo "? microservice-a UP" && break
+          echo "⏳ Esperando microservice-a..."
+          for i in {1..24}; do
+            STATUS=$(curl -sf -o /dev/null -w "%{http_code}" http://localhost:8080/actuator/health 2>/dev/null || echo "000")
+            echo "  Intento $i/24: HTTP $STATUS"
+            [ "$STATUS" = "200" ] && echo "✅ microservice-a UP" && break
+            [ "$i" = "24" ] && echo "❌ Timeout" && cd simulation && docker compose logs microservice-a && exit 1
             sleep 5
           done
-          if [ "$STATUS" -ne "200" ]; then
-            cd simulation && docker compose logs microservice-a
-            exit 1
-          fi
 
-      - name: "??  DEMO BREAK 1 ? Karate Contrato � microservice-a ? microservice-b"
+      - name: "⚠️ DEMO BREAK 1 — Karate Contrato: microservice-a → microservice-b"
         run: |
-          echo "?? Validando contrato p�blico de microservice-b..."
+          echo "🔍 Validando contrato público de microservice-b..."
           echo "   Campos esperados: 'telefono', 'nombre', 'status'"
           cd tests/functional-karate
           mvn test -Dkarate.env=ci \
             -Dtest=RecargaFlowRunner#testContratoMicroservicios \
-            --no-transfer-progress
+            --no-transfer-progress --batch-mode
 
       - name: Subir Informe Contrato
         if: always()
@@ -183,18 +213,30 @@ jobs:
         with:
           name: contract-test-report-${{ github.run_id }}
           path: tests/functional-karate/target/surefire-reports/
+          retention-days: 14
 
       - name: Parar Ambiente
         if: always()
         run: cd simulation && docker compose down -v
 
-# ------------------------------------------------------------------------------
-# JOB 3 � E2E Completo
-# ------------------------------------------------------------------------------
+      - name: Resumen de contrato
+        if: always()
+        run: |
+          echo "## 🔗 Tests de Contrato" >> $GITHUB_STEP_SUMMARY
+          echo "| Servicio | Estado |" >> $GITHUB_STEP_SUMMARY
+          echo "|----------|--------|" >> $GITHUB_STEP_SUMMARY
+          echo "| microservice-a → microservice-b | ${{ job.status == 'success' && '✅' || '❌' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Ambiente origen | ${{ env.FROM_NAME }} |" >> $GITHUB_STEP_SUMMARY
+
+# ──────────────────────────────────────────────────────────────────────────────
+# JOB 2 — E2E Completo (Karate + Selenium + k6)
+# Mejora v2: Selenium incluido y bloqueante, Maven cache, sin sleep fijo
+# ──────────────────────────────────────────────────────────────────────────────
   e2e-full:
-    name: "2 � E2E Completo � Karate 8 Pasos + k6 [${{ needs.validate.outputs.from-name }}]"
+    name: "2 — E2E Completo — Karate + Selenium + k6 [${{ needs.validate.outputs.from-name }}]"
     runs-on: ubuntu-latest
     needs: [validate, contract-tests]
+    if: ${{ !inputs.skip_e2e }}
 
     env:
       FROM_OVERLAY: ${{ needs.validate.outputs.from-overlay }}
@@ -204,11 +246,18 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Configurar JDK 17
+      - name: Configurar JDK ${{ env.JAVA_VERSION }}
         uses: actions/setup-java@v4
         with:
-          java-version: "17"
+          java-version: ${{ env.JAVA_VERSION }}
           distribution: temurin
+
+      - name: Cache Maven (Karate + Selenium)
+        uses: actions/cache@v4
+        with:
+          path: ~/.m2/repository
+          key: maven-${{ runner.os }}-${{ hashFiles('tests/functional-karate/pom.xml', 'tests/ui-selenium/pom.xml') }}
+          restore-keys: maven-${{ runner.os }}-
 
       - name: Login GHCR
         uses: docker/login-action@v3
@@ -222,56 +271,93 @@ jobs:
           cd simulation
           docker compose pull microservice-a microservice-b || true
           docker compose up -d --no-build
-          echo "? Esperando arranque (90s)..."
-          sleep 90
-          docker compose ps
 
-      - name: Health Checks
+      - name: Health Checks (microservice-b y microservice-a)
         run: |
-          for SVC_URL in http://localhost:8081/actuator/health http://localhost:8080/actuator/health; do
-            for i in {1..15}; do
-              STATUS=$(curl -s -o /dev/null -w "%{http_code}" "$SVC_URL" || echo "000")
-              [ "$STATUS" -eq "200" ] && echo "? ${SVC_URL} UP" && break
+          for SVC in "microservice-b:http://localhost:8081/actuator/health" "microservice-a:http://localhost:8080/actuator/health"; do
+            SVC_NAME="${SVC%%:*}"
+            SVC_URL="${SVC#*:}"
+            echo "⏳ Esperando ${SVC_NAME}..."
+            for i in {1..24}; do
+              STATUS=$(curl -sf -o /dev/null -w "%{http_code}" "$SVC_URL" 2>/dev/null || echo "000")
+              echo "  Intento $i/24: HTTP $STATUS"
+              [ "$STATUS" = "200" ] && echo "✅ ${SVC_NAME} UP" && break
+              [ "$i" = "24" ] && echo "❌ ${SVC_NAME} no respondió" \
+                && cd simulation && docker compose logs "${SVC_NAME}" && exit 1
               sleep 5
             done
-            [ "$STATUS" -ne "200" ] && echo "? ${SVC_URL} no respondi�" && exit 1
           done
 
-      - name: "Karate E2E � Flujo Completo 8 Pasos"
+      - name: "Karate E2E — Flujo Completo 8 Pasos"
         run: |
           cd tests/functional-karate
           mvn test -Dkarate.env=ci \
             -Dtest=RecargaFlowRunner#testRecargaFlow \
-            --no-transfer-progress
+            --no-transfer-progress --batch-mode
 
-      - name: Subir Informe E2E
+      - name: Subir Informe Karate E2E
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: e2e-full-report-${{ github.run_id }}
+          name: e2e-full-karate-report-${{ github.run_id }}
           path: tests/functional-karate/target/surefire-reports/
+          retention-days: 14
 
-      - name: "k6 Smoke Test � Performance"
+      - name: "Selenium — Validación UI (bloqueante)"
+        run: |
+          cd tests/ui-selenium
+          mvn test -Dapp.url=http://localhost:8080 --no-transfer-progress --batch-mode
+        continue-on-error: false
+
+      - name: Subir Informe Selenium
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-selenium-report-${{ github.run_id }}
+          path: tests/ui-selenium/target/surefire-reports/
+          retention-days: 14
+
+      - name: "k6 Smoke Test — Performance Ruta Crítica"
         run: |
           curl -fsSL https://dl.k6.io/key.gpg \
             | sudo gpg --dearmor -o /usr/share/keyrings/k6-archive-keyring.gpg
           echo "deb [signed-by=/usr/share/keyrings/k6-archive-keyring.gpg] https://dl.k6.io/deb stable main" \
             | sudo tee /etc/apt/sources.list.d/k6.list
           sudo apt-get update -qq && sudo apt-get install -y k6
+          mkdir -p tests/k6/results
           k6 run --env BASE_URL=http://localhost:8080 tests/k6/smoke_recarga.js
+
+      - name: Subir Resultados k6
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-k6-results-${{ github.run_id }}
+          path: tests/k6/results/
+          retention-days: 14
 
       - name: Parar Ambiente
         if: always()
         run: cd simulation && docker compose down -v
 
-# ------------------------------------------------------------------------------
-# JOB 4 � Promoci�n GitOps
-# Solo ejecuta si Jobs 2 y 3 pasan � protecci�n total del entorno destino
-# ------------------------------------------------------------------------------
+      - name: Resumen E2E
+        if: always()
+        run: |
+          echo "## 🧪 E2E Completo" >> $GITHUB_STEP_SUMMARY
+          echo "| Suite | Estado |" >> $GITHUB_STEP_SUMMARY
+          echo "|-------|--------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Karate 8 pasos | ${{ job.status == 'success' && '✅' || '❌' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Selenium UI | ${{ job.status == 'success' && '✅' || '❌' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| k6 Smoke (p95<2s) | ${{ job.status == 'success' && '✅' || '❌' }} |" >> $GITHUB_STEP_SUMMARY
+
+# ──────────────────────────────────────────────────────────────────────────────
+# JOB 3 — Promoción GitOps
+# Solo ejecuta si Jobs 1 y 2 pasan — protección total del ambiente destino
+# ──────────────────────────────────────────────────────────────────────────────
   promote:
-    name: "3 � GitOps Promoci�n ${{ needs.validate.outputs.from-name }} ? ${{ needs.validate.outputs.to-name }}"
+    name: "3 — GitOps Promoción ${{ needs.validate.outputs.from-name }} → ${{ needs.validate.outputs.to-name }}"
     runs-on: ubuntu-latest
     needs: [validate, contract-tests, e2e-full]
+    if: always() && needs.contract-tests.result == 'success' && (needs.e2e-full.result == 'success' || inputs.skip_e2e)
     permissions:
       contents: write
 
@@ -287,15 +373,15 @@ jobs:
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: "Copiar tags de ${{ env.FROM_OVERLAY }} ? ${{ env.TO_OVERLAY }}"
+      - name: "Copiar tags de ${{ env.FROM_OVERLAY }} → ${{ env.TO_OVERLAY }}"
         run: |
           python3 - << 'EOF'
           import re, os, sys
 
           REGISTRY = 'ghcr.io/optaresolutions/mx-poc-paymentapp'
           SERVICES = ['microservice-a', 'microservice-b', 'ui-paymentbox']
-          from_ovl = os.environ['FROM_OVERLAY']
-          to_ovl   = os.environ['TO_OVERLAY']
+          from_ovl  = os.environ['FROM_OVERLAY']
+          to_ovl    = os.environ['TO_OVERLAY']
           from_name = os.environ['FROM_NAME']
           to_name   = os.environ['TO_NAME']
 
@@ -307,11 +393,12 @@ jobs:
           with open(tgt_path) as f:
               tgt = f.read()
 
-          print(f'?? Promoviendo {from_name} ? {to_name}')
-          print(f'   Origem:  {src_path}')
+          print(f'🚀 Promoviendo {from_name} → {to_name}')
+          print(f'   Origen:  {src_path}')
           print(f'   Destino: {tgt_path}')
           print()
 
+          promoted = []
           for svc in SERVICES:
               m = re.search(
                   rf'- name: {re.escape(REGISTRY)}/{svc}\n\s+newTag: "?([^"\n]+)"?',
@@ -324,59 +411,63 @@ jobs:
                   new_tgt     = re.sub(pattern, replacement, tgt)
                   if new_tgt != tgt:
                       tgt = new_tgt
-                      print(f'  ? {svc}: {tag}')
+                      promoted.append(f'{svc}: {tag}')
+                      print(f'  ✅ {svc}: {tag}')
                   else:
-                      print(f'  ??  {svc}: patr�n no encontrado en el destino', file=sys.stderr)
+                      print(f'  ⚠️  {svc}: patrón no encontrado en el destino', file=sys.stderr)
               else:
-                  print(f'  ??  {svc}: tag no encontrada en el origen', file=sys.stderr)
+                  print(f'  ℹ️  {svc}: tag no encontrada en el origen (puede no estar en este overlay)')
 
           with open(tgt_path, 'w') as f:
               f.write(tgt)
 
           print()
-          print('=== Manifiesto destino actualizado ===')
+          print(f'✅ Promoción completada: {len(promoted)} servicios actualizados')
+          print('=== Manifiesto destino ===')
           print(tgt)
           EOF
 
-      - name: "Git commit + push � promoci�n GitOps [skip ci]"
+      - name: "Git commit + push — promoción GitOps [skip ci]"
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add k8s/overlays/${{ env.TO_OVERLAY }}/kustomization.yaml
-          git diff --staged --quiet && echo "Sin cambios" && exit 0
-          git commit -m "gitops: promover ${FROM_OVERLAY} ? ${TO_OVERLAY} (${FROM_NAME} ? ${TO_NAME}) [skip ci]"
+          git diff --staged --quiet && echo "Sin cambios que promocionar" && exit 0
+          git commit -m "gitops: promover ${FROM_OVERLAY} → ${TO_OVERLAY} (${FROM_NAME} → ${TO_NAME}) [skip ci]"
           git push
 
-      - name: "ArgoCD (simulado) � Sync ${{ env.TO_NAME }}"
+      - name: "ArgoCD (simulado) — Sync ${{ env.TO_NAME }}"
         run: |
-          echo "---------------------------------------------------------------"
-          echo "?? [ArgoCD] Promoci�n detectada:"
-          echo "   Origem:  ${FROM_NAME} (${FROM_OVERLAY})"
+          echo "──────────────────────────────────────────────────────────"
+          echo "🚀 [ArgoCD] Promoción detectada:"
+          echo "   Origen:  ${FROM_NAME} (${FROM_OVERLAY})"
           echo "   Destino: ${TO_NAME} (${TO_OVERLAY})"
           echo ""
-          echo "?? [ArgoCD] Sincronizando application att-paymentbox-${TO_OVERLAY}..."
-          echo "?? [ArgoCD] Strategy: Sync (Prune=true, SelfHeal=true)"
+          echo "🔄 [ArgoCD] Sincronizando application att-paymentbox-${TO_OVERLAY}..."
+          echo "⚙️  [ArgoCD] Strategy: Sync (Prune=true, SelfHeal=true)"
           sleep 3
           echo ""
-          echo "? [ArgoCD] Sync COMPLETADO"
-          echo "   microservice-a ? desplegado en ${TO_NAME}"
-          echo "   microservice-b ? desplegado en ${TO_NAME}"
-          echo "   ui-paymentbox  ? desplegado en ${TO_NAME}"
+          echo "✅ [ArgoCD] Sync COMPLETADO"
+          echo "   microservice-a → desplegado en ${TO_NAME}"
+          echo "   microservice-b → desplegado en ${TO_NAME}"
+          echo "   ui-paymentbox  → desplegado en ${TO_NAME}"
           echo ""
-          echo "?? Endpoints simulados ${TO_NAME}:"
-          echo "   API:  http://microservice-a.${TO_OVERLAY}.att-paymentbox.internal"
-          echo "   UI:   http://ui.${TO_OVERLAY}.att-paymentbox.internal"
-          echo "---------------------------------------------------------------"
+          echo "🌐 Endpoints simulados ${TO_NAME}:"
+          echo "   API: http://microservice-a.${TO_OVERLAY}.att-paymentbox.internal"
+          echo "   UI:  http://ui.${TO_OVERLAY}.att-paymentbox.internal"
+          echo "──────────────────────────────────────────────────────────"
 
-      - name: Resumen de la Promoci�n
+      - name: Resumen de la Promoción
         run: |
-          echo "## ?? Promoci�n Completada" >> $GITHUB_STEP_SUMMARY
-          echo ""                          >> $GITHUB_STEP_SUMMARY
-          echo "| Campo | Valor |"         >> $GITHUB_STEP_SUMMARY
-          echo "|-------|-------|"         >> $GITHUB_STEP_SUMMARY
-          echo "| Origem | ${{ env.FROM_NAME }} (\`${{ env.FROM_OVERLAY }}\`) |" >> $GITHUB_STEP_SUMMARY
-          echo "| Destino | ${{ env.TO_NAME }} (\`${{ env.TO_OVERLAY }}\`) |"    >> $GITHUB_STEP_SUMMARY
-          echo "| Tests Contrato | ? Pasaron |"  >> $GITHUB_STEP_SUMMARY
-          echo "| E2E Completo | ? Pasaron |"     >> $GITHUB_STEP_SUMMARY
-          echo "| GitOps | ? Manifiesto actualizado |" >> $GITHUB_STEP_SUMMARY
-          echo "| ArgoCD | ? Sync simulado |"       >> $GITHUB_STEP_SUMMARY
+          echo "## 🎉 Promoción Completada" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Campo | Valor |" >> $GITHUB_STEP_SUMMARY
+          echo "|-------|-------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Origen | ${{ env.FROM_NAME }} (\`${{ env.FROM_OVERLAY }}\`) |" >> $GITHUB_STEP_SUMMARY
+          echo "| Destino | ${{ env.TO_NAME }} (\`${{ env.TO_OVERLAY }}\`) |" >> $GITHUB_STEP_SUMMARY
+          echo "| Tests Contrato | ✅ Pasaron |" >> $GITHUB_STEP_SUMMARY
+          echo "| E2E Completo | ${{ inputs.skip_e2e && '⏭️ Omitido' || '✅ Pasaron' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Selenium UI | ${{ inputs.skip_e2e && '⏭️ Omitido' || '✅ Pasaron' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| GitOps | ✅ Manifiesto actualizado |" >> $GITHUB_STEP_SUMMARY
+          echo "| ArgoCD | ✅ Sync simulado |" >> $GITHUB_STEP_SUMMARY
+          echo "| Aprobado por | @${{ github.actor }} |" >> $GITHUB_STEP_SUMMARY

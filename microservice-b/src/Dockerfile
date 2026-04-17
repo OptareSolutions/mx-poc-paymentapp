@@ -1,16 +1,30 @@
-# ── Stage 1: Build ─────────────────────────────────────────────────────────────
-FROM gradle:8.7-jdk17 AS build
-WORKDIR /app
-COPY build.gradle settings.gradle ./
-RUN gradle dependencies --no-daemon || true
-COPY src ./src
-RUN gradle bootJar --no-daemon
+# ── Stage 1: Build (Maven + Java 21) ──────────────────────────────────────────
+FROM maven:3.9-eclipse-temurin-21-alpine AS build
 
-# ── Stage 2: Run ───────────────────────────────────────────────────────────────
-FROM eclipse-temurin:17-jre-alpine
 WORKDIR /app
+
+COPY pom.xml .
+RUN mvn dependency:go-offline -q
+
+COPY src ./src
+RUN mvn package -DskipTests -q
+
+# ── Stage 2: Runtime (eclipse-temurin:21-jre-alpine) ─────────────────────────
+FROM eclipse-temurin:21-jre-alpine
+
+WORKDIR /app
+
 RUN addgroup -S appgroup && adduser -S appuser -G appgroup
-COPY --from=build /app/build/libs/*.jar app.jar
+
+COPY --from=build /app/target/*.jar app.jar
+COPY --from=build /app/src/main/resources/logback-spring.xml logback-spring.xml
+
+RUN chown appuser:appgroup app.jar logback-spring.xml
+
 USER appuser
+
 EXPOSE 8081
-ENTRYPOINT ["java", "-Djava.security.egd=file:/dev/./urandom", "-jar", "app.jar"]
+
+ENV TUH_JAVA_OPTS="-Xms256m -Xmx512m -XX:+UseG1GC -Djava.security.egd=file:/dev/./urandom"
+
+ENTRYPOINT ["sh", "-c", "java ${TUH_JAVA_OPTS} -Dlogging.config=logback-spring.xml -jar app.jar"]

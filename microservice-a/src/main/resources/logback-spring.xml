@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<configuration>
+
+    <!-- Importa defaults de Spring Boot -->
+    <include resource="org/springframework/boot/logging/logback/defaults.xml"/>
+
+    <springProperty name="APP_NAME"    source="spring.application.name"  defaultValue="paymentbox-microservice-a"/>
+    <springProperty name="LOG_FILE"    source="logging.file.name"         defaultValue="application"/>
+    <springProperty name="LOG_PATH"    source="logging.file.path"         defaultValue="/tmp/logs"/>
+    <springProperty name="SPRING_PROFILE" source="spring.profiles.active" defaultValue="default"/>
+
+    <!-- ── Consola: JSON estructurado con Logstash encoder ─────────────────── -->
+    <!-- Patrón adoptado de mxapm0002577-source-identity-connector            -->
+    <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder class="net.logstash.logback.encoder.LogstashEncoder">
+            <includeKeyValuePairs>true</includeKeyValuePairs>
+            <!-- Campos personalizados para trazabilidad en ELK/Splunk -->
+            <customFields>{"app":"${APP_NAME}","profile":"${SPRING_PROFILE}"}</customFields>
+            <!-- Excluye campos que añaden ruido en PoC -->
+            <fieldNames>
+                <timestamp>timestamp</timestamp>
+                <message>message</message>
+                <logger>logger</logger>
+                <thread>thread</thread>
+                <levelValue>[ignore]</levelValue>
+            </fieldNames>
+            <!-- MDC: traceId y spanId para trazabilidad distribuida -->
+            <includeMdcKeyName>traceId</includeMdcKeyName>
+            <includeMdcKeyName>spanId</includeMdcKeyName>
+        </encoder>
+    </appender>
+
+    <!-- ── Async wrapper: no bloquea threads de negocio ───────────────────── -->
+    <appender name="ASYNC_CONSOLE" class="ch.qos.logback.classic.AsyncAppender">
+        <appender-ref ref="CONSOLE"/>
+        <queueSize>5000</queueSize>
+        <discardingThreshold>0</discardingThreshold>
+    </appender>
+
+    <!-- ── Niveles por paquete ────────────────────────────────────────────── -->
+    <logger name="com.att.paymentbox"            level="DEBUG"/>
+    <logger name="org.springframework.web"        level="INFO"/>
+    <logger name="org.springframework.security"   level="INFO"/>
+    <logger name="org.hibernate.SQL"              level="WARN"/>
+    <logger name="org.hibernate.orm.connections"  level="WARN"/>
+    <logger name="io.github.resilience4j"         level="INFO"/>
+
+    <!-- ── Root logger ────────────────────────────────────────────────────── -->
+    <root level="INFO">
+        <appender-ref ref="ASYNC_CONSOLE"/>
+    </root>
+
+</configuration>

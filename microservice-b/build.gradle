@@ -1,3 +1,9 @@
+// ─────────────────────────────────────────────────────────────────────────────
+// DEPRECATED — Reemplazado por pom.xml (Maven)
+// Migración: Java 17 → 21 · Spring Boot 3.2.5 → 3.5.3 · Gradle → Maven
+// Este archivo ya NO es utilizado por el pipeline (pipeline-microservice-b.yml).
+// Conservado como referencia histórica. Usar pom.xml para todos los builds.
+// ─────────────────────────────────────────────────────────────────────────────
 plugins {
     id 'java'
     id 'org.springframework.boot' version '3.2.5'

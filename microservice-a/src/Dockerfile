@@ -1,18 +1,38 @@
-# ── Stage 1: Build ─────────────────────────────────────────────────────────────
-FROM gradle:8.7-jdk17 AS build
-WORKDIR /app
-COPY build.gradle settings.gradle ./
-COPY gradle ./gradle
-# Cache dependencies layer
-RUN gradle dependencies --no-daemon || true
-COPY src ./src
-RUN gradle bootJar --no-daemon
+# ── Stage 1: Build (Maven + Java 21) ──────────────────────────────────────────
+# Alineado con identity-connector: Maven multi-módulo, Java 21
+# En producción real ATT, sustituir por Golden Image ECR:
+#   FROM 177890020059.dkr.ecr.mx-central-1.amazonaws.com/goldenimages/giattol9jdk21-slim:...
+FROM maven:3.9-eclipse-temurin-21-alpine AS build
 
-# ── Stage 2: Run ───────────────────────────────────────────────────────────────
-FROM eclipse-temurin:17-jre-alpine
 WORKDIR /app
+
+# Cache de dependencias Maven (capa independiente del código)
+COPY pom.xml .
+RUN mvn dependency:go-offline -q
+
+# Build del código fuente
+COPY src ./src
+RUN mvn package -DskipTests -q
+
+# ── Stage 2: Runtime (eclipse-temurin:21-jre-alpine) ─────────────────────────
+FROM eclipse-temurin:21-jre-alpine
+
+WORKDIR /app
+
+# Usuario no-root (patrón identity-connector: usrapp)
 RUN addgroup -S appgroup && adduser -S appuser -G appgroup
-COPY --from=build /app/build/libs/*.jar app.jar
+
+# Copia solo el JAR generado por Maven
+COPY --from=build /app/target/*.jar app.jar
+COPY --from=build /app/src/main/resources/logback-spring.xml logback-spring.xml
+
+RUN chown appuser:appgroup app.jar logback-spring.xml
+
 USER appuser
+
 EXPOSE 8080
-ENTRYPOINT ["java", "-Djava.security.egd=file:/dev/./urandom", "-jar", "app.jar"]
+
+# TUH_JAVA_OPTS: variable de tuning JVM (patrón entrypoint.sh identity-connector)
+ENV TUH_JAVA_OPTS="-Xms256m -Xmx512m -XX:+UseG1GC -Djava.security.egd=file:/dev/./urandom"
+
+ENTRYPOINT ["sh", "-c", "java ${TUH_JAVA_OPTS} -Dlogging.config=logback-spring.xml -jar app.jar"]

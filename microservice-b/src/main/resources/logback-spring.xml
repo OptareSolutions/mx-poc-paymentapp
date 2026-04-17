@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<configuration>
+
+    <include resource="org/springframework/boot/logging/logback/defaults.xml"/>
+
+    <springProperty name="APP_NAME"       source="spring.application.name"  defaultValue="paymentbox-customer-profile"/>
+    <springProperty name="LOG_FILE"       source="logging.file.name"         defaultValue="application"/>
+    <springProperty name="LOG_PATH"       source="logging.file.path"         defaultValue="/tmp/logs"/>
+    <springProperty name="SPRING_PROFILE" source="spring.profiles.active"    defaultValue="default"/>
+
+    <!-- ── Consola: JSON estructurado con Logstash encoder ─────────────────── -->
+    <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder class="net.logstash.logback.encoder.LogstashEncoder">
+            <includeKeyValuePairs>true</includeKeyValuePairs>
+            <customFields>{"app":"${APP_NAME}","profile":"${SPRING_PROFILE}"}</customFields>
+            <fieldNames>
+                <timestamp>timestamp</timestamp>
+                <message>message</message>
+                <logger>logger</logger>
+                <thread>thread</thread>
+                <levelValue>[ignore]</levelValue>
+            </fieldNames>
+            <includeMdcKeyName>traceId</includeMdcKeyName>
+            <includeMdcKeyName>spanId</includeMdcKeyName>
+        </encoder>
+    </appender>
+
+    <appender name="ASYNC_CONSOLE" class="ch.qos.logback.classic.AsyncAppender">
+        <appender-ref ref="CONSOLE"/>
+        <queueSize>5000</queueSize>
+        <discardingThreshold>0</discardingThreshold>
+    </appender>
+
+    <!-- ── Niveles por paquete ────────────────────────────────────────────── -->
+    <logger name="com.att.paymentbox.customerprofile" level="DEBUG"/>
+    <logger name="org.springframework.web"             level="INFO"/>
+    <logger name="org.hibernate.SQL"                   level="WARN"/>
+    <logger name="org.hibernate.orm.connections"       level="WARN"/>
+    <logger name="io.github.resilience4j"              level="INFO"/>
+
+    <root level="INFO">
+        <appender-ref ref="ASYNC_CONSOLE"/>
+    </root>
+
+</configuration>
