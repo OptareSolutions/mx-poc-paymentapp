@@ -49,10 +49,17 @@ jobs:
           fetch-depth: 0  # Escanea todo el historial git, no solo el último commit
 
       - name: Gitleaks — Scan completo del repositorio
-        uses: gitleaks/gitleaks-action@v2
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GITLEAKS_LICENSE: ${{ secrets.GITLEAKS_LICENSE }}
+        # gitleaks/gitleaks-action@v2 requiere licencia de pago para orgs.
+        # Usamos la CLI directamente: gratis, sin licencia, mismo resultado.
+        run: |
+          curl -sSfL \
+            "https://github.com/gitleaks/gitleaks/releases/download/v8.18.4/gitleaks_8.18.4_linux_x64.tar.gz" \
+            | tar -xz gitleaks
+          ./gitleaks detect \
+            --source . \
+            --verbose \
+            --redact \
+            --exit-code 1
 
       - name: Verificar archivo .gitignore protege .env
         run: |

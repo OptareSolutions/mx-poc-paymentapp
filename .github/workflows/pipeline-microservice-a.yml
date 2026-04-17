@@ -38,8 +38,8 @@ name: "[microservice-a] CI — Build · Calidad · Seguridad · Deploy"
 #
 # Secrets requeridos:
 #   SONAR_TOKEN         → SonarCloud analysis
-#   GITLEAKS_LICENSE    → Gitleaks (plan free no requiere)
 #   AWS_ROLE_TO_ASSUME  → OIDC para ECR en producción (no aplica en PoC)
+#   (Gitleaks corre via CLI — no requiere secret de licencia)
 #
 # Ambientes por rama (flujo: dev → qa → preprod → prod):
 #   dev     → env-e (E / Desarrollo)
@@ -88,10 +88,17 @@ jobs:
           fetch-depth: 0
 
       - name: Gitleaks — Detección de Secrets
-        uses: gitleaks/gitleaks-action@v2
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GITLEAKS_LICENSE: ${{ secrets.GITLEAKS_LICENSE }}
+        # gitleaks/gitleaks-action@v2 requiere licencia de pago para orgs.
+        # Usamos la CLI directamente: gratis, sin licencia, mismo resultado.
+        run: |
+          curl -sSfL \
+            "https://github.com/gitleaks/gitleaks/releases/download/v8.18.4/gitleaks_8.18.4_linux_x64.tar.gz" \
+            | tar -xz gitleaks
+          ./gitleaks detect \
+            --source . \
+            --verbose \
+            --redact \
+            --exit-code 1
 
 # ──────────────────────────────────────────────────────────────────────────────
 # JOB 1 — Build & Quality (Shift-Left: unit tests + cobertura + SonarCloud)
