@@ -22,9 +22,9 @@ name: "🔒 Pipeline Seguridad — Repo-wide · Gitleaks · CodeQL · Dependabot
 
 on:
   push:
-    branches: [prod, dev, qa, preprod]
+    branches: [PRODUCCION, E, A, F]
   pull_request:
-    branches: [prod, dev, qa, preprod]
+    branches: [PRODUCCION, E, A, F]
   schedule:
     - cron: '0 7 * * 1'  # Lunes 07:00 UTC — scan programado semanal
   workflow_dispatch:

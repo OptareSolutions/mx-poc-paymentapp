@@ -31,12 +31,12 @@ on:
         description: "Ambiente de ORIGEN (rama)"
         required: true
         type: choice
-        options: [dev, qa, preprod]
+        options: [E, A, F]
       promote_to:
         description: "Ambiente de DESTINO (rama)"
         required: true
         type: choice
-        options: [qa, preprod, prod]
+        options: [A, F, PRODUCCION]
       skip_e2e:
         description: "Omitir E2E completo (solo contrato)"
         required: false
@@ -66,16 +66,16 @@ jobs:
           FROM="${{ inputs.promote_from }}"
           TO="${{ inputs.promote_to }}"
           VALID=false
-          [ "$FROM" = "dev"     ] && [ "$TO" = "qa"      ] && VALID=true
-          [ "$FROM" = "qa"      ] && [ "$TO" = "preprod"  ] && VALID=true
-          [ "$FROM" = "preprod" ] && [ "$TO" = "prod"     ] && VALID=true
+          [ "$FROM" = "E" ] && [ "$TO" = "A"          ] && VALID=true
+          [ "$FROM" = "A" ] && [ "$TO" = "F"          ] && VALID=true
+          [ "$FROM" = "F" ] && [ "$TO" = "PRODUCCION" ] && VALID=true
           if [ "$VALID" = "false" ]; then
             echo "❌ Combinación inválida: ${FROM} → ${TO}"
             echo ""
-            echo "Combinaciones válidas (flujo: dev → qa → preprod → prod):"
-            echo "  dev     → qa      (E / Desarrollo → A / QA)"
-            echo "  qa      → preprod (A / QA → F / Pre-producción)"
-            echo "  preprod → prod    (F / Pre-producción → Producción)"
+            echo "Combinaciones válidas (flujo: E → A → F → PRODUCCION):"
+            echo "  E → A           (Desarrollo → QA)"
+            echo "  A → F           (QA → Pre-producción)"
+            echo "  F → PRODUCCION  (Pre-producción → Producción)"
             exit 1
           fi
           echo "✅ Promoción válida: ${FROM} → ${TO}"
@@ -84,14 +84,14 @@ jobs:
         id: mapping
         run: |
           case "${{ inputs.promote_from }}" in
-            dev)     echo "from_overlay=env-e" >> $GITHUB_OUTPUT ; echo "from_name=E (Desarrollo)"     >> $GITHUB_OUTPUT ;;
-            qa)      echo "from_overlay=env-a" >> $GITHUB_OUTPUT ; echo "from_name=A (QA)"             >> $GITHUB_OUTPUT ;;
-            preprod) echo "from_overlay=env-f" >> $GITHUB_OUTPUT ; echo "from_name=F (Pre-producción)" >> $GITHUB_OUTPUT ;;
+            E)          echo "from_overlay=env-e" >> $GITHUB_OUTPUT ; echo "from_name=E (Desarrollo)"     >> $GITHUB_OUTPUT ;;
+            A)          echo "from_overlay=env-a" >> $GITHUB_OUTPUT ; echo "from_name=A (QA)"             >> $GITHUB_OUTPUT ;;
+            F)          echo "from_overlay=env-f" >> $GITHUB_OUTPUT ; echo "from_name=F (Pre-producción)" >> $GITHUB_OUTPUT ;;
           esac
           case "${{ inputs.promote_to }}" in
-            qa)      echo "to_overlay=env-a" >> $GITHUB_OUTPUT ; echo "to_name=A (QA)"             >> $GITHUB_OUTPUT ;;
-            preprod) echo "to_overlay=env-f" >> $GITHUB_OUTPUT ; echo "to_name=F (Pre-producción)" >> $GITHUB_OUTPUT ;;
-            prod)    echo "to_overlay=prod"  >> $GITHUB_OUTPUT ; echo "to_name=Producción"          >> $GITHUB_OUTPUT ;;
+            A)          echo "to_overlay=env-a" >> $GITHUB_OUTPUT ; echo "to_name=A (QA)"             >> $GITHUB_OUTPUT ;;
+            F)          echo "to_overlay=env-f" >> $GITHUB_OUTPUT ; echo "to_name=F (Pre-producción)" >> $GITHUB_OUTPUT ;;
+            PRODUCCION) echo "to_overlay=prod"  >> $GITHUB_OUTPUT ; echo "to_name=Producción"          >> $GITHUB_OUTPUT ;;
           esac
 
       - name: Resumen de la promoción

@@ -50,14 +50,15 @@ name: "[microservice-a] CI — Build · Calidad · Seguridad · Deploy"
 
 on:
   push:
-    branches: [dev, qa, preprod, prod]
+    branches: [E, A, F, PRODUCCION]
     paths:
       - 'microservice-a/**'
       - '.github/workflows/pipeline-microservice-a.yml'
   pull_request:
-    branches: [dev, qa, preprod, prod]
+    branches: [E, A, F, PRODUCCION]
     paths:
       - 'microservice-a/**'
+      - '.github/workflows/pipeline-microservice-a.yml'
   workflow_dispatch:
 
 concurrency:
@@ -277,10 +278,10 @@ jobs:
         id: env-info
         run: |
           case "${{ github.ref_name }}" in
-            dev)     echo "overlay=env-e" >> $GITHUB_OUTPUT ; echo "name=E (Desarrollo)"     >> $GITHUB_OUTPUT ; echo "prefix=env-e" >> $GITHUB_OUTPUT ;;
-            qa)      echo "overlay=env-a" >> $GITHUB_OUTPUT ; echo "name=A (QA)"             >> $GITHUB_OUTPUT ; echo "prefix=env-a" >> $GITHUB_OUTPUT ;;
-            preprod) echo "overlay=env-f" >> $GITHUB_OUTPUT ; echo "name=F (Pre-producción)" >> $GITHUB_OUTPUT ; echo "prefix=env-f" >> $GITHUB_OUTPUT ;;
-            prod)    echo "overlay=prod"  >> $GITHUB_OUTPUT ; echo "name=Producción"          >> $GITHUB_OUTPUT ; echo "prefix=prod"  >> $GITHUB_OUTPUT ;;
+            E)          echo "overlay=env-e" >> $GITHUB_OUTPUT ; echo "name=E (Desarrollo)"     >> $GITHUB_OUTPUT ; echo "prefix=env-e" >> $GITHUB_OUTPUT ;;
+            A)          echo "overlay=env-a" >> $GITHUB_OUTPUT ; echo "name=A (QA)"             >> $GITHUB_OUTPUT ; echo "prefix=env-a" >> $GITHUB_OUTPUT ;;
+            F)          echo "overlay=env-f" >> $GITHUB_OUTPUT ; echo "name=F (Pre-producción)" >> $GITHUB_OUTPUT ; echo "prefix=env-f" >> $GITHUB_OUTPUT ;;
+            PRODUCCION) echo "overlay=prod"  >> $GITHUB_OUTPUT ; echo "name=Producción"          >> $GITHUB_OUTPUT ; echo "prefix=prod"  >> $GITHUB_OUTPUT ;;
             *)       echo "overlay=env-e" >> $GITHUB_OUTPUT ; echo "name=E (manual)"         >> $GITHUB_OUTPUT ; echo "prefix=env-e" >> $GITHUB_OUTPUT ;;
           esac
 
