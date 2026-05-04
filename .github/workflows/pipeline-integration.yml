@@ -1,17 +1,17 @@
-name: "?? Pipeline Integración — Contrato · E2E · Promoción entre Ambientes"
+name: "?? Pipeline Integraciï¿½n ï¿½ Contrato ï¿½ E2E ï¿½ Promociï¿½n entre Ambientes"
 
 # ------------------------------------------------------------------------------
-# Trigger: MANUAL (workflow_dispatch) — promoción deliberada entre ambientes
+# Trigger: MANUAL (workflow_dispatch) ï¿½ promociï¿½n deliberada entre ambientes
 #
-# Flujo de promoción:
+# Flujo de promociï¿½n:
 #   develop ? qa    (env-e ? env-a)   Equipa valida no E e promove para QA
 #   qa      ? uat   (env-a ? env-u)   QA valida e promove para UAT
-#   uat     ? main  (env-u ? prod)    UAT valida e promove para Produção
+#   uat     ? main  (env-u ? prod)    UAT valida e promove para Produï¿½ï¿½o
 #
 # Gates declarativos:
-#   Job 2 — Tests de Contrato entre servicios  (?? DEMO BREAK 1: falla aquí)
-#   Job 3 — E2E completo con entorno simulado
-#   Job 4 — Promoción GitOps + ArgoCD simulado  (solo ejecuta si Jobs 2+3 verdes)
+#   Job 2 ï¿½ Tests de Contrato entre servicios  (?? DEMO BREAK 1: falla aquï¿½)
+#   Job 3 ï¿½ E2E completo con entorno simulado
+#   Job 4 ï¿½ Promociï¿½n GitOps + ArgoCD simulado  (solo ejecuta si Jobs 2+3 verdes)
 # ------------------------------------------------------------------------------
 
 on:
@@ -32,11 +32,11 @@ env:
   REGISTRY: ghcr.io
 
 # ------------------------------------------------------------------------------
-# JOB 1 — Validar inputs de promoción
+# JOB 1 ï¿½ Validar inputs de promociï¿½n
 # ------------------------------------------------------------------------------
 jobs:
   validate:
-    name: "0 · Validar Promoción ${{ inputs.promote_from }} ? ${{ inputs.promote_to }}"
+    name: "0 ï¿½ Validar Promociï¿½n ${{ inputs.promote_from }} ? ${{ inputs.promote_to }}"
     runs-on: ubuntu-latest
     outputs:
       from-overlay: ${{ steps.mapping.outputs.from_overlay }}
@@ -45,7 +45,7 @@ jobs:
       to-name:      ${{ steps.mapping.outputs.to_name }}
 
     steps:
-      - name: Validar combinación de ambientes
+      - name: Validar combinaciï¿½n de ambientes
         run: |
           FROM="${{ inputs.promote_from }}"
           TO="${{ inputs.promote_to }}"
@@ -54,11 +54,11 @@ jobs:
           [ "$FROM" = "qa"      ] && [ "$TO" = "uat"  ] && VALID=true
           [ "$FROM" = "uat"     ] && [ "$TO" = "main" ] && VALID=true
           if [ "$VALID" = "false" ]; then
-            echo "? Combinación inválida: ${FROM} ? ${TO}"
-            echo "   Combinaciones válidas: develop?qa | qa?uat | uat?main"
+            echo "? Combinaciï¿½n invï¿½lida: ${FROM} ? ${TO}"
+            echo "   Combinaciones vï¿½lidas: develop?qa | qa?uat | uat?main"
             exit 1
           fi
-          echo "? Promoción válida: ${FROM} ? ${TO}"
+          echo "? Promociï¿½n vï¿½lida: ${FROM} ? ${TO}"
 
       - name: Mapear ambientes y overlays
         id: mapping
@@ -71,16 +71,16 @@ jobs:
           case "${{ inputs.promote_to }}" in
             qa)   echo "to_overlay=env-a" >> $GITHUB_OUTPUT ; echo "to_name=A (QA)"    >> $GITHUB_OUTPUT ;;
             uat)  echo "to_overlay=env-u" >> $GITHUB_OUTPUT ; echo "to_name=U (UAT)"   >> $GITHUB_OUTPUT ;;
-            main) echo "to_overlay=prod"  >> $GITHUB_OUTPUT ; echo "to_name=Producción"  >> $GITHUB_OUTPUT ;;
+            main) echo "to_overlay=prod"  >> $GITHUB_OUTPUT ; echo "to_name=Producciï¿½n"  >> $GITHUB_OUTPUT ;;
           esac
 
 # ------------------------------------------------------------------------------
-# JOB 2 — Tests de Contrato entre Servicios
-# ??  DEMO BREAK 1: falla aquí cuando microservice-b tiene campos renombrados
-#     (telefono?phone / nombre?fullName) y la imagen env-e está en el GHCR
+# JOB 2 ï¿½ Tests de Contrato entre Servicios
+# ??  DEMO BREAK 1: falla aquï¿½ cuando microservice-b tiene campos renombrados
+#     (telefono?phone / nombre?fullName) y la imagen env-e estï¿½ en el GHCR
 # ------------------------------------------------------------------------------
   contract-tests:
-    name: "1 · ?? DEMO BREAK 1 ? Tests Contrato [${{ needs.validate.outputs.from-name }}]"
+    name: "1 ï¿½ ?? DEMO BREAK 1 ? Tests Contrato [${{ needs.validate.outputs.from-name }}]"
     runs-on: ubuntu-latest
     needs: validate
 
@@ -97,6 +97,14 @@ jobs:
         with:
           java-version: "17"
           distribution: temurin
+
+      - name: Cache Maven (~/.m2/repository)
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: ~/.m2/repository
+          key: ${{ runner.os }}-maven-${{ hashFiles('tests/functional-karate/pom.xml') }}
+          restore-keys: |
+            ${{ runner.os }}-maven-
 
       - name: Login GHCR
         uses: docker/login-action@v3
@@ -119,7 +127,7 @@ jobs:
           echo "tag_a=${TAG_A}" >> $GITHUB_OUTPUT
           echo "tag_b=${TAG_B}" >> $GITHUB_OUTPUT
 
-      - name: Pull imágenes del entorno ${{ env.FROM_NAME }} para test de contrato
+      - name: Pull imï¿½genes del entorno ${{ env.FROM_NAME }} para test de contrato
         run: |
           docker pull ${{ env.REGISTRY }}/${{ github.repository }}/microservice-a:${{ steps.read-tags.outputs.tag_a }} || \
             docker pull ${{ env.REGISTRY }}/${{ github.repository }}/microservice-a:latest
@@ -132,12 +140,12 @@ jobs:
           MSVC_B_TAG: ${{ steps.read-tags.outputs.tag_b }}
         run: |
           cd simulation
-          # Sobreescribir las tags específicas del entorno de origen
+          # Sobreescribir las tags especï¿½ficas del entorno de origen
           MSVC_A_IMAGE="${{ env.REGISTRY }}/${{ github.repository }}/microservice-a:${MSVC_A_TAG:-latest}"
           MSVC_B_IMAGE="${{ env.REGISTRY }}/${{ github.repository }}/microservice-b:${MSVC_B_TAG:-latest}"
           echo "Usando microservice-a: ${MSVC_A_IMAGE}"
           echo "Usando microservice-b: ${MSVC_B_IMAGE}"
-          # Override de las imágenes vía variables de entorno de docker compose
+          # Override de las imï¿½genes vï¿½a variables de entorno de docker compose
           MICROSERVICE_A_IMAGE="$MSVC_A_IMAGE" MICROSERVICE_B_IMAGE="$MSVC_B_IMAGE" \
             docker compose up -d db-simulado mock-operador mock-recibo microservice-b microservice-a --no-build
           echo "? Esperando arranque de los servicios (90s)..."
@@ -168,9 +176,9 @@ jobs:
             exit 1
           fi
 
-      - name: "??  DEMO BREAK 1 ? Karate Contrato — microservice-a ? microservice-b"
+      - name: "??  DEMO BREAK 1 ? Karate Contrato ï¿½ microservice-a ? microservice-b"
         run: |
-          echo "?? Validando contrato público de microservice-b..."
+          echo "?? Validando contrato pï¿½blico de microservice-b..."
           echo "   Campos esperados: 'telefono', 'nombre', 'status'"
           cd tests/functional-karate
           mvn test -Dkarate.env=ci \
@@ -189,10 +197,10 @@ jobs:
         run: cd simulation && docker compose down -v
 
 # ------------------------------------------------------------------------------
-# JOB 3 — E2E Completo
+# JOB 3 ï¿½ E2E Completo
 # ------------------------------------------------------------------------------
   e2e-full:
-    name: "2 · E2E Completo — Karate 8 Pasos + k6 [${{ needs.validate.outputs.from-name }}]"
+    name: "2 ï¿½ E2E Completo ï¿½ Karate 8 Pasos + k6 [${{ needs.validate.outputs.from-name }}]"
     runs-on: ubuntu-latest
     needs: [validate, contract-tests]
 
@@ -209,6 +217,14 @@ jobs:
         with:
           java-version: "17"
           distribution: temurin
+
+      - name: Cache Maven (~/.m2/repository)
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: ~/.m2/repository
+          key: ${{ runner.os }}-maven-${{ hashFiles('tests/functional-karate/pom.xml') }}
+          restore-keys: |
+            ${{ runner.os }}-maven-
 
       - name: Login GHCR
         uses: docker/login-action@v3
@@ -234,10 +250,10 @@ jobs:
               [ "$STATUS" -eq "200" ] && echo "? ${SVC_URL} UP" && break
               sleep 5
             done
-            [ "$STATUS" -ne "200" ] && echo "? ${SVC_URL} no respondió" && exit 1
+            [ "$STATUS" -ne "200" ] && echo "? ${SVC_URL} no respondiï¿½" && exit 1
           done
 
-      - name: "Karate E2E — Flujo Completo 8 Pasos"
+      - name: "Karate E2E ï¿½ Flujo Completo 8 Pasos"
         run: |
           cd tests/functional-karate
           mvn test -Dkarate.env=ci \
@@ -251,7 +267,7 @@ jobs:
           name: e2e-full-report-${{ github.run_id }}
           path: tests/functional-karate/target/surefire-reports/
 
-      - name: "k6 Smoke Test — Performance"
+      - name: "k6 Smoke Test ï¿½ Performance"
         run: |
           curl -fsSL https://dl.k6.io/key.gpg \
             | sudo gpg --dearmor -o /usr/share/keyrings/k6-archive-keyring.gpg
@@ -265,11 +281,11 @@ jobs:
         run: cd simulation && docker compose down -v
 
 # ------------------------------------------------------------------------------
-# JOB 4 — Promoción GitOps
-# Solo ejecuta si Jobs 2 y 3 pasan — protección total del entorno destino
+# JOB 4 ï¿½ Promociï¿½n GitOps
+# Solo ejecuta si Jobs 2 y 3 pasan ï¿½ protecciï¿½n total del entorno destino
 # ------------------------------------------------------------------------------
   promote:
-    name: "3 · GitOps Promoción ${{ needs.validate.outputs.from-name }} ? ${{ needs.validate.outputs.to-name }}"
+    name: "3 ï¿½ GitOps Promociï¿½n ${{ needs.validate.outputs.from-name }} ? ${{ needs.validate.outputs.to-name }}"
     runs-on: ubuntu-latest
     needs: [validate, contract-tests, e2e-full]
     permissions:
@@ -326,7 +342,7 @@ jobs:
                       tgt = new_tgt
                       print(f'  ? {svc}: {tag}')
                   else:
-                      print(f'  ??  {svc}: patrón no encontrado en el destino', file=sys.stderr)
+                      print(f'  ??  {svc}: patrï¿½n no encontrado en el destino', file=sys.stderr)
               else:
                   print(f'  ??  {svc}: tag no encontrada en el origen', file=sys.stderr)
 
@@ -338,7 +354,7 @@ jobs:
           print(tgt)
           EOF
 
-      - name: "Git commit + push — promoción GitOps [skip ci]"
+      - name: "Git commit + push ï¿½ promociï¿½n GitOps [skip ci]"
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
@@ -347,10 +363,10 @@ jobs:
           git commit -m "gitops: promover ${FROM_OVERLAY} ? ${TO_OVERLAY} (${FROM_NAME} ? ${TO_NAME}) [skip ci]"
           git push
 
-      - name: "ArgoCD (simulado) — Sync ${{ env.TO_NAME }}"
+      - name: "ArgoCD (simulado) ï¿½ Sync ${{ env.TO_NAME }}"
         run: |
           echo "---------------------------------------------------------------"
-          echo "?? [ArgoCD] Promoción detectada:"
+          echo "?? [ArgoCD] Promociï¿½n detectada:"
           echo "   Origem:  ${FROM_NAME} (${FROM_OVERLAY})"
           echo "   Destino: ${TO_NAME} (${TO_OVERLAY})"
           echo ""
@@ -368,9 +384,9 @@ jobs:
           echo "   UI:   http://ui.${TO_OVERLAY}.att-paymentbox.internal"
           echo "---------------------------------------------------------------"
 
-      - name: Resumen de la Promoción
+      - name: Resumen de la Promociï¿½n
         run: |
-          echo "## ?? Promoción Completada" >> $GITHUB_STEP_SUMMARY
+          echo "## ?? Promociï¿½n Completada" >> $GITHUB_STEP_SUMMARY
           echo ""                          >> $GITHUB_STEP_SUMMARY
           echo "| Campo | Valor |"         >> $GITHUB_STEP_SUMMARY
           echo "|-------|-------|"         >> $GITHUB_STEP_SUMMARY
