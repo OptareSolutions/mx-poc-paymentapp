@@ -73,7 +73,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: microservice-a-test-results-${{ github.ref_name }}
+          name: microservice-a-test-results-${{ github.run_id }}
           path: microservice-a/build/reports/
 
       - name: "SonarCloud � An�lisis de Calidad de C�digo"
