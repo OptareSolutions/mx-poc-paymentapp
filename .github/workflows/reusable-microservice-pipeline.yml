@@ -1,0 +1,525 @@
+# ==============================================================================
+# Reusable Microservice Pipeline
+# Eliminates duplication between pipeline-microservice-a.yml and
+# pipeline-microservice-b.yml by centralising the 4 shared jobs.
+#
+# Inputs:
+#   microservice_name  – microservice-a | microservice-b
+#   image_name         – GHCR image path (without registry prefix)
+#   test_runner        – karate (E2E full suite) | smoke (contract smoke test)
+# ==============================================================================
+name: "Reusable Microservice Pipeline"
+
+on:
+  workflow_call:
+    inputs:
+      microservice_name:
+        description: "Name of the microservice (microservice-a or microservice-b)"
+        required: true
+        type: string
+      image_name:
+        description: "Container image name (e.g. optaresolutions/mx-poc-paymentapp/microservice-a)"
+        required: true
+        type: string
+      test_runner:
+        description: "Test runner to use: karate (E2E) or smoke (contract)"
+        required: true
+        type: string
+    secrets:
+      SONAR_TOKEN:
+        required: true
+
+permissions: {}
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ inputs.image_name }}
+
+# ------------------------------------------------------------------------------
+# JOB 1 – Build & Quality (Shift-Left)
+# ------------------------------------------------------------------------------
+jobs:
+  build-quality:
+    name: "1 · Build & Quality · Shift-Left [${{ inputs.microservice_name }}]"
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          fetch-depth: 0  # SonarCloud necesita historial completo
+
+      - name: Configurar JDK 17
+        uses: actions/setup-java@c5195efecf7bdfc987ee8bae7a71cb8b11521c00 # v4.7.1
+        with:
+          java-version: "17"
+          distribution: temurin
+
+      - name: Configurar Gradle 8.7
+        uses: gradle/actions/setup-gradle@06832c7b30a0129d7fb559bcc6e43d26f6374244 # v4.3.1
+        with:
+          gradle-version: "8.7"
+
+      - name: Unit Tests + JaCoCo
+        working-directory: ${{ inputs.microservice_name }}
+        run: gradle test jacocoTestReport --no-daemon
+
+      - name: Gate de Cobertura (>= 80%)
+        working-directory: ${{ inputs.microservice_name }}
+        run: gradle jacocoTestCoverageVerification --no-daemon
+
+      - name: Subir informe de tests
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: ${{ inputs.microservice_name }}-test-results-${{ github.ref_name }}
+          path: ${{ inputs.microservice_name }}/build/reports/
+          retention-days: 14
+
+      - name: "SonarCloud · Analisis de Calidad de Codigo"
+        uses: SonarSource/sonarcloud-github-action@e44258b109568baa0df60ed515909fc6c72cba92 # v3.0.0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        with:
+          projectBaseDir: ${{ inputs.microservice_name }}
+
+      - name: Build JAR (artefacto)
+        working-directory: ${{ inputs.microservice_name }}
+        run: gradle bootJar --no-daemon -x test
+
+      - name: Upload JAR
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: ${{ inputs.microservice_name }}-jar-${{ github.run_id }}
+          path: ${{ inputs.microservice_name }}/build/libs/*.jar
+          retention-days: 1
+
+# ------------------------------------------------------------------------------
+# JOB 2 – Security Scan (Trivy Filesystem)
+# ------------------------------------------------------------------------------
+  security-scan:
+    name: "2 · Seguridad · Trivy Scan [${{ inputs.microservice_name }}]"
+    runs-on: ubuntu-latest
+    needs: build-quality
+    permissions:
+      security-events: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Download JAR
+        uses: actions/download-artifact@95815c38cf2ff2164869cbab79da8d1f422bc89e # v4.2.1
+        with:
+          name: ${{ inputs.microservice_name }}-jar-${{ github.run_id }}
+          path: ${{ inputs.microservice_name }}/build/libs/
+
+      - name: "Trivy · Scan Filesystem (JAR + dependencias)"
+        uses: aquasecurity/trivy-action@76071ef0d7ec797419534a183b498b4d6366cf37 # 0.30.0
+        with:
+          scan-type: fs
+          scan-ref: ${{ inputs.microservice_name }}
+          severity: CRITICAL,HIGH
+          exit-code: '1'
+          ignore-unfixed: true
+          format: sarif
+          output: trivy-fs-results.sarif
+
+      - name: Upload SARIF (Filesystem)
+        if: always()
+        uses: github/codeql-action/upload-sarif@fca7ace96b7d713c7035871441bd52efbe39e27e # v3.28.19
+        with:
+          sarif_file: trivy-fs-results.sarif
+          category: trivy-fs-${{ inputs.microservice_name }}
+
+# ------------------------------------------------------------------------------
+# JOB 3 – Image Ops (Build → Scan → Push GHCR)
+# ------------------------------------------------------------------------------
+  image-ops:
+    name: "3 · Image Ops · Build · Scan · Push [${{ inputs.microservice_name }}]"
+    runs-on: ubuntu-latest
+    needs: security-scan
+    permissions:
+      contents: read
+      packages: write
+      security-events: write
+    outputs:
+      image-tag: ${{ steps.image-tag.outputs.tag }}
+      env-overlay: ${{ steps.env-info.outputs.overlay }}
+      env-name: ${{ steps.env-info.outputs.name }}
+      full-image: ${{ steps.image-tag.outputs.full_image }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Download JAR
+        uses: actions/download-artifact@95815c38cf2ff2164869cbab79da8d1f422bc89e # v4.2.1
+        with:
+          name: ${{ inputs.microservice_name }}-jar-${{ github.run_id }}
+          path: ${{ inputs.microservice_name }}/build/libs/
+
+      - name: Mapear rama a ambiente
+        id: env-info
+        run: |
+          case "${{ github.ref_name }}" in
+            develop) echo "overlay=env-e" >> $GITHUB_OUTPUT ; echo "name=E (Desarrollo)" >> $GITHUB_OUTPUT ; echo "prefix=env-e" >> $GITHUB_OUTPUT ;;
+            qa)      echo "overlay=env-a" >> $GITHUB_OUTPUT ; echo "name=A (QA)"         >> $GITHUB_OUTPUT ; echo "prefix=env-a" >> $GITHUB_OUTPUT ;;
+            uat)     echo "overlay=env-u" >> $GITHUB_OUTPUT ; echo "name=U (UAT)"        >> $GITHUB_OUTPUT ; echo "prefix=env-u" >> $GITHUB_OUTPUT ;;
+            main)    echo "overlay=prod"  >> $GITHUB_OUTPUT ; echo "name=Produccion"     >> $GITHUB_OUTPUT ; echo "prefix=prod"  >> $GITHUB_OUTPUT ;;
+            *)       echo "overlay=env-e" >> $GITHUB_OUTPUT ; echo "name=E (manual)"     >> $GITHUB_OUTPUT ; echo "prefix=env-e" >> $GITHUB_OUTPUT ;;
+          esac
+
+      - name: "Calcular tag de imagen (${{ steps.env-info.outputs.prefix }}-{sha})"
+        id: image-tag
+        run: |
+          SHORT_SHA=$(echo "${{ github.sha }}" | cut -c1-7)
+          TAG="${{ steps.env-info.outputs.prefix }}-${SHORT_SHA}"
+          FULL="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${TAG}"
+          echo "tag=${TAG}"         >> $GITHUB_OUTPUT
+          echo "full_image=${FULL}" >> $GITHUB_OUTPUT
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@b5ca514318bd6ebac0fb2aedd5d36ec1b5c232a2 # v3.10.0
+
+      - name: Login GHCR
+        uses: docker/login-action@74a5d142397b4f367a81961eba4e8cd7edddf772 # v3.4.0
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build Docker Image (local para scan)
+        uses: docker/build-push-action@14487ce63c7a62a4a324b0bfb37086795e31c6c1 # v6.16.0
+        with:
+          context: ${{ inputs.microservice_name }}
+          file: ${{ inputs.microservice_name }}/src/Dockerfile
+          push: false
+          load: true
+          tags: ${{ steps.image-tag.outputs.full_image }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: "Trivy - Scan Imagen Docker (CRITICAL informativo)"
+        uses: aquasecurity/trivy-action@76071ef0d7ec797419534a183b498b4d6366cf37 # 0.30.0
+        with:
+          scan-type: image
+          image-ref: ${{ steps.image-tag.outputs.full_image }}
+          severity: CRITICAL
+          exit-code: '0'
+          ignore-unfixed: true
+          format: sarif
+          output: trivy-image-results.sarif
+
+      - name: Upload SARIF (Image Scan)
+        if: always()
+        uses: github/codeql-action/upload-sarif@fca7ace96b7d713c7035871441bd52efbe39e27e # v3.28.19
+        with:
+          sarif_file: trivy-image-results.sarif
+          category: trivy-image-${{ inputs.microservice_name }}
+
+      - name: Push a GHCR con tag ${{ steps.image-tag.outputs.tag }}
+        uses: docker/build-push-action@14487ce63c7a62a4a324b0bfb37086795e31c6c1 # v6.16.0
+        with:
+          context: ${{ inputs.microservice_name }}
+          file: ${{ inputs.microservice_name }}/src/Dockerfile
+          push: true
+          tags: |
+            ${{ steps.image-tag.outputs.full_image }}
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+# ------------------------------------------------------------------------------
+# JOB 4a – E2E Tests + GitOps Deploy (Karate · microservice-a)
+# Runs when test_runner == 'karate'
+# ------------------------------------------------------------------------------
+  e2e-gitops:
+    name: "4 · E2E Tests + GitOps Deploy [${{ needs.image-ops.outputs.env-name }}]"
+    if: inputs.test_runner == 'karate'
+    runs-on: ubuntu-latest
+    needs: image-ops
+    permissions:
+      contents: write
+
+    env:
+      IMAGE_TAG: ${{ needs.image-ops.outputs.image-tag }}
+      OVERLAY:   ${{ needs.image-ops.outputs.env-overlay }}
+      ENV_NAME:  ${{ needs.image-ops.outputs.env-name }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Configurar JDK 17 (Karate + Maven)
+        uses: actions/setup-java@c5195efecf7bdfc987ee8bae7a71cb8b11521c00 # v4.7.1
+        with:
+          java-version: "17"
+          distribution: temurin
+
+      - name: Login GHCR
+        uses: docker/login-action@74a5d142397b4f367a81961eba4e8cd7edddf772 # v3.4.0
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Iniciar Entorno Simulado (docker-compose)
+        run: |
+          cd simulation
+          docker compose up -d --build
+          echo "Esperando arranque de los servicios (90s)..."
+          sleep 90
+          docker compose ps
+          echo "--- Logs microservice-b ---"
+          docker compose logs --tail=30 microservice-b || true
+          echo "--- Logs microservice-a ---"
+          docker compose logs --tail=50 microservice-a || true
+
+      - name: Health Check microservice-b
+        run: |
+          for i in {1..15}; do
+            STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:18081/actuator/health || echo "000")
+            echo "Intento $i: HTTP $STATUS"
+            [ "$STATUS" -eq "200" ] && echo "microservice-b UP" && break
+            sleep 5
+          done
+          if [ "$STATUS" -ne "200" ]; then
+            echo "microservice-b no arranco"
+            cd simulation && docker compose logs microservice-b
+            exit 1
+          fi
+
+      - name: Health Check microservice-a
+        run: |
+          for i in {1..15}; do
+            STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8080/actuator/health || echo "000")
+            echo "Intento $i: HTTP $STATUS"
+            [ "$STATUS" -eq "200" ] && echo "microservice-a UP" && break
+            sleep 5
+          done
+          if [ "$STATUS" -ne "200" ]; then
+            echo "microservice-a no arranco"
+            cd simulation && docker compose logs microservice-a
+            exit 1
+          fi
+
+      - name: "DEMO BREAK 2 - Karate E2E · Flujo Completo 8 Pasos"
+        run: |
+          cd tests/functional-karate
+          mvn test -Dkarate.env=ci -Dtest=RecargaFlowRunner#testRecargaFlow \
+            --no-transfer-progress
+
+      - name: Subir Informe Karate
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: karate-e2e-report-${{ env.OVERLAY }}-${{ github.run_id }}
+          path: tests/functional-karate/target/surefire-reports/
+          retention-days: 14
+
+      - name: "Selenium · Validacion UI"
+        run: |
+          cd tests/ui-selenium
+          mvn test -Dapp.url=http://localhost:8080 --no-transfer-progress
+        continue-on-error: true
+
+      - name: "k6 Smoke Test · Performance"
+        run: |
+          curl -fsSL https://dl.k6.io/key.gpg \
+            | sudo gpg --dearmor -o /usr/share/keyrings/k6-archive-keyring.gpg
+          echo "deb [signed-by=/usr/share/keyrings/k6-archive-keyring.gpg] https://dl.k6.io/deb stable main" \
+            | sudo tee /etc/apt/sources.list.d/k6.list
+          sudo apt-get update -qq && sudo apt-get install -y k6
+          k6 run --env BASE_URL=http://localhost:8080 tests/k6/smoke_recarga.js
+
+      - name: Parar Ambiente
+        if: always()
+        run: cd simulation && docker compose down -v
+
+      - name: "GitOps · Actualizar manifiesto: ${{ inputs.microservice_name }} en ${{ env.OVERLAY }}"
+        run: |
+          python3 - << 'EOF'
+          import re, os, sys
+          overlay  = os.environ['OVERLAY']
+          new_tag  = os.environ['IMAGE_TAG']
+          ms_name  = '${{ inputs.microservice_name }}'
+          filepath = f'k8s/overlays/{overlay}/kustomization.yaml'
+          registry = 'ghcr.io/optaresolutions/mx-poc-paymentapp'
+
+          with open(filepath) as f:
+              content = f.read()
+
+          pattern     = rf'(- name: {re.escape(registry)}/{ms_name}\n\s+newTag:)[^\n]*'
+          replacement = rf'\1 "{new_tag}"'
+          new_content = re.sub(pattern, replacement, content)
+
+          if new_content == content:
+              print(f'Patron no encontrado en {filepath}', file=sys.stderr)
+              sys.exit(1)
+
+          with open(filepath, 'w') as f:
+              f.write(new_content)
+          print(f'{ms_name}: {new_tag} -> k8s/overlays/{overlay}/kustomization.yaml')
+          EOF
+
+      - name: "Git commit + push · manifiesto actualizado [skip ci]"
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add k8s/overlays/${{ env.OVERLAY }}/kustomization.yaml
+          git diff --staged --quiet && echo "Sin cambios" && exit 0
+          git commit -m "gitops(${{ inputs.microservice_name }}): ${IMAGE_TAG} -> ${ENV_NAME} [skip ci]"
+          git push
+
+      - name: "ArgoCD (simulado) · Sync ${{ env.ENV_NAME }}"
+        run: |
+          echo "---------------------------------------------------------------"
+          echo "[ArgoCD] Cambio detectado en k8s/overlays/${OVERLAY}/"
+          echo "[ArgoCD] Application: att-paymentbox-${OVERLAY}"
+          echo "[ArgoCD] Servicio:    ${{ inputs.microservice_name }}"
+          echo "[ArgoCD] Nueva imagen: ghcr.io/.../${{ inputs.microservice_name }}:${IMAGE_TAG}"
+          echo "[ArgoCD] Entorno:     ${ENV_NAME}"
+          echo "[ArgoCD] Sync strategy: Apply (Prune=true, SelfHeal=true)"
+          sleep 2
+          echo "[ArgoCD] Sync completado - ${{ inputs.microservice_name }} desplegado en ${ENV_NAME}"
+          echo "[ArgoCD] Endpoint: http://${{ inputs.microservice_name }}.${OVERLAY}.att-paymentbox.internal"
+          echo "---------------------------------------------------------------"
+
+# ------------------------------------------------------------------------------
+# JOB 4b – Smoke Test + GitOps Deploy (microservice-b)
+# Runs when test_runner == 'smoke'
+# ------------------------------------------------------------------------------
+  smoke-gitops:
+    name: "4 · Smoke Test + GitOps Deploy [${{ needs.image-ops.outputs.env-name }}]"
+    if: inputs.test_runner == 'smoke'
+    runs-on: ubuntu-latest
+    needs: image-ops
+    permissions:
+      contents: write
+
+    env:
+      IMAGE_TAG: ${{ needs.image-ops.outputs.image-tag }}
+      OVERLAY:   ${{ needs.image-ops.outputs.env-overlay }}
+      ENV_NAME:  ${{ needs.image-ops.outputs.env-name }}
+
+    services:
+      db-simulado:
+        image: postgres:14-alpine
+        env:
+          POSTGRES_DB: att_paymentbox
+          POSTGRES_USER: att_user
+          POSTGRES_PASSWORD: att_pass
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U att_user -d att_paymentbox"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Configurar JDK 17
+        uses: actions/setup-java@c5195efecf7bdfc987ee8bae7a71cb8b11521c00 # v4.7.1
+        with:
+          java-version: "17"
+          distribution: temurin
+
+      - name: Aplicar schema TDM y seeders Billy
+        env:
+          PGPASSWORD: att_pass
+        run: |
+          sudo apt-get install -y postgresql-client
+          psql -h localhost -U att_user -d att_paymentbox -f simulation/tdm-seeders/01_schema.sql
+          psql -h localhost -U att_user -d att_paymentbox -f simulation/tdm-seeders/02_billy_profiles.sql
+
+      - name: Download JAR ${{ inputs.microservice_name }}
+        uses: actions/download-artifact@95815c38cf2ff2164869cbab79da8d1f422bc89e # v4.2.1
+        with:
+          name: ${{ inputs.microservice_name }}-jar-${{ github.run_id }}
+          path: ${{ inputs.microservice_name }}/build/libs/
+
+      - name: Iniciar ${{ inputs.microservice_name }} (smoke test local)
+        run: |
+          java -jar ${{ inputs.microservice_name }}/build/libs/*.jar \
+            --spring.datasource.url=jdbc:postgresql://localhost:5432/att_paymentbox \
+            --spring.datasource.username=att_user \
+            --spring.datasource.password=att_pass \
+            --server.port=8081 &
+          echo "Esperando arranque de ${{ inputs.microservice_name }}..."
+          for i in {1..12}; do
+            STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8081/actuator/health || echo "000")
+            [ "$STATUS" -eq "200" ] && echo "${{ inputs.microservice_name }} UP" && break
+            sleep 5
+          done
+          if [ "$STATUS" -ne "200" ]; then echo "${{ inputs.microservice_name }} no arranco" && exit 1; fi
+
+      - name: "Smoke Test · Verificar contrato publico (/api/customers/4544)"
+        run: |
+          RESP=$(curl -sf http://localhost:8081/api/customers/4544)
+          echo "Response: $RESP"
+          echo "$RESP" | python3 -c "
+          import sys, json
+          data = json.load(sys.stdin)
+          assert 'phone' in data, 'FAIL: campo phone ausente (contrato roto?)'
+          assert 'fullName' in data, 'FAIL: campo fullName ausente (contrato roto?)'
+          assert 'status'   in data, 'FAIL: campo status ausente'
+          assert data['phone'] == '4544', f'FAIL: phone={data[\"phone\"]}'
+          print('Smoke test OK - campos del contrato presentes')
+          "
+
+      - name: "GitOps · Actualizar manifiesto: ${{ inputs.microservice_name }} en ${{ env.OVERLAY }}"
+        run: |
+          python3 - << 'EOF'
+          import re, os, sys
+          overlay  = os.environ['OVERLAY']
+          new_tag  = os.environ['IMAGE_TAG']
+          ms_name  = '${{ inputs.microservice_name }}'
+          filepath = f'k8s/overlays/{overlay}/kustomization.yaml'
+          registry = 'ghcr.io/optaresolutions/mx-poc-paymentapp'
+
+          with open(filepath) as f:
+              content = f.read()
+
+          pattern     = rf'(- name: {re.escape(registry)}/{ms_name}\n\s+newTag:)[^\n]*'
+          replacement = rf'\1 "{new_tag}"'
+          new_content = re.sub(pattern, replacement, content)
+
+          if new_content == content:
+              print(f'Patron no encontrado en {filepath}', file=sys.stderr)
+              sys.exit(1)
+
+          with open(filepath, 'w') as f:
+              f.write(new_content)
+          print(f'{ms_name}: {new_tag} -> k8s/overlays/{overlay}/kustomization.yaml')
+          EOF
+
+      - name: "Git commit + push · manifiesto actualizado [skip ci]"
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add k8s/overlays/${{ env.OVERLAY }}/kustomization.yaml
+          git diff --staged --quiet && echo "Sin cambios" && exit 0
+          git commit -m "gitops(${{ inputs.microservice_name }}): ${IMAGE_TAG} -> ${ENV_NAME} [skip ci]"
+          git push
+
+      - name: "ArgoCD (simulado) · Sync ${{ env.ENV_NAME }}"
+        run: |
+          echo "---------------------------------------------------------------"
+          echo "[ArgoCD] Cambio detectado en k8s/overlays/${OVERLAY}/"
+          echo "[ArgoCD] Application: att-paymentbox-${OVERLAY}"
+          echo "[ArgoCD] Servicio:    ${{ inputs.microservice_name }}"
+          echo "[ArgoCD] Nueva imagen: ghcr.io/.../${{ inputs.microservice_name }}:${IMAGE_TAG}"
+          echo "[ArgoCD] Entorno:     ${ENV_NAME}"
+          sleep 2
+          echo "[ArgoCD] Sync completado - ${{ inputs.microservice_name }} desplegado en ${ENV_NAME}"
+          echo "---------------------------------------------------------------"
