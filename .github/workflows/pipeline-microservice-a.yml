@@ -1,4 +1,4 @@
-name: "[microservice-a] CI � Build � Calidad � Seguridad � Deploy"
+﻿name: "[microservice-a] CI � Build � Calidad � Seguridad � Deploy"
 
 # ------------------------------------------------------------------------------
 # Equipo: PaymentBox Core (Team A)
@@ -281,8 +281,15 @@ jobs:
         run: |
           cd simulation
           docker compose up -d --build
-          echo "? Esperando arranque de los servicios (90s)..."
-          sleep 90
+          echo "Esperando arranque de los servicios (polling inteligente, max 150s)..."
+          for i in {1..30}; do
+            STATUS_A=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8080/actuator/health || echo "000")
+            STATUS_B=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:18081/actuator/health || echo "000")
+            [ "$STATUS_A" -eq "200" ] && [ "$STATUS_B" -eq "200" ] && \
+              echo "Servicios listos en $((i * 5))s" && break
+            echo "Intento $i/30: microservice-a=$STATUS_A microservice-b=$STATUS_B"
+            sleep 5
+          done
           docker compose ps
           echo "--- Logs microservice-b ---"
           docker compose logs --tail=30 microservice-b || true
