@@ -107,7 +107,7 @@ jobs:
           path: microservice-a/build/libs/
 
       - name: "Trivy � Scan Filesystem (JAR + dependencias)"
-        uses: aquasecurity/trivy-action@master
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
           scan-type: fs
           scan-ref: microservice-a
@@ -192,13 +192,16 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      - name: "Trivy — Scan Imagen Docker (CRITICAL informativo)"
-        uses: aquasecurity/trivy-action@master
+      # exit-code: '1' hace el scan bloqueante: si se detecta una vulnerabilidad
+      # CRITICAL, el pipeline falla y no se publica la imagen en GHCR.
+      # ignore-unfixed: true evita falsos positivos por CVEs sin parche disponible.
+      - name: "Trivy — Scan Imagen Docker (CRITICAL bloqueante)"
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
           scan-type: image
           image-ref: ${{ steps.image-tag.outputs.full_image }}
           severity: CRITICAL
-          exit-code: '0'
+          exit-code: '1'
           ignore-unfixed: true
           format: sarif
           output: trivy-image-results.sarif
