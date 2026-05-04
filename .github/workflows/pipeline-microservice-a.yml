@@ -18,7 +18,15 @@ on:
     paths:
       - 'microservice-a/**'
       - '.github/workflows/pipeline-microservice-a.yml'
+  pull_request:
+    branches: [develop, qa, uat, main]
+    paths:
+      - 'microservice-a/**'
+      - '.github/workflows/pipeline-microservice-a.yml'
   workflow_dispatch:
+
+permissions:
+  contents: read  # default: read-only; individual jobs override as needed
 
 concurrency:
   group: microservice-a-${{ github.ref_name }}
@@ -230,6 +238,7 @@ jobs:
     name: "4 � E2E Tests + GitOps Deploy [${{ needs.image-ops.outputs.env-name }}]"
     runs-on: ubuntu-latest
     needs: image-ops
+    if: github.event_name == 'push'
     permissions:
       contents: write
 
