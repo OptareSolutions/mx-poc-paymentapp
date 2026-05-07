@@ -1,0 +1,4 @@
+generated/data/
+generated/features/
+__pycache__/
+*.pyc
