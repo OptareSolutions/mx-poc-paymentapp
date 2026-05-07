@@ -1,0 +1,366 @@
+name: "🚀 [Performance] k6 Smoke — PaymentBox"
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Workflow: k6 Smoke Performance con comparación histórica de resultados
+#
+# Propósito: Medir tiempos de respuesta del flujo completo de 8 pasos bajo
+#            carga controlada (20 VUs, 7 minutos) y comparar contra baseline.
+#
+# Triggers:
+#   - workflow_dispatch: ejecución manual con parámetros configurables
+#   - schedule: ejecución diaria a las 02:00 UTC
+#   - workflow_call: llamada desde otros pipelines (p.ej. pipeline-integration)
+#
+# Thresholds:
+#   - Flujo completo p95 < 3s
+#   - Login p95 < 700ms
+#   - Consulta p95 < 900ms
+#   - Actualización p95 < 1200ms
+#   - Error rate < 1%
+# ──────────────────────────────────────────────────────────────────────────────
+
+on:
+  workflow_dispatch:
+    inputs:
+      base_url:
+        description: "URL base del servicio (ej: http://localhost:8080)"
+        required: false
+        default: "http://localhost:8080"
+      environment:
+        description: "Entorno a testear"
+        required: true
+        type: choice
+        options: [develop, qa, uat]
+        default: develop
+      vus:
+        description: "Número de usuarios virtuales"
+        required: false
+        default: "20"
+      duration:
+        description: "Duración del test (ej: 7m)"
+        required: false
+        default: "7m"
+      update_baseline:
+        description: "¿Actualizar baseline con estos resultados?"
+        type: boolean
+        required: false
+        default: false
+
+  schedule:
+    - cron: '0 2 * * *'
+
+  workflow_call:
+    inputs:
+      base_url:
+        type: string
+        required: false
+        default: "http://localhost:8080"
+      environment:
+        type: string
+        required: false
+        default: develop
+    outputs:
+      performance_passed:
+        description: "Si los tests de performance pasaron todos los thresholds"
+        value: ${{ jobs.k6-performance.outputs.passed }}
+
+# Solo una ejecución por entorno a la vez; no cancelar si ya está corriendo
+concurrency:
+  group: performance-${{ github.event.inputs.environment || 'develop' }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  # ──────────────────────────────────────────────────────────────────────────
+  # JOB 1 — Preparar entorno: levantar servicios mock
+  # ──────────────────────────────────────────────────────────────────────────
+  setup-environment:
+    name: "1 — Levantar Entorno Mock"
+    runs-on: ubuntu-latest
+    outputs:
+      base_url: ${{ steps.resolve-url.outputs.base_url }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
+
+      - name: Resolver BASE_URL
+        id: resolve-url
+        run: |
+          BASE_URL="${{ inputs.base_url || 'http://localhost:8080' }}"
+          echo "base_url=${BASE_URL}" >> "$GITHUB_OUTPUT"
+          echo "🎯 BASE_URL: ${BASE_URL}"
+
+      - name: Configurar JDK 17
+        uses: actions/setup-java@c5195efecf7bdfc987ee8bae7a71cb8b11521c00  # v4.7.1
+        with:
+          java-version: "17"
+          distribution: temurin
+
+      - name: Configurar Gradle
+        uses: gradle/actions/setup-gradle@06832c7b30a0129d7fb559bcc6e43d26f6374244  # v4.3.1
+        with:
+          gradle-version: "8.7"
+
+      - name: Build microservice-a
+        working-directory: microservice-a
+        run: gradle bootJar --no-daemon -q
+
+      - name: Levantar microservice-a (background)
+        working-directory: microservice-a
+        run: |
+          java -jar build/libs/*.jar --server.port=8080 &
+          echo "PID microservice-a: $!" > /tmp/svc.pid
+          # Esperar hasta 60s a que el servicio responda
+          for i in $(seq 1 12); do
+            sleep 5
+            if curl -sf http://localhost:8080/actuator/health > /dev/null 2>&1; then
+              echo "✅ microservice-a listo en iteración $i"
+              exit 0
+            fi
+            echo "⏳ Esperando microservice-a... ($((i*5))s)"
+          done
+          echo "❌ microservice-a no respondió en 60s"
+          exit 1
+
+  # ──────────────────────────────────────────────────────────────────────────
+  # JOB 2 — Ejecutar k6 + comparar con baseline
+  # ──────────────────────────────────────────────────────────────────────────
+  k6-performance:
+    name: "2 — k6 Smoke Performance"
+    runs-on: ubuntu-latest
+    needs: setup-environment
+    outputs:
+      passed: ${{ steps.evaluate.outputs.passed }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
+
+      - name: Instalar k6
+        run: |
+          curl -fsSL https://dl.k6.io/key.gpg | sudo gpg --dearmor -o /etc/apt/trusted.gpg.d/k6.gpg
+          echo "deb https://dl.k6.io/deb stable main" | sudo tee /etc/apt/sources.list.d/k6.list
+          sudo apt-get update -qq
+          sudo apt-get install -y k6
+
+      # Descargar baseline de la última ejecución exitosa (si existe)
+      - name: Descargar baseline histórico
+        id: download-baseline
+        uses: actions/download-artifact@95815c38cf2ff2164869cbab79da8d1f422bc89  # v4.2.1
+        with:
+          name: k6-performance-baseline
+          path: tests/k6/results/
+        continue-on-error: true
+
+      - name: Verificar baseline disponible
+        id: check-baseline
+        run: |
+          if [ -f "tests/k6/results/baseline.json" ]; then
+            echo "baseline_exists=true" >> "$GITHUB_OUTPUT"
+            echo "✅ Baseline encontrado"
+            cat tests/k6/results/baseline.json | python3 -c "
+          import json,sys
+          d = json.load(sys.stdin)
+          m = d.get('metrics', {})
+          print(f'  Baseline timestamp : {d.get(\"timestamp\", \"N/A\")}')
+          print(f'  Flujo completo p95 : {m.get(\"flujo_completo_p95_ms\", \"N/A\")} ms')
+          print(f'  Login p95          : {m.get(\"login_p95_ms\", \"N/A\")} ms')
+          print(f'  Error rate         : {m.get(\"error_rate\", \"N/A\")}')
+          "
+          else
+            echo "baseline_exists=false" >> "$GITHUB_OUTPUT"
+            echo "ℹ️  Sin baseline previo — primera ejecución de referencia"
+          fi
+
+      - name: Ejecutar k6 Smoke Performance
+        id: k6-run
+        env:
+          BASE_URL: ${{ needs.setup-environment.outputs.base_url }}
+          ENVIRONMENT: ${{ github.event.inputs.environment || 'develop' }}
+          GITHUB_RUN_ID: ${{ github.run_id }}
+          K6_VUS: ${{ github.event.inputs.vus || '20' }}
+          K6_DURATION: ${{ github.event.inputs.duration || '7m' }}
+        run: |
+          mkdir -p tests/k6/results
+
+          k6 run \
+            --env BASE_URL="${BASE_URL}" \
+            --env ENVIRONMENT="${ENVIRONMENT}" \
+            --env GITHUB_RUN_ID="${GITHUB_RUN_ID}" \
+            --env K6_VUS="${K6_VUS}" \
+            --env K6_DURATION="${K6_DURATION}" \
+            --out json=tests/k6/results/k6_raw.json \
+            tests/k6/smoke_performance.js || true
+
+          # Verificar que se generó el resumen
+          if [ ! -f "tests/k6/results/smoke_performance_latest.json" ]; then
+            echo "❌ No se generó el archivo de resultados"
+            exit 1
+          fi
+          echo "✅ Resultados generados"
+
+      - name: Instalar Node.js para comparación
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020  # v4.4.0
+        with:
+          node-version: '20'
+
+      - name: Comparar con baseline histórico
+        id: compare
+        run: |
+          if [ "${{ steps.check-baseline.outputs.baseline_exists }}" = "true" ]; then
+            echo "📊 Comparando con baseline..."
+            node tests/k6/scripts/compare-results.js \
+              --current  tests/k6/results/smoke_performance_latest.json \
+              --baseline tests/k6/results/baseline.json \
+              --output   tests/k6/results/comparison_report.md
+            COMPARE_EXIT=$?
+            echo "compare_exit=${COMPARE_EXIT}" >> "$GITHUB_OUTPUT"
+          else
+            echo "ℹ️  Primera ejecución: sin comparación disponible"
+            echo "compare_exit=0" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Evaluar resultado final
+        id: evaluate
+        run: |
+          # Verificar thresholds desde el JSON de resultados
+          python3 - <<'EOF'
+          import json, sys, os
+
+          with open('tests/k6/results/smoke_performance_latest.json') as f:
+            data = json.load(f)
+
+          m = data.get('metrics', {})
+          errors = []
+
+          checks = [
+            ('flujo_completo_p95_ms', 3000,  'Flujo completo p95 < 3000ms'),
+            ('login_p95_ms',          700,   'Login p95 < 700ms'),
+            ('consulta_p95_ms',       900,   'Consulta p95 < 900ms'),
+            ('pago_p95_ms',           1200,  'Actualización p95 < 1200ms'),
+            ('error_rate',            0.01,  'Error rate < 1%'),
+          ]
+
+          for key, limit, desc in checks:
+            val = m.get(key)
+            if val is None:
+              print(f'⚠️  {desc}: sin datos')
+            elif val > limit:
+              errors.append(f'❌ {desc}: {val:.2f} > {limit}')
+              print(errors[-1])
+            else:
+              print(f'✅ {desc}: {val:.2f}')
+
+          if errors:
+            print(f'\n❌ {len(errors)} threshold(s) fallaron')
+            with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
+              f.write('passed=false\n')
+          else:
+            print('\n✅ Todos los thresholds pasaron')
+            with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
+              f.write('passed=true\n')
+          EOF
+
+      - name: Publicar resumen en Job Summary
+        if: always()
+        run: |
+          echo "## 🚀 k6 Smoke Performance — PaymentBox" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Campo | Valor |" >> "$GITHUB_STEP_SUMMARY"
+          echo "|-------|-------|" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Entorno | \`${{ github.event.inputs.environment || 'develop' }}\` |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| VUs | ${{ github.event.inputs.vus || '20' }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Duración | ${{ github.event.inputs.duration || '7m' }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Run ID | ${{ github.run_id }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+
+          if [ -f "tests/k6/results/comparison_report.md" ]; then
+            cat tests/k6/results/comparison_report.md >> "$GITHUB_STEP_SUMMARY"
+          else
+            python3 - <<'EOF'
+          import json, os
+          try:
+            with open('tests/k6/results/smoke_performance_latest.json') as f:
+              d = json.load(f)
+            m = d.get('metrics', {})
+            lines = [
+              "## Métricas de Rendimiento\n",
+              "| Métrica | Resultado | Límite | Estado |",
+              "|---------|-----------|--------|--------|",
+              f"| Flujo completo p95 | {m.get('flujo_completo_p95_ms', 'N/A')} ms | 3000 ms | {'✅' if m.get('flujo_completo_p95_ms', 9999) <= 3000 else '❌'} |",
+              f"| Login p95 | {m.get('login_p95_ms', 'N/A')} ms | 700 ms | {'✅' if m.get('login_p95_ms', 9999) <= 700 else '❌'} |",
+              f"| Consulta p95 | {m.get('consulta_p95_ms', 'N/A')} ms | 900 ms | {'✅' if m.get('consulta_p95_ms', 9999) <= 900 else '❌'} |",
+              f"| Actualización p95 | {m.get('pago_p95_ms', 'N/A')} ms | 1200 ms | {'✅' if m.get('pago_p95_ms', 9999) <= 1200 else '❌'} |",
+              f"| Error rate | {round(m.get('error_rate', 0)*100, 2)} % | 1 % | {'✅' if m.get('error_rate', 1) <= 0.01 else '❌'} |",
+            ]
+            summary_path = os.environ['GITHUB_STEP_SUMMARY']
+            with open(summary_path, 'a') as f:
+              f.write('\n'.join(lines) + '\n')
+          except Exception as e:
+            print(f'Error generando resumen: {e}')
+          EOF
+          fi
+
+      - name: Subir resultados como artefacto
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4.6.2
+        with:
+          name: k6-performance-results-${{ github.run_id }}
+          path: tests/k6/results/
+          retention-days: 90
+
+      # Actualizar baseline solo si se solicitó y los tests pasaron
+      - name: Actualizar baseline histórico
+        if: |
+          (github.event.inputs.update_baseline == 'true' ||
+           github.event_name == 'schedule') &&
+          steps.evaluate.outputs.passed == 'true'
+        run: |
+          cp tests/k6/results/smoke_performance_latest.json \
+             tests/k6/results/baseline.json
+          echo "✅ Baseline actualizado con los resultados de esta ejecución"
+
+      - name: Subir baseline actualizado
+        if: |
+          (github.event.inputs.update_baseline == 'true' ||
+           github.event_name == 'schedule') &&
+          steps.evaluate.outputs.passed == 'true'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4.6.2
+        with:
+          name: k6-performance-baseline
+          path: tests/k6/results/baseline.json
+          retention-days: 365
+          overwrite: true
+
+      # Fallar el job si los thresholds no pasan
+      - name: Verificar resultado final
+        if: steps.evaluate.outputs.passed == 'false'
+        run: |
+          echo "❌ Los tests de performance no pasaron los thresholds configurados."
+          echo "   Revisa el Job Summary para el detalle de las métricas."
+          exit 1
+
+  # ──────────────────────────────────────────────────────────────────────────
+  # JOB 3 — Notificación de resultados (solo en schedule o regresión)
+  # ──────────────────────────────────────────────────────────────────────────
+  notify:
+    name: "3 — Notificación de Resultados"
+    runs-on: ubuntu-latest
+    needs: k6-performance
+    if: always() && (github.event_name == 'schedule' || needs.k6-performance.outputs.passed == 'false')
+
+    steps:
+      - name: Notificación de resultado
+        run: |
+          PASSED="${{ needs.k6-performance.outputs.passed }}"
+          if [ "$PASSED" = "true" ]; then
+            echo "✅ Performance OK: todos los thresholds pasaron"
+          else
+            echo "❌ Performance FALLA: thresholds no cumplidos"
+            echo "   Ver artefactos del run ${{ github.run_id }} para detalles"
+            # Aquí se podría integrar notificación a Slack/Teams/email
+          fi
