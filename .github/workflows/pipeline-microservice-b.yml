@@ -191,13 +191,14 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      - name: "Trivy — Scan Imagen Docker (CRITICAL informativo)"
-        uses: aquasecurity/trivy-action@master
+      # QUALITY GATE: Trivy image scan es BLOQUEANTE (exit-code: 1)
+      - name: "Trivy — Scan Imagen Docker (CRITICAL+HIGH BLOQUEANTE)"
+        uses: aquasecurity/trivy-action@6c175e9c4083a92bbca2f9af8189a8f2b2467aca # v0.30.0
         with:
           scan-type: image
           image-ref: ${{ steps.image-tag.outputs.full_image }}
-          severity: CRITICAL
-          exit-code: '0'
+          severity: CRITICAL,HIGH
+          exit-code: '1'
           ignore-unfixed: true
           format: sarif
           output: trivy-image-results.sarif
@@ -356,3 +357,4 @@ jobs:
           sleep 2
           echo "? [ArgoCD] Sync completado � microservice-b desplegado en ${ENV_NAME}"
           echo "---------------------------------------------------------------"
+
