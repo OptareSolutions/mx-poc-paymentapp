@@ -1,0 +1,42 @@
+[
+  {
+    "id": "billy-1",
+    "telefono": "4544",
+    "nombre": "Billy Rodriguez",
+    "operador": "BLUE",
+    "monto": 20.00,
+    "metodoPago": "EFECTIVO"
+  },
+  {
+    "id": "billy-2",
+    "telefono": "4545",
+    "nombre": "Billy Martinez",
+    "operador": "BLUE",
+    "monto": 50.00,
+    "metodoPago": "TARJETA"
+  },
+  {
+    "id": "billy-3",
+    "telefono": "4546",
+    "nombre": "Billy Sanchez",
+    "operador": "RED",
+    "monto": 100.00,
+    "metodoPago": "EFECTIVO"
+  },
+  {
+    "id": "billy-4",
+    "telefono": "4547",
+    "nombre": "Billy Lopez",
+    "operador": "BLUE",
+    "monto": 30.00,
+    "metodoPago": "TARJETA"
+  },
+  {
+    "id": "billy-5",
+    "telefono": "4548",
+    "nombre": "Billy Gomez",
+    "operador": "RED",
+    "monto": 20.00,
+    "metodoPago": "EFECTIVO"
+  }
+]

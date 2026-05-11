@@ -1,0 +1,11 @@
+Como agente de Telco Operator quiero buscar un cliente por su número de teléfono para verificar que está activo antes de procesar una recarga.
+
+Como agente de Telco Operator quiero registrar una recarga de monto válido para un cliente activo para generar un comprobante de pago.
+
+Como agente de Telco Operator quiero seleccionar el método de pago disponible para completar la transacción de recarga.
+
+Como cliente quiero obtener el recibo de mi recarga para tener un comprobante del pago realizado.
+
+Como sistema quiero validar el contrato del operador externo BLUE para garantizar que el servicio de recarga está disponible antes de procesar el pago.
+
+Como equipo de QA quiero generar datos sintéticos de clientes y pagos para ejecutar pruebas sin usar datos reales de producción.
