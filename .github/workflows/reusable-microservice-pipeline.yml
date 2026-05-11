@@ -60,6 +60,7 @@ jobs:
             | tar -xz gitleaks
           ./gitleaks detect \
             --source . \
+            --config .gitleaks.toml \
             --verbose \
             --redact \
             --exit-code 1

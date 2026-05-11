@@ -1,0 +1,13 @@
+# Gitleaks configuration for mx-poc-paymentapp
+# Suppresses false positives from k6 performance metric config objects.
+
+title = "mx-poc-paymentapp gitleaks config"
+
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "k6 metrics config objects – keys are metric names, not secrets"
+paths = [
+  "tests/k6/scripts/compare-results.js",
+]
