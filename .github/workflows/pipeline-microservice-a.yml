@@ -12,6 +12,7 @@ on:
       - '.github/workflows/pipeline-microservice-a.yml'
       - '.github/workflows/reusable-microservice-pipeline.yml'
       - '.gitleaks.toml'
+      - '.trivyignore'
   workflow_dispatch:
 
 concurrency:
