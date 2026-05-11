@@ -142,6 +142,7 @@ jobs:
           format: sarif
           output: trivy-fs-results.sarif
           version: v0.70.0
+          trivyignores: .trivyignore
 
       - name: Upload SARIF (Filesystem)
         if: always()
@@ -230,6 +231,7 @@ jobs:
           output: trivy-image-results.sarif
           version: v0.70.0
           limit-severities-for-sarif: true
+          trivyignores: .trivyignore
 
       - name: Upload SARIF (Image Scan)
         if: always()
