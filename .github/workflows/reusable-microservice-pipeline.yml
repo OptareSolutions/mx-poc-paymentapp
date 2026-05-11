@@ -232,6 +232,7 @@ jobs:
           version: v0.70.0
           limit-severities-for-sarif: true
           trivyignores: .trivyignore
+          scanners: vuln
 
       - name: Upload SARIF (Image Scan)
         if: always()
