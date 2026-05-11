@@ -33,16 +33,16 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
       - name: Configurar JDK 17
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@c1e323688fd81a25caa38c78aa6df2d33d3e20d9 # v4
         with:
           java-version: "17"
           distribution: "temurin"
 
       - name: Configurar Gradle (sin wrapper local)
-        uses: gradle/actions/setup-gradle@v3
+        uses: gradle/actions/setup-gradle@d9c87d481d55275bb5441eef3fe0e46805f9ef70 # v3
         with:
           gradle-version: "8.7"
 
@@ -56,7 +56,7 @@ jobs:
 
       - name: Subir resultados de tests
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: unit-test-results
           path: microservice-a/build/reports/
@@ -71,7 +71,7 @@ jobs:
 
       - name: Subir resultados de tests microservice-b
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: unit-test-results-b
           path: microservice-b/build/reports/
@@ -91,7 +91,7 @@ jobs:
         run: gradle bootJar --no-daemon -x test
 
       - name: Subir artefacto JAR microservice-a
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: app-jar
           path: microservice-a/build/libs/*.jar
@@ -101,7 +101,7 @@ jobs:
         run: gradle bootJar --no-daemon -x test
 
       - name: Subir artefacto JAR microservice-b
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: app-jar-b
           path: microservice-b/build/libs/*.jar
@@ -130,10 +130,10 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
       - name: Configurar JDK 17
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@c1e323688fd81a25caa38c78aa6df2d33d3e20d9 # v4
         with:
           java-version: "17"
           distribution: "temurin"
@@ -203,7 +203,7 @@ jobs:
           echo "? Contrato API Recibo validado."
 
       - name: Download JAR microservice-b
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           name: app-jar-b
           path: microservice-b/build/libs/
@@ -247,25 +247,25 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
       - name: Download JAR artifact microservice-a
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           name: app-jar
           path: microservice-a/build/libs/
 
       - name: Download JAR artifact microservice-b
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           name: app-jar-b
           path: microservice-b/build/libs/
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
 
       - name: Log in to GitHub Container Registry
-        uses: docker/login-action@v3
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
@@ -273,7 +273,7 @@ jobs:
 
       - name: Extract Docker metadata (microservice-a)
         id: meta-a
-        uses: docker/metadata-action@v5
+        uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051 # v5
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_A }}
           tags: |
@@ -281,7 +281,7 @@ jobs:
             type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
 
       - name: Build and Push microservice-a
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
         with:
           context: microservice-a
           file: microservice-a/src/Dockerfile
@@ -293,7 +293,7 @@ jobs:
 
       - name: Extract Docker metadata (microservice-b)
         id: meta-b
-        uses: docker/metadata-action@v5
+        uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051 # v5
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_B }}
           tags: |
@@ -301,7 +301,7 @@ jobs:
             type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
 
       - name: Build and Push microservice-b
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
         with:
           context: microservice-b
           file: microservice-b/src/Dockerfile
@@ -312,7 +312,7 @@ jobs:
           cache-to: type=gha,mode=max
 
       - name: Set up Node.js (para build Angular UI)
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: "20"
           cache: "npm"
@@ -320,7 +320,7 @@ jobs:
 
       - name: Extract Docker metadata (ui-paymentbox)
         id: meta-ui
-        uses: docker/metadata-action@v5
+        uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051 # v5
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_UI }}
           tags: |
@@ -328,7 +328,7 @@ jobs:
             type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
 
       - name: Build and Push ui-paymentbox
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
         with:
           context: ui-paymentbox
           file: ui-paymentbox/Dockerfile
@@ -348,16 +348,16 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
       - name: Set up JDK 17
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@c1e323688fd81a25caa38c78aa6df2d33d3e20d9 # v4
         with:
           java-version: "17"
           distribution: "temurin"
 
       - name: Login a GHCR (imagen pre-construida Ambiente A)
-        uses: docker/login-action@v3
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
@@ -414,7 +414,7 @@ jobs:
 
       - name: Subir Reporte Karate
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: karate-report
           path: tests/functional-karate/target/surefire-reports/
@@ -426,7 +426,7 @@ jobs:
 
       - name: Subir Reporte Selenium
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: selenium-report
           path: tests/ui-selenium/target/surefire-reports/
@@ -443,7 +443,7 @@ jobs:
 
       - name: Subir Resultados k6
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: k6-smoke-results
           path: tests/k6/results/
