@@ -1,13 +1,20 @@
 # Gitleaks configuration for mx-poc-paymentapp
 # Suppresses false positives from k6 performance metric config objects.
+# These files use object keys (e.g. 'flujo_completo_p95_ms') that
+# trigger the generic-api-key rule due to entropy. They are metric names,
+# not secrets.
 
 title = "mx-poc-paymentapp gitleaks config"
 
 [extend]
 useDefault = true
 
-[[allowlists]]
-description = "k6 metrics config objects – keys are metric names, not secrets"
+# Global allowlist: paths is a list of regexes matched against the finding file path.
+# NOTE: correct gitleaks v8 syntax is [allowlist] (singular), not [[allowlists]].
+[allowlist]
+description = "k6 and perf scripts - metric config keys are not secrets"
 paths = [
-  "tests/k6/scripts/compare-results.js",
+  '''tests/k6/scripts/compare-results\.js''',
+  '''doc/02_CI_CD/performance/scripts/compare-results\.js''',
+  '''doc/03_Performance_Testing/scripts/utils/compare-baseline\.js''',
 ]
