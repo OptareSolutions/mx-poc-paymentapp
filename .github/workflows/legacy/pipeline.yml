@@ -1,22 +1,30 @@
-name: "Telco Operator PaymentBox - Pipeline Declarativo PoC"
+ï»¿name: "Telco Operator PaymentBox - Pipeline Declarativo PoC [LEGACY - DEPRECADO]"
 
-# ------------------------------------------------------------------------------
-# LEGACY — sustituido por los pipelines por microservicio. Mantenido como referencia.
+# ==============================================================================
+# ADVERTENCIA: ARCHIVO LEGACY - DEPRECADO - NO USAR EN PRODUCCION
 #
-# Pipelines activos:
+# Este pipeline monolitico ha sido sustituido por los pipelines por microservicio.
+# Se conserva UNICAMENTE como referencia historica / documentacion.
+#
+# FECHA DE DEPRECACION: 2026-05-04
+# MOTIVO: Sustituido por pipelines dedicados por microservicio y de integracion.
+#
+# Pipelines activos (usar estos en su lugar):
 #   .github/workflows/pipeline-microservice-a.yml  (path trigger: microservice-a/**)
 #   .github/workflows/pipeline-microservice-b.yml  (path trigger: microservice-b/**)
-#   .github/workflows/pipeline-integration.yml     (workflow_dispatch — promoción manual)
-# ------------------------------------------------------------------------------
+#   .github/workflows/pipeline-integration.yml     (workflow_dispatch - promocion manual)
+#
+# Este archivo NO tiene triggers automaticos (solo workflow_dispatch manual)
+# y esta alojado en .github/workflows/legacy/ para evitar confusion.
+# ==============================================================================
 
 on:
   workflow_dispatch:
     inputs:
       reason:
-        description: "Motivo de ejecución manual (referencia/debug)"
+        description: "LEGACY - Motivo de ejecucion manual (solo referencia/debug)"
         required: false
-        default: "ejecución manual de referencia"
-
+        default: "ejecucion manual de referencia LEGACY"
 env:
   REGISTRY: ghcr.io
   IMAGE_NAME_A: ${{ github.repository }}/microservice-a
@@ -24,11 +32,11 @@ env:
   IMAGE_NAME_UI: ${{ github.repository }}/ui-paymentbox
 
 # ------------------------------------------------------------------------------
-# JOB 1 — Build & Quality (Shift-Left: unitarios + seguridad primero)
+# JOB 1 ï¿½ Build & Quality (Shift-Left: unitarios + seguridad primero)
 # ------------------------------------------------------------------------------
 jobs:
   build-and-quality:
-    name: "1 · Build & Quality (Shift-Left)"
+    name: "1 ï¿½ Build & Quality (Shift-Left)"
     runs-on: ubuntu-latest
 
     steps:
@@ -79,12 +87,12 @@ jobs:
       - name: "Seguridad: Veracode Pipeline Scan (simulado)"
         run: |
           echo "? [Shift-Left] Veracode SAST scan simulado para PoC."
-          echo "En producción: integrar con veracode/veracode-github-action."
+          echo "En producciï¿½n: integrar con veracode/veracode-github-action."
 
       - name: "Seguridad: SonarQube Analysis (simulado)"
         run: |
           echo "? [Shift-Left] SonarQube scan simulado para PoC."
-          echo "En producción: usar SonarSource/sonarcloud-github-action."
+          echo "En producciï¿½n: usar SonarSource/sonarcloud-github-action."
 
       - name: Build JAR microservice-a (sin tests - ya ejecutados)
         working-directory: microservice-a
@@ -107,10 +115,10 @@ jobs:
           path: microservice-b/build/libs/*.jar
 
 # ------------------------------------------------------------------------------
-# JOB 2 — Integration & Contract (Ambiente A Simulado)
+# JOB 2 ï¿½ Integration & Contract (Ambiente A Simulado)
 # ------------------------------------------------------------------------------
   integration-and-contract:
-    name: "2 · Integration & Contract (Ambiente A)"
+    name: "2 ï¿½ Integration & Contract (Ambiente A)"
     runs-on: ubuntu-latest
     needs: build-and-quality
 
@@ -178,7 +186,7 @@ jobs:
           sleep 5
           echo "? Mocks Prism iniciados correctamente."
 
-      - name: Validación de Contrato - Mock Operador (Paso 4)
+      - name: Validaciï¿½n de Contrato - Mock Operador (Paso 4)
         run: |
           echo "?? Validando contrato API Operador via Prism..."
           STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
@@ -190,7 +198,7 @@ jobs:
             (echo "? FALLO DE CONTRATO: API Operador no responde con 200" && exit 1)
           echo "? Contrato API Operador validado."
 
-      - name: Validación de Contrato - Mock Recibo (Paso 8)
+      - name: Validaciï¿½n de Contrato - Mock Recibo (Paso 8)
         run: |
           echo "?? Validando contrato API Recibo via Prism..."
           STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
@@ -223,22 +231,22 @@ jobs:
             sleep 5
           done
           if [ "$STATUS" -ne "200" ]; then
-            echo "? microservice-b no arrancó" && exit 1
+            echo "? microservice-b no arrancï¿½" && exit 1
           fi
 
       - name: "??  DEMO BREAK 1 ? Karate Contrato microservice-a?microservice-b"
         run: |
           cd tests/functional-karate
-          echo "?? Validando contrato público de microservice-b (campos 'telefono', 'nombre', 'status')..."
+          echo "?? Validando contrato pï¿½blico de microservice-b (campos 'telefono', 'nombre', 'status')..."
           mvn test -Dkarate.env=ci -Dtest=RecargaFlowRunner#testContratoMicroservicios \
             --no-transfer-progress
           echo "? Contrato inter-servicios validado."
 
 # ------------------------------------------------------------------------------
-# JOB 3 — Image Ops (Build & Push Docker Images)
+# JOB 3 ï¿½ Image Ops (Build & Push Docker Images)
 # ------------------------------------------------------------------------------
   image-ops:
-    name: "3 · Image Ops (Docker Build)"
+    name: "3 ï¿½ Image Ops (Docker Build)"
     runs-on: ubuntu-latest
     needs: integration-and-contract
     permissions:
@@ -339,10 +347,10 @@ jobs:
           cache-to: type=gha,mode=max
 
 # ------------------------------------------------------------------------------
-# JOB 4 — Functional E2E & Deploy (Karate + Selenium + k6)
+# JOB 4 ï¿½ Functional E2E & Deploy (Karate + Selenium + k6)
 # ------------------------------------------------------------------------------
   functional-e2e:
-    name: "4 · Functional E2E & Deploy (Karate + Selenium + k6)"
+    name: "4 ï¿½ Functional E2E & Deploy (Karate + Selenium + k6)"
     runs-on: ubuntu-latest
     needs: image-ops
 
@@ -387,7 +395,7 @@ jobs:
             sleep 5
           done
           if [ "$STATUS" -ne "200" ]; then
-            echo "? microservice-b no arrancó - Mostrando logs:"
+            echo "? microservice-b no arrancï¿½ - Mostrando logs:"
             cd simulation && docker compose logs --tail=80 microservice-b
             exit 1
           fi
@@ -401,7 +409,7 @@ jobs:
             sleep 5
           done
           if [ "$STATUS" -ne "200" ]; then
-            echo "? Microservicio A no arrancó - Mostrando logs:"
+            echo "? Microservicio A no arrancï¿½ - Mostrando logs:"
             cd simulation && docker compose logs --tail=80 microservice-a
             exit 1
           fi
@@ -419,7 +427,7 @@ jobs:
           name: karate-report
           path: tests/functional-karate/target/surefire-reports/
 
-      - name: "Selenium Headless - Validación UI (Pasos 1, 3, 5)"
+      - name: "Selenium Headless - Validaciï¿½n UI (Pasos 1, 3, 5)"
         run: |
           cd tests/ui-selenium
           mvn test -Dapp.url=http://localhost:8080 --no-transfer-progress
@@ -431,7 +439,7 @@ jobs:
           name: selenium-report
           path: tests/ui-selenium/target/surefire-reports/
 
-      - name: "k6 Smoke Test - Ruta Crítica Performance (Paso 6)"
+      - name: "k6 Smoke Test - Ruta Crï¿½tica Performance (Paso 6)"
         run: |
           curl -fsSL https://dl.k6.io/key.gpg | sudo gpg --dearmor -o /usr/share/keyrings/k6-archive-keyring.gpg
           echo "deb [signed-by=/usr/share/keyrings/k6-archive-keyring.gpg] https://dl.k6.io/deb stable main" \
