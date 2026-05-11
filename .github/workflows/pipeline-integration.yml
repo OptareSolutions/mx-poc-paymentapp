@@ -101,6 +101,14 @@ jobs:
           java-version: "17"
           distribution: temurin
 
+      - name: Cache Maven (~/.m2/repository)
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: ~/.m2/repository
+          key: ${{ runner.os }}-maven-${{ hashFiles('tests/functional-karate/pom.xml') }}
+          restore-keys: |
+            ${{ runner.os }}-maven-
+
       - name: Login GHCR
         uses: docker/login-action@v3
         with:
@@ -212,6 +220,14 @@ jobs:
         with:
           java-version: "17"
           distribution: temurin
+
+      - name: Cache Maven (~/.m2/repository)
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: ~/.m2/repository
+          key: ${{ runner.os }}-maven-${{ hashFiles('tests/functional-karate/pom.xml') }}
+          restore-keys: |
+            ${{ runner.os }}-maven-
 
       - name: Login GHCR
         uses: docker/login-action@v3
