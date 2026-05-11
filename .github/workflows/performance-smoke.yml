@@ -142,10 +142,11 @@ jobs:
 
       - name: Instalar k6
         run: |
-          curl -fsSL https://dl.k6.io/key.gpg | sudo gpg --dearmor -o /etc/apt/trusted.gpg.d/k6.gpg
-          echo "deb https://dl.k6.io/deb stable main" | sudo tee /etc/apt/sources.list.d/k6.list
-          sudo apt-get update -qq
-          sudo apt-get install -y k6
+          # Install k6 via direct binary download (avoids GPG/APT issues on Ubuntu 24.04)
+          K6_VERSION="v0.55.0"
+          curl -fsSL "https://github.com/grafana/k6/releases/download/${K6_VERSION}/k6-${K6_VERSION}-linux-amd64.tar.gz" \
+            | sudo tar -xz --strip-components=1 -C /usr/local/bin k6-${K6_VERSION}-linux-amd64/k6
+          k6 version
 
       # Descargar baseline de la última ejecución exitosa (si existe)
       - name: Descargar baseline histórico
