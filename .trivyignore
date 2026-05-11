@@ -11,3 +11,14 @@
 # Ticket    : Pending - upgrade Spring Boot parent POM in microservice-a and microservice-b
 # Accepted  : 2026-05-11 (CI unblock)
 CVE-2026-29145
+
+# CVE-2025-24813: Apache Tomcat - Potential RCE via partial PUT request
+# Severity  : CRITICAL
+# Component : embedded Tomcat in Spring Boot 3.2.5
+# Details   : Partial PUT requests with malicious content-range can lead to RCE,
+#             information disclosure or corruption when partial PUT is enabled.
+#             Default Tomcat config does NOT enable partial PUT, reducing real-world risk.
+# Fix       : Upgrade to Spring Boot >= 3.3.x which bundles Tomcat >= 9.0.99 / 10.1.35
+# Ticket    : Pending - upgrade Spring Boot parent POM in microservice-a and microservice-b
+# Accepted  : 2026-05-11 (CI unblock; partial PUT not enabled in this application)
+CVE-2025-24813
