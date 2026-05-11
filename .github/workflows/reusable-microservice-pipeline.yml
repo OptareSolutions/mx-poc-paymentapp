@@ -228,6 +228,7 @@ jobs:
           ignore-unfixed: true
           format: sarif
           output: trivy-image-results.sarif
+          version: v0.70.0
 
       - name: Upload SARIF (Image Scan)
         if: always()
