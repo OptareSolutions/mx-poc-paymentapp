@@ -1,0 +1,244 @@
+openapi: 3.0.1
+info:
+  title: PaymentBox Recarga API
+  description: >-
+    Microservice A — Flujo de 8 pasos de Recarga por PaymentBox Telco Operator.
+    CONTRATO PÚBLICO estable — cualquier cambio incompatible bloqueará el pipeline.
+  version: 1.0.0
+  contact:
+    name: Team A — PaymentBox Core
+servers:
+  - url: http://localhost:8080
+    description: Desarrollo local
+tags:
+  - name: Recarga PaymentBox
+    description: Flujo de 8 pasos — Recarga por PaymentBox Telco Operator
+
+paths:
+  /api/clientes/buscar:
+    get:
+      tags:
+        - Recarga PaymentBox
+      summary: Paso 2 - Focalizar cliente por teléfono (Billy 1)
+      operationId: buscarCliente
+      parameters:
+        - name: telefono
+          in: query
+          required: true
+          description: Número de teléfono del cliente
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Perfil del cliente encontrado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CustomerProfileDto'
+        '404':
+          description: Cliente no encontrado o inactivo
+        '500':
+          description: Error interno
+
+  /api/recargas/montos:
+    get:
+      tags:
+        - Recarga PaymentBox
+      summary: Paso 3 - Obtener montos disponibles desde DB
+      operationId: obtenerMontos
+      parameters:
+        - name: operador
+          in: query
+          required: false
+          description: Código del operador
+          schema:
+            type: string
+            default: BLUE
+      responses:
+        '200':
+          description: Lista de montos disponibles
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/MontosRecarga'
+
+  /api/recargas/validar-operador:
+    post:
+      tags:
+        - Recarga PaymentBox
+      summary: Paso 4 - Validar con API Operador (Mock Prism)
+      operationId: validarOperador
+      parameters:
+        - name: telefono
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: operador
+          in: query
+          required: false
+          schema:
+            type: string
+            default: BLUE
+      responses:
+        '200':
+          description: Validación exitosa con el operador
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+
+  /api/pagos/metodos:
+    get:
+      tags:
+        - Recarga PaymentBox
+      summary: Paso 5 - Obtener métodos de pago disponibles en PaymentBox
+      operationId: obtenerMetodosPago
+      responses:
+        '200':
+          description: Lista de métodos de pago
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: string
+
+  /api/pagos/registrar:
+    post:
+      tags:
+        - Recarga PaymentBox
+      summary: Pasos 6 y 7 - Procesar y registrar pago en Ambiente A
+      operationId: registrarPago
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PagoRequest'
+      responses:
+        '201':
+          description: Pago registrado exitosamente
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PagoResponse'
+        '400':
+          description: Datos de pago inválidos
+        '500':
+          description: Error al procesar el pago
+
+  /api/recibos/emitir:
+    post:
+      tags:
+        - Recarga PaymentBox
+      summary: Paso 8 - Emitir recibo PDF vía API Mock (Prism)
+      operationId: emitirRecibo
+      parameters:
+        - name: folio
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: numeroOrden
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Recibo emitido exitosamente
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+
+  /actuator/health:
+    get:
+      tags:
+        - Actuator
+      summary: Health check
+      operationId: health
+      responses:
+        '200':
+          description: Service UP
+
+components:
+  schemas:
+    CustomerProfileDto:
+      type: object
+      description: >-
+        Representación del perfil de cliente consumida desde microservice-b.
+        CAMPOS CRÍTICOS: telefono y nombre — sincronizados con contrato de microservice-b.
+      properties:
+        id:
+          type: integer
+          format: int64
+        telefono:
+          type: string
+          description: "Número de teléfono del cliente (CAMPO DE CONTRATO)"
+        nombre:
+          type: string
+          description: "Nombre completo del cliente (CAMPO DE CONTRATO)"
+        status:
+          type: string
+          description: Estado del cliente
+
+    PagoRequest:
+      type: object
+      required:
+        - telefonoCliente
+        - monto
+        - metodoPago
+        - numeroOrden
+      properties:
+        telefonoCliente:
+          type: string
+          description: Teléfono del cliente que recarga
+        monto:
+          type: number
+          format: double
+          description: Monto de la recarga
+        metodoPago:
+          type: string
+          description: Método de pago seleccionado
+        numeroOrden:
+          type: string
+          description: Número de orden único
+
+    PagoResponse:
+      type: object
+      properties:
+        folio:
+          type: string
+          description: Folio del pago registrado
+        status:
+          type: string
+          description: Estado del pago
+        numeroOrden:
+          type: string
+          description: Número de orden confirmado
+        mensaje:
+          type: string
+          description: Mensaje descriptivo del resultado
+
+    MontosRecarga:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+        operador:
+          type: string
+          description: Código del operador
+        monto:
+          type: number
+          format: double
+          description: Monto de recarga disponible
+        descripcion:
+          type: string
+          description: Descripción del monto

@@ -1,1 +1,400 @@
-# PoC AT&T PaymentBox ÔÇö Presentaci├│n de Apoyo## Calidad Declarativa en CI/CD> **Instrucciones de uso:** Este documento se usa como soporte visual durante la ejecuci├│n de la demo. Cada secci├│n = una diapositiva. Los bloques `[ACCI├ôN]` indican cu├índo actuar en pantalla.------## DIAPOSITIVA 1 ÔÇö PORTADA```ÔòöÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòùÔòæ                                                                  ÔòæÔòæ          PAYMENTBOX ÔÇö PoC de Calidad Declarativa                 ÔòæÔòæ                                                                  ÔòæÔòæ                  Optare Solutions para AT&T                      ÔòæÔòæ                                                                  ÔòæÔòæ    "La calidad no es una etapa. Es una propiedad del sistema."   ÔòæÔòæ                                                                  ÔòæÔòæ                          Mayo 2026                               ÔòæÔòÜÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòØ```------## DIAPOSITIVA 2 ÔÇö EL PROBLEMA (Ôÿà WOW 1)**[ACCI├ôN: Hacer la pregunta antes de mostrar nada]**> *"┬┐Cu├íntos d├¡as tardaron la ├║ltima vez en detectar que un equipo rompi├│ la integraci├│n con otro?"*---### Los 3 retos de AT&T| # | ├ürea | Problema actual ||---|------|----------------|| ­ƒñû | **RPA** | Scripts m├ís lentos que ejecuci├│n manual. Sin framework centralizado. || ­ƒöä | **CI/CD** | Los errores se detectan tarde, ya en ambientes de QA. || ÔÜí | **Performance** | JMeter no escala a 4k+ VUs. Grabaci├│n HTTPS bloqueada por tokens. |------## DIAPOSITIVA 3 ÔÇö EL COSTE REAL (Ôÿà WOW 2)**[ACCI├ôN: Escribir/mostrar el c├ílculo en vivo]**```5.200 validaciones manuales       ├ù 15 minutos promedio       ÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇ     = 1.300 horas por ciclo```> *"Ese es el coste de la validaci├│n manual hoy. No en teor├¡a ÔÇö en horas reales de su equipo."*---**Nuestra propuesta elimina ese coste mediante calidad declarativa:**- Cada commit activa el ciclo completo de validaci├│n- Sin intervenci├│n humana- En menos de 10 minutos------## DIAPOSITIVA 4 ÔÇö ARQUITECTURA (3 capas)**[ACCI├ôN: Mostrar diagrama arquitectura_solucion.md]**```ÔöîÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÉÔöé           CAPA DE APLICACI├ôN                ÔöéÔöé  microservice-a Ôöé microservice-b Ôöé UI AngularÔöéÔöé  (PaymentBox)   Ôöé (Customer)     Ôöé (Nginx)  ÔöéÔööÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÿ                      ÔåòÔöîÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÉÔöé           CAPA DE CALIDAD                   ÔöéÔöé  Unit Tests Ôöé Karate API Ôöé Selenium Ôöé k6    ÔöéÔöé  JaCoCo 80% Ôöé Contrato   Ôöé RPA      Ôöé Perf  ÔöéÔööÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÿ                      ÔåòÔöîÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÉÔöé           CAPA GITOPS                       ÔöéÔöé  develop ÔåÆ env-e Ôöé qa ÔåÆ env-a Ôöé uat ÔåÆ env-u ÔöéÔöé  Kustomize overlays Ôöé ArgoCD sync            ÔöéÔööÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÿ```**Principio:** El manifiesto K8s solo se actualiza si el pipeline est├í 100 % verde.------## DIAPOSITIVA 5 ÔÇö FLUJO DE 8 PASOS**[ACCI├ôN: Mostrar UI en http://localhost:4200]**| Paso | Tipo | Herramienta | Acci├│n ||------|------|-------------|--------|| **1** | UI | Selenium | Men├║ Recarga visible || **2** | API | Karate | Localizar Cliente Billy 1 (tel: 4544) || **3** | UI/DB | Karate + SQL | Seleccionar monto (coherencia BD) || **4** | Mock | Prism | API Operador BLUE ÔÇö cr├®dito aprobado || **5** | UI | Selenium | Seleccionar m├®todo de pago || **6** | Perf | k6 smoke | Registrar pago (p95 < 2s) || **7** | DB | Karate | Verificar persistencia || **8** | Mock | Prism | Emitir recibo PDF |------## DIAPOSITIVA 6 ÔÇö DEMO: FLUJO VERDE (Ôÿà WOW 3)**[ACCI├ôN: Mostrar GitHub Actions ÔÇö pipeline-microservice-a ÔÇö ├║ltimo run verde]**```Job 1 ÔÇö Build & Quality    Ô£à  2 min         Unit tests 100 % Ôöé JaCoCo 83 % Ôöé SonarCloud OKJob 2 ÔÇö Security           Ô£à  1 min         Trivy: 0 CVEs cr├¡ticos/altosJob 3 ÔÇö Image Ops          Ô£à  3 min         Docker multi-stage ÔåÆ GHCR: env-e-{sha}Job 4 ÔÇö E2E + GitOps       Ô£à  4 min         Karate 8 pasos OK ÔåÆ kustomization.yaml actualizado```> **[PAUSA 3 segundos mirando los checkmarks verdes]**> *"Este es el estado base. Cada push genera este resultado. Autom├íticamente."*------## DIAPOSITIVA 7 ÔÇö DEMO BREAK 1: Contrato (Ôÿà WOW 4)**[ACCI├ôN: Ejecutar en PowerShell]**```powershell.\demo\break-contract.ps1git add .git commit -m "demo: BREAK 1 - romper contrato"git push origin develop```---### ┬┐Qu├® ocurre?```pipeline-microservice-b  Ô£à  (sus tests unitarios pasan)pipeline-integration     ÔØî  Job 2 ÔÇö Contrato FALLAFAILED: match response.telefono == '4544'  actual: {phone: '4544', fullName: 'Billy 1 - Cortes'}  ÔåÉ el campo 'telefono' ya no existePROMOCI├ôN A QA ÔåÆ BLOQUEADA```---> **[PAUSA DRAM├üTICA 5 segundos]**> *"47 segundos vs 2ÔÇô3 d├¡as. El entorno de QA nunca se toc├│. El equipo recibe la notificaci├│n directa. La soluci├│n, sin nuestra herramienta: descubrir esto en QA, analizar, asignar, corregir, volver a desplegar."*---**[ACCI├ôN: Restaurar]**```powershell.\demo\restore.ps1git add .git commit -m "demo: restaurar contrato"git push origin develop```------## DIAPOSITIVA 8 ÔÇö DEMO BREAK 2: Comportamiento**[ACCI├ôN: Ejecutar en PowerShell]**```powershell.\demo\break-behavior.ps1git add .git commit -m "demo: BREAK 2 - monto minimo 100"git push origin qa```---### ┬┐Qu├® ocurre?```Job 1 ÔÇö Build & Quality  Ô£à  (unit tests no cubren monto m├¡nimo)Job 2 ÔÇö Security         Ô£àJob 3 ÔÇö Image Ops        Ô£à  imagen env-a-{sha} construidaJob 4 ÔÇö E2E Karate       ÔØî  FALLA  POST /api/pagos/registrar  monto=20  expected: 201  ÔåÆ  actual: 400 "Monto m├¡nimo $100"k8s/overlays/env-a/kustomization.yaml ÔåÆ NO ACTUALIZADO```---> *"El entorno de QA sigue apuntando a la versi├│n que funcionaba. La imagen rota nunca lleg├│ al overlay. GitOps protege el ambiente autom├íticamente."*---**[ACCI├ôN: Restaurar]**```powershell.\demo\restore.ps1git add .git commit -m "demo: restaurar comportamiento"git push origin qa```------## DIAPOSITIVA 9 ÔÇö PERFORMANCE CON k6**[ACCI├ôN: Mostrar script k6 en VS Code o ejecutar localmente]**```powershellcd tests\k6k6 run smoke-test.js```---### Por qu├® k6 vs JMeter| | k6 | JMeter ||--|-------|--------|| **Escala** | 2.000+ VUs sin degradaci├│n | Limitado a ~4k VUs || **Grabaci├│n HTTPS** | Nativa, con tokens entre nubes | Bloqueada por arquitectura de AT&T || **Scripting** | JavaScript (mantenible) | XML/GUI (fr├ígil) || **CI/CD** | Binario standalone, integraci├│n directa | Requiere plugin y JVM extra |---### Smoke test integrado en cada push```20 VUs / 5 minutos  ÔåÆ  p95 < 2 segundos  ÔåÆ  PASS / FAIL bloqueante```> Si el umbral se supera: **Job 4 falla ÔåÆ overlay no se actualiza**------## DIAPOSITIVA 10 ÔÇö FRAMEWORK Y IA (Ôÿà WOW 5)**[ACCI├ôN: Ejecutar demo.py con historia del comit├®]**```powershellcd tests\iapython demo.py```---### Pedir al comit├® una historia de usuario (en vivo)> Ejemplo: *"Como operador, quiero que el sistema rechace recargas de clientes bloqueados."***ÔåÆ El framework genera 10ÔÇô15 casos de prueba Karate en segundos**---### Capacidades del Framework| Capacidad | Mecanismo ||-----------|-----------|| **Governance** | Est├índares codificados en el pipeline (no dependientes de disciplina) || **Reporteo unificado** | SonarCloud + JaCoCo + Karate HTML + k6 JSON ÔåÆ artefactos descargables || **Calendarizaci├│n** | Cron jobs para regresi├│n nocturna completa || **IA integrada** | Generaci├│n de tests + datos sint├®ticos desde historias de usuario |------## DIAPOSITIVA 11 ÔÇö CIERRE ROI (Ôÿà WOW 6)**[ACCI├ôN: Mostrar este c├ílculo]**```1.300 h por ciclo  ├ù  40 % automatizaci├│n conservadora                   ÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇ                 = 520 horas recuperadas por cicloCoste promedio hora QA: ~$50                   ÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇ                 = $26.000 recuperados por ciclo de validaci├│n```---> **[PAUSA. Mirar al comit├®.]**> *"┬┐Cu├íntos ciclos de validaci├│n ejecutan al a├▒o? Multipliquen ese n├║mero por $26.000. Eso es lo que ya est├ín perdiendo."*> *"┬┐Cu├ínto tiempo m├ís pueden permitirse que los errores lleguen a QA?"*------## DIAPOSITIVA 12 ÔÇö DIFERENCIACI├ôN| Diferenciador | Optare | Alternativa t├¡pica ||--------------|--------|--------------------|| Modelo de calidad | Declarativo ÔÇö todo en c├│digo, trazable | Ad-hoc por equipo || Detecci├│n de contratos | En pipeline, antes de QA | Manual, en QA o producci├│n || Performance en CI | Smoke en cada push + hist├│rico | Pruebas aisladas || Seguridad | Zero CVEs bloqueante | Escaneo peri├│dico desvinculado || GitOps | Manifiestos inmutables, rollback autom├ítico | Deploy y rollback manuales || IA | Framework preparado para generaci├│n de tests | No integrado || Coste | 100 % open-source (excepto SonarCloud freemium) | Herramientas comerciales |------## DIAPOSITIVA 13 ÔÇö Q&A (Respuestas preparadas)**P: ┬┐Por qu├® k6 y no JMeter?**> k6 escala a 2k+ VUs, graba HTTPS nativo, se integra en GitHub Actions como binario.**P: ┬┐C├│mo gestionamos secretos de AT&T en el pipeline?**> GitHub Actions Secrets (cifrado en reposo y tr├ínsito). Auto-hosted runners dentro de la red AT&T para entornos productivos.**P: ┬┐Funciona con nuestra infraestructura multi-cloud/VPN?**> Self-hosted runners dentro de la infraestructura AT&T, transparentes al proveedor de nube.**P: ┬┐Cu├ínto tiempo lleva adoptar este framework?**> 3 sprints para el primer equipo. Los siguientes heredan el template en 1 sprint.**P: ┬┐Qu├® pasa si un microservicio no tiene OpenAPI?**> Karate graba el comportamiento base y lo convierte en el contrato de referencia. Migraci├│n incremental.**P: ┬┐La IA es determinista en los quality gates?**> Los gates son siempre deterministas (umbrales num├®ricos, OpenAPI, tests). La IA asiste al equipo de QA, no reemplaza los gates.------## ORDEN DE EJECUCI├ôN (referencia r├ípida)```[APERTURA]     WOW 1 ÔÇö La Pregunta que Duele        ÔåÆ 3 min[ACTO I]       Contexto AT&T + WOW 2 N├║mero Real    ÔåÆ 7 min[ACTO II-a]    Arquitectura (diagrama)               ÔåÆ 5 min[ACTO II-b]    WOW 3 ÔÇö Flujo Verde en GitHub Actions ÔåÆ 10 min[ACTO II-c]    WOW 4 ÔÇö DEMO BREAK 1 (contrato)      ÔåÆ 8 min               WOW 4 ÔÇö DEMO BREAK 2 (comportamiento) ÔåÆ 8 min[ACTO II-d]    Performance k6                        ÔåÆ 5 min[ACTO III]     Framework + WOW 5 ÔÇö IA en vivo        ÔåÆ 10 min[CIERRE]       WOW 6 ÔÇö ROI + Q&A                     ÔåÆ 10 min                                              TOTAL: ~66 min```---## PLAN DE CONTINGENCIA| Problema | Soluci├│n ||----------|---------|| Docker Compose no levanta | Usar grabaci├│n de pantalla del run anterior || Pipeline tarda m├ís de lo esperado | Profundizar en arquitectura con diagrama mientras corre || Sin conexi├│n a internet | Los mocks Prism funcionan completamente offline || Script de demo falla | `.\demo\restore.ps1` y mostrar el resultado con `git log --oneline` |---*Documento generado para uso interno ÔÇö Optare Solutions ÔÇö Mayo 2026*
+# PoC AT&T PaymentBox — Presentación de Apoyo
+## Calidad Declarativa en CI/CD
+
+> **Instrucciones de uso:** Este documento se usa como soporte visual durante la ejecución de la demo. Cada sección = una diapositiva. Los bloques `[ACCIÓN]` indican cuándo actuar en pantalla.
+
+---
+
+---
+
+## DIAPOSITIVA 1 — PORTADA
+
+```
+╔══════════════════════════════════════════════════════════════════╗
+║                                                                  ║
+║          PAYMENTBOX — PoC de Calidad Declarativa                 ║
+║                                                                  ║
+║                  Optare Solutions para AT&T                      ║
+║                                                                  ║
+║    "La calidad no es una etapa. Es una propiedad del sistema."   ║
+║                                                                  ║
+║                          Mayo 2026                               ║
+╚══════════════════════════════════════════════════════════════════╝
+```
+
+---
+
+---
+
+## DIAPOSITIVA 2 — EL PROBLEMA (★ WOW 1)
+
+**[ACCIÓN: Hacer la pregunta antes de mostrar nada]**
+
+> *"¿Cuántos días tardaron la última vez en detectar que un equipo rompió la integración con otro?"*
+
+---
+
+### Los 3 retos de AT&T
+
+| # | Área | Problema actual |
+|---|------|----------------|
+| 🤖 | **RPA** | Scripts más lentos que ejecución manual. Sin framework centralizado. |
+| 🔄 | **CI/CD** | Los errores se detectan tarde, ya en ambientes de QA. |
+| ⚡ | **Performance** | JMeter no escala a 4k+ VUs. Grabación HTTPS bloqueada por tokens. |
+
+---
+
+---
+
+## DIAPOSITIVA 3 — EL COSTE REAL (★ WOW 2)
+
+**[ACCIÓN: Escribir/mostrar el cálculo en vivo]**
+
+```
+5.200 validaciones manuales
+       × 15 minutos promedio
+       ─────────────────────
+     = 1.300 horas por ciclo
+```
+
+> *"Ese es el coste de la validación manual hoy. No en teoría — en horas reales de su equipo."*
+
+---
+
+**Nuestra propuesta elimina ese coste mediante calidad declarativa:**
+- Cada commit activa el ciclo completo de validación
+- Sin intervención humana
+- En menos de 10 minutos
+
+---
+
+---
+
+## DIAPOSITIVA 4 — ARQUITECTURA (3 capas)
+
+**[ACCIÓN: Mostrar diagrama arquitectura_solucion.md]**
+
+```
+┌─────────────────────────────────────────────┐
+│           CAPA DE APLICACIÓN                │
+│  microservice-a │ microservice-b │ UI Angular│
+│  (PaymentBox)   │ (Customer)     │ (Nginx)  │
+└─────────────────────────────────────────────┘
+                      ↕
+┌─────────────────────────────────────────────┐
+│           CAPA DE CALIDAD                   │
+│  Unit Tests │ Karate API │ Selenium │ k6    │
+│  JaCoCo 80% │ Contrato   │ RPA      │ Perf  │
+└─────────────────────────────────────────────┘
+                      ↕
+┌─────────────────────────────────────────────┐
+│           CAPA GITOPS                       │
+│  develop → env-e │ qa → env-a │ uat → env-u │
+│  Kustomize overlays │ ArgoCD sync            │
+└─────────────────────────────────────────────┘
+```
+
+**Principio:** El manifiesto K8s solo se actualiza si el pipeline está 100 % verde.
+
+---
+
+---
+
+## DIAPOSITIVA 5 — FLUJO DE 8 PASOS
+
+**[ACCIÓN: Mostrar UI en http://localhost:4200]**
+
+| Paso | Tipo | Herramienta | Acción |
+|------|------|-------------|--------|
+| **1** | UI | Selenium | Menú Recarga visible |
+| **2** | API | Karate | Localizar Cliente Billy 1 (tel: 4544) |
+| **3** | UI/DB | Karate + SQL | Seleccionar monto (coherencia BD) |
+| **4** | Mock | Prism | API Operador BLUE — crédito aprobado |
+| **5** | UI | Selenium | Seleccionar método de pago |
+| **6** | Perf | k6 smoke | Registrar pago (p95 < 2s) |
+| **7** | DB | Karate | Verificar persistencia |
+| **8** | Mock | Prism | Emitir recibo PDF |
+
+---
+
+---
+
+## DIAPOSITIVA 6 — DEMO: FLUJO VERDE (★ WOW 3)
+
+**[ACCIÓN: Mostrar GitHub Actions — pipeline-microservice-a — último run verde]**
+
+```
+Job 1 — Build & Quality    ✅  2 min
+         Unit tests 100 % │ JaCoCo 83 % │ SonarCloud OK
+
+Job 2 — Security           ✅  1 min
+         Trivy: 0 CVEs críticos/altos
+
+Job 3 — Image Ops          ✅  3 min
+         Docker multi-stage → GHCR: env-e-{sha}
+
+Job 4 — E2E + GitOps       ✅  4 min
+         Karate 8 pasos OK → kustomization.yaml actualizado
+```
+
+> **[PAUSA 3 segundos mirando los checkmarks verdes]**
+
+> *"Este es el estado base. Cada push genera este resultado. Automáticamente."*
+
+---
+
+---
+
+## DIAPOSITIVA 7 — DEMO BREAK 1: Contrato (★ WOW 4)
+
+**[ACCIÓN: Ejecutar en PowerShell]**
+
+```powershell
+.\demo\break-contract.ps1
+git add .
+git commit -m "demo: BREAK 1 - romper contrato"
+git push origin develop
+```
+
+---
+
+### ¿Qué ocurre?
+
+```
+pipeline-microservice-b  ✅  (sus tests unitarios pasan)
+pipeline-integration     ❌  Job 2 — Contrato FALLA
+
+FAILED: match response.telefono == '4544'
+  actual: {phone: '4544', fullName: 'Billy 1 - Cortes'}
+  ← el campo 'telefono' ya no existe
+
+PROMOCIÓN A QA → BLOQUEADA
+```
+
+---
+
+> **[PAUSA DRAMÁTICA 5 segundos]**
+
+> *"47 segundos vs 2–3 días. El entorno de QA nunca se tocó. El equipo recibe la notificación directa. La solución, sin nuestra herramienta: descubrir esto en QA, analizar, asignar, corregir, volver a desplegar."*
+
+---
+
+**[ACCIÓN: Restaurar]**
+```powershell
+.\demo\restore.ps1
+git add .
+git commit -m "demo: restaurar contrato"
+git push origin develop
+```
+
+---
+
+---
+
+## DIAPOSITIVA 8 — DEMO BREAK 2: Comportamiento
+
+**[ACCIÓN: Ejecutar en PowerShell]**
+
+```powershell
+.\demo\break-behavior.ps1
+git add .
+git commit -m "demo: BREAK 2 - monto minimo 100"
+git push origin qa
+```
+
+---
+
+### ¿Qué ocurre?
+
+```
+Job 1 — Build & Quality  ✅  (unit tests no cubren monto mínimo)
+Job 2 — Security         ✅
+Job 3 — Image Ops        ✅  imagen env-a-{sha} construida
+
+Job 4 — E2E Karate       ❌  FALLA
+
+  POST /api/pagos/registrar  monto=20
+  expected: 201  →  actual: 400 "Monto mínimo $100"
+
+k8s/overlays/env-a/kustomization.yaml → NO ACTUALIZADO
+```
+
+---
+
+> *"El entorno de QA sigue apuntando a la versión que funcionaba. La imagen rota nunca llegó al overlay. GitOps protege el ambiente automáticamente."*
+
+---
+
+**[ACCIÓN: Restaurar]**
+```powershell
+.\demo\restore.ps1
+git add .
+git commit -m "demo: restaurar comportamiento"
+git push origin qa
+```
+
+---
+
+---
+
+## DIAPOSITIVA 9 — PERFORMANCE CON k6
+
+**[ACCIÓN: Mostrar script k6 en VS Code o ejecutar localmente]**
+
+```powershell
+cd tests\k6
+k6 run smoke-test.js
+```
+
+---
+
+### Por qué k6 vs JMeter
+
+| | k6 | JMeter |
+|--|-------|--------|
+| **Escala** | 2.000+ VUs sin degradación | Limitado a ~4k VUs |
+| **Grabación HTTPS** | Nativa, con tokens entre nubes | Bloqueada por arquitectura de AT&T |
+| **Scripting** | JavaScript (mantenible) | XML/GUI (frágil) |
+| **CI/CD** | Binario standalone, integración directa | Requiere plugin y JVM extra |
+
+---
+
+### Smoke test integrado en cada push
+
+```
+20 VUs / 5 minutos  →  p95 < 2 segundos  →  PASS / FAIL bloqueante
+```
+
+> Si el umbral se supera: **Job 4 falla → overlay no se actualiza**
+
+---
+
+---
+
+## DIAPOSITIVA 10 — FRAMEWORK Y IA (★ WOW 5)
+
+**[ACCIÓN: Ejecutar demo.py con historia del comité]**
+
+```powershell
+cd tests\ia
+python demo.py
+```
+
+---
+
+### Pedir al comité una historia de usuario (en vivo)
+
+> Ejemplo: *"Como operador, quiero que el sistema rechace recargas de clientes bloqueados."*
+
+**→ El framework genera 10–15 casos de prueba Karate en segundos**
+
+---
+
+### Capacidades del Framework
+
+| Capacidad | Mecanismo |
+|-----------|-----------|
+| **Governance** | Estándares codificados en el pipeline (no dependientes de disciplina) |
+| **Reporteo unificado** | SonarCloud + JaCoCo + Karate HTML + k6 JSON → artefactos descargables |
+| **Calendarización** | Cron jobs para regresión nocturna completa |
+| **IA integrada** | Generación de tests + datos sintéticos desde historias de usuario |
+
+---
+
+---
+
+## DIAPOSITIVA 11 — CIERRE ROI (★ WOW 6)
+
+**[ACCIÓN: Mostrar este cálculo]**
+
+```
+1.300 h por ciclo  ×  40 % automatización conservadora
+                   ─────────────────────────────────────
+                 = 520 horas recuperadas por ciclo
+
+Coste promedio hora QA: ~$50
+                   ─────────────────────────────────────
+                 = $26.000 recuperados por ciclo de validación
+```
+
+---
+
+> **[PAUSA. Mirar al comité.]**
+
+> *"¿Cuántos ciclos de validación ejecutan al año? Multipliquen ese número por $26.000. Eso es lo que ya están perdiendo."*
+
+> *"¿Cuánto tiempo más pueden permitirse que los errores lleguen a QA?"*
+
+---
+
+---
+
+## DIAPOSITIVA 12 — DIFERENCIACIÓN
+
+| Diferenciador | Optare | Alternativa típica |
+|--------------|--------|--------------------|
+| Modelo de calidad | Declarativo — todo en código, trazable | Ad-hoc por equipo |
+| Detección de contratos | En pipeline, antes de QA | Manual, en QA o producción |
+| Performance en CI | Smoke en cada push + histórico | Pruebas aisladas |
+| Seguridad | Zero CVEs bloqueante | Escaneo periódico desvinculado |
+| GitOps | Manifiestos inmutables, rollback automático | Deploy y rollback manuales |
+| IA | Framework preparado para generación de tests | No integrado |
+| Coste | 100 % open-source (excepto SonarCloud freemium) | Herramientas comerciales |
+
+---
+
+---
+
+## DIAPOSITIVA 13 — Q&A (Respuestas preparadas)
+
+**P: ¿Por qué k6 y no JMeter?**
+> k6 escala a 2k+ VUs, graba HTTPS nativo, se integra en GitHub Actions como binario.
+
+**P: ¿Cómo gestionamos secretos de AT&T en el pipeline?**
+> GitHub Actions Secrets (cifrado en reposo y tránsito). Auto-hosted runners dentro de la red AT&T para entornos productivos.
+
+**P: ¿Funciona con nuestra infraestructura multi-cloud/VPN?**
+> Self-hosted runners dentro de la infraestructura AT&T, transparentes al proveedor de nube.
+
+**P: ¿Cuánto tiempo lleva adoptar este framework?**
+> 3 sprints para el primer equipo. Los siguientes heredan el template en 1 sprint.
+
+**P: ¿Qué pasa si un microservicio no tiene OpenAPI?**
+> Karate graba el comportamiento base y lo convierte en el contrato de referencia. Migración incremental.
+
+**P: ¿La IA es determinista en los quality gates?**
+> Los gates son siempre deterministas (umbrales numéricos, OpenAPI, tests). La IA asiste al equipo de QA, no reemplaza los gates.
+
+---
+
+---
+
+## ORDEN DE EJECUCIÓN (referencia rápida)
+
+```
+[APERTURA]     WOW 1 — La Pregunta que Duele        → 3 min
+[ACTO I]       Contexto AT&T + WOW 2 Número Real    → 7 min
+[ACTO II-a]    Arquitectura (diagrama)               → 5 min
+[ACTO II-b]    WOW 3 — Flujo Verde en GitHub Actions → 10 min
+[ACTO II-c]    WOW 4 — DEMO BREAK 1 (contrato)      → 8 min
+               WOW 4 — DEMO BREAK 2 (comportamiento) → 8 min
+[ACTO II-d]    Performance k6                        → 5 min
+[ACTO III]     Framework + WOW 5 — IA en vivo        → 10 min
+[CIERRE]       WOW 6 — ROI + Q&A                     → 10 min
+                                              TOTAL: ~66 min
+```
+
+---
+
+## PLAN DE CONTINGENCIA
+
+| Problema | Solución |
+|----------|---------|
+| Docker Compose no levanta | Usar grabación de pantalla del run anterior |
+| Pipeline tarda más de lo esperado | Profundizar en arquitectura con diagrama mientras corre |
+| Sin conexión a internet | Los mocks Prism funcionan completamente offline |
+| Script de demo falla | `.\demo\restore.ps1` y mostrar el resultado con `git log --oneline` |
+
+---
+
+*Documento generado para uso interno — Optare Solutions — Mayo 2026*

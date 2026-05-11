@@ -1,0 +1,776 @@
+name: "AT&T PoC QA — Quality Gates"
+
+# ──────────────────────────────────────────────────────────────────────────────
+# DESCRIPCIÓN
+#   Pipeline de Quality Gates consolidado para la PoC AT&T PaymentBox.
+#   Ejecuta los cinco tipos de prueba en paralelo y aplica un gate estricto
+#   (BLOQUEANTE) por cada tipo antes de marcar el pipeline como exitoso.
+#
+# QUALITY GATES (todos BLOQUEANTES):
+#   1. API Testing Funcional  — 0 smoke tests fallidos (Karate @smoke)
+#   2. API Testing Integración — todos los flujos E2E completan sin error
+#   3. API Testing Contrato   — 0 breaking changes en OpenAPI
+#   4. Performance k6         — todos los thresholds respetados
+#   5. RPA Web                — flujo web completado exitosamente
+#
+# ACTIVACIÓN:
+#   - Push en cualquier rama excepto main
+#   - Pull Request hacia cualquier rama excepto main
+#   - Ejecución manual (workflow_dispatch)
+#
+# VARIABLES DE REPOSITORIO OPCIONALES:
+#   SLACK_NOTIFICATIONS = true   (para enviar alertas por Slack)
+#
+# SECRETS REQUERIDOS (para job RPA):
+#   SF_URL, SF_USERNAME, SF_PASSWORD, SF_SECURITY_TOKEN
+#
+# NOTA: NO hacer push/commit a rama main.
+# ──────────────────────────────────────────────────────────────────────────────
+
+on:
+  push:
+    branches-ignore: [main]
+  pull_request:
+    branches-ignore: [main]
+  workflow_dispatch:
+    inputs:
+      skip_rpa:
+        description: "Omitir job RPA (true/false)"
+        required: false
+        default: "false"
+        type: choice
+        options: ["false", "true"]
+      skip_performance:
+        description: "Omitir job Performance k6 (true/false)"
+        required: false
+        default: "false"
+        type: choice
+        options: ["false", "true"]
+
+# ── Permisos mínimos necesarios (least privilege) ─────────────────────────────
+permissions:
+  contents: read
+  checks: write        # publicar resultados de tests en GitHub UI
+  pull-requests: write # comentarios en PRs con resumen de resultados
+
+# ── Control de concurrencia ───────────────────────────────────────────────────
+concurrency:
+  group: quality-gates-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+# ── Variables globales ────────────────────────────────────────────────────────
+env:
+  JAVA_VERSION: "17"
+  JAVA_DIST: "temurin"
+  BASE_URL: "http://localhost:8080"
+  BASE_URL_B: "http://localhost:18081"
+
+jobs:
+
+  # ════════════════════════════════════════════════════════════════════════════
+  # JOB 1 · API TESTING FUNCIONAL (Karate – smoke tests @smoke)
+  # GATE: 0 fallos — todos los smoke tests deben pasar
+  # ════════════════════════════════════════════════════════════════════════════
+  api-funcional:
+    name: "1 · API Funcional — Smoke Tests (Karate)"
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    outputs:
+      result: ${{ job.status }}
+      tests_passed: ${{ steps.parse-results.outputs.passed }}
+      tests_failed: ${{ steps.parse-results.outputs.failed }}
+
+    steps:
+      - name: Checkout código
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Login GHCR
+        run: |
+          echo "${{ secrets.GITHUB_TOKEN }}" \
+            | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+
+      - name: Iniciar entorno simulado (Docker Compose)
+        working-directory: simulation
+        timeout-minutes: 8
+        run: |
+          docker compose up -d --build --wait
+          echo "✅ Entorno de simulación iniciado"
+
+      - name: Health check — microservice-a
+        run: |
+          for i in $(seq 1 15); do
+            STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
+              http://localhost:8080/actuator/health || echo "000")
+            echo "Intento $i: HTTP $STATUS"
+            [ "$STATUS" -eq "200" ] && echo "✅ microservice-a UP" && break
+            [ "$i" -eq "15" ] && echo "❌ microservice-a no arrancó" && \
+              cd simulation && docker compose logs microservice-a && exit 1
+            sleep 5
+          done
+
+      - name: Health check — microservice-b
+        run: |
+          for i in $(seq 1 15); do
+            STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
+              http://localhost:18081/actuator/health || echo "000")
+            echo "Intento $i: HTTP $STATUS"
+            [ "$STATUS" -eq "200" ] && echo "✅ microservice-b UP" && break
+            [ "$i" -eq "15" ] && echo "❌ microservice-b no arrancó" && \
+              cd simulation && docker compose logs microservice-b && exit 1
+            sleep 5
+          done
+
+      - name: Configurar JDK ${{ env.JAVA_VERSION }}
+        uses: actions/setup-java@c1e323688fd81a25caa38c78aa6df2d33d3e20d9 # v4.8.0
+        with:
+          java-version: ${{ env.JAVA_VERSION }}
+          distribution: ${{ env.JAVA_DIST }}
+          cache: maven
+
+      - name: Cache Maven
+        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
+        with:
+          path: ~/.m2/repository
+          key: ${{ runner.os }}-maven-smoke-${{ hashFiles('tests/functional-karate/pom.xml') }}
+          restore-keys: |
+            ${{ runner.os }}-maven-smoke-
+            ${{ runner.os }}-maven-
+
+      # QUALITY GATE 1: 0 fallos — todos los @smoke tests deben pasar
+      - name: "🔴 QG1 · Ejecutar Karate Smoke Tests (@smoke)"
+        id: run-smoke
+        working-directory: tests/functional-karate
+        env:
+          BASE_URL: ${{ env.BASE_URL }}
+          KARATE_ENV: ci
+        run: |
+          set +e
+          mvn test \
+            -Dkarate.env=ci \
+            -Dtest=RecargaFlowRunner#testSmoke \
+            --no-transfer-progress \
+            -Dsurefire.failIfNoSpecifiedTests=false
+          EXIT_CODE=$?
+          echo "exit_code=${EXIT_CODE}" >> $GITHUB_OUTPUT
+          exit $EXIT_CODE
+
+      - name: Parsear resultados JUnit
+        id: parse-results
+        if: always()
+        working-directory: tests/functional-karate
+        run: |
+          PASSED=0
+          FAILED=0
+          if ls target/surefire-reports/*.xml 2>/dev/null; then
+            PASSED=$(grep -r 'tests=' target/surefire-reports/*.xml \
+              | grep -oP 'tests="\K[0-9]+' | awk '{s+=$1} END {print s+0}')
+            FAILED=$(grep -r 'failures=\|errors=' target/surefire-reports/*.xml \
+              | grep -oP '(failures|errors)="\K[0-9]+' | awk '{s+=$1} END {print s+0}')
+          fi
+          echo "passed=${PASSED}" >> $GITHUB_OUTPUT
+          echo "failed=${FAILED}" >> $GITHUB_OUTPUT
+          echo "📊 Resultados: ✅ ${PASSED} pasados | ❌ ${FAILED} fallidos"
+
+      - name: Publicar artefactos — Smoke Tests
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: qg-api-funcional-${{ github.run_number }}
+          path: |
+            tests/functional-karate/target/surefire-reports/
+            tests/functional-karate/target/karate-reports/
+          retention-days: 30
+          if-no-files-found: warn
+
+      - name: Detener entorno simulado
+        if: always()
+        working-directory: simulation
+        run: docker compose down -v --remove-orphans
+
+
+  # ════════════════════════════════════════════════════════════════════════════
+  # JOB 2 · API TESTING INTEGRACIÓN (Karate – flujos E2E)
+  # GATE: todos los flujos E2E deben completarse sin error
+  # ════════════════════════════════════════════════════════════════════════════
+  api-integracion:
+    name: "2 · API Integración — Flujos E2E (Karate)"
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    outputs:
+      result: ${{ job.status }}
+      tests_passed: ${{ steps.parse-integracion.outputs.passed }}
+      tests_failed: ${{ steps.parse-integracion.outputs.failed }}
+
+    steps:
+      - name: Checkout código
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Login GHCR
+        run: |
+          echo "${{ secrets.GITHUB_TOKEN }}" \
+            | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+
+      - name: Iniciar entorno simulado (Docker Compose)
+        working-directory: simulation
+        timeout-minutes: 8
+        run: |
+          docker compose up -d --build --wait
+          echo "✅ Entorno de simulación iniciado para integración"
+
+      - name: Health check — todos los servicios
+        run: |
+          for SVC_URL in \
+            "http://localhost:8080/actuator/health:microservice-a" \
+            "http://localhost:18081/actuator/health:microservice-b"; do
+            URL="${SVC_URL%%:*}"
+            NAME="${SVC_URL##*:}"
+            for i in $(seq 1 15); do
+              STATUS=$(curl -s -o /dev/null -w "%{http_code}" "${URL}" || echo "000")
+              [ "$STATUS" -eq "200" ] && echo "✅ ${NAME} UP" && break
+              [ "$i" -eq "15" ] && echo "❌ ${NAME} no arrancó" && exit 1
+              sleep 5
+            done
+          done
+
+      - name: Configurar JDK ${{ env.JAVA_VERSION }}
+        uses: actions/setup-java@c1e323688fd81a25caa38c78aa6df2d33d3e20d9 # v4.8.0
+        with:
+          java-version: ${{ env.JAVA_VERSION }}
+          distribution: ${{ env.JAVA_DIST }}
+          cache: maven
+
+      - name: Cache Maven
+        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
+        with:
+          path: ~/.m2/repository
+          key: ${{ runner.os }}-maven-integracion-${{ hashFiles('tests/integration-karate/pom.xml') }}
+          restore-keys: |
+            ${{ runner.os }}-maven-integracion-
+            ${{ runner.os }}-maven-
+
+      # QUALITY GATE 2: todos los flujos E2E deben completarse sin error
+      - name: "🔴 QG2 · Ejecutar Tests de Integración E2E (Karate @integracion)"
+        id: run-integracion
+        working-directory: tests/integration-karate
+        env:
+          BASE_URL: ${{ env.BASE_URL }}
+          BASE_URL_B: ${{ env.BASE_URL_B }}
+          KARATE_ENV: ci
+        run: |
+          mvn test \
+            -Dkarate.env=ci \
+            -DbaseUrl=${{ env.BASE_URL }} \
+            -DbaseUrlB=${{ env.BASE_URL_B }} \
+            --no-transfer-progress \
+            -q
+
+      - name: Parsear resultados integración
+        id: parse-integracion
+        if: always()
+        working-directory: tests/integration-karate
+        run: |
+          PASSED=0
+          FAILED=0
+          if ls target/surefire-reports/*.xml 2>/dev/null; then
+            PASSED=$(grep -r 'tests=' target/surefire-reports/*.xml \
+              | grep -oP 'tests="\K[0-9]+' | awk '{s+=$1} END {print s+0}')
+            FAILED=$(grep -r 'failures=\|errors=' target/surefire-reports/*.xml \
+              | grep -oP '(failures|errors)="\K[0-9]+' | awk '{s+=$1} END {print s+0}')
+          fi
+          echo "passed=${PASSED}" >> $GITHUB_OUTPUT
+          echo "failed=${FAILED}" >> $GITHUB_OUTPUT
+          echo "📊 Integración: ✅ ${PASSED} pasados | ❌ ${FAILED} fallidos"
+
+      - name: Publicar artefactos — Integración
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: qg-api-integracion-${{ github.run_number }}
+          path: |
+            tests/integration-karate/target/surefire-reports/
+            tests/integration-karate/target/karate-reports/
+          retention-days: 30
+          if-no-files-found: warn
+
+      - name: Detener entorno simulado
+        if: always()
+        working-directory: simulation
+        run: docker compose down -v --remove-orphans
+
+
+  # ════════════════════════════════════════════════════════════════════════════
+  # JOB 3 · API TESTING CONTRATO (OpenAPI / oasdiff)
+  # GATE: 0 breaking changes permitidos
+  # ════════════════════════════════════════════════════════════════════════════
+  api-contrato:
+    name: "3 · API Contrato — Breaking Changes (oasdiff)"
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    outputs:
+      result: ${{ job.status }}
+      breaking_changes: ${{ steps.check-contract.outputs.breaking_changes }}
+
+    steps:
+      - name: Checkout código (con historial completo)
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          fetch-depth: 0
+
+      - name: Instalar oasdiff
+        run: |
+          OASDIFF_VERSION="1.10.14"
+          curl -sSfL \
+            "https://github.com/tufin/oasdiff/releases/download/v${OASDIFF_VERSION}/oasdiff_${OASDIFF_VERSION}_linux_amd64.tar.gz" \
+            | tar -xz -C /usr/local/bin oasdiff
+          oasdiff --version
+
+      - name: Obtener especificaciones OpenAPI base (rama destino)
+        run: |
+          BASE_REF="${{ github.base_ref || 'develop' }}"
+          echo "Comparando contra rama base: ${BASE_REF}"
+          git fetch origin "${BASE_REF}" --depth=1 2>/dev/null || true
+          mkdir -p /tmp/openapi-baseline
+          git show "origin/${BASE_REF}:microservice-a/docs/openapi.yaml" \
+            > /tmp/openapi-baseline/microservice-a.yaml 2>/dev/null || \
+            echo "⚠️ openapi microservice-a no encontrado en ${BASE_REF}, usando baseline local"
+          git show "origin/${BASE_REF}:microservice-b/docs/openapi.yaml" \
+            > /tmp/openapi-baseline/microservice-b.yaml 2>/dev/null || \
+            echo "⚠️ openapi microservice-b no encontrado en ${BASE_REF}, usando baseline local"
+
+      # QUALITY GATE 3: 0 breaking changes permitidos
+      - name: "🔴 QG3 · Detectar Breaking Changes en microservice-a"
+        id: contract-msvc-a
+        continue-on-error: true
+        run: |
+          if [ -f /tmp/openapi-baseline/microservice-a.yaml ] && \
+             [ -f microservice-a/docs/openapi.yaml ]; then
+            RESULT=$(oasdiff breaking \
+              /tmp/openapi-baseline/microservice-a.yaml \
+              microservice-a/docs/openapi.yaml \
+              --format text 2>&1 || true)
+            echo "${RESULT}"
+            COUNT=$(echo "${RESULT}" | grep -c "breaking" || echo 0)
+            echo "breaking_count_a=${COUNT}" >> $GITHUB_OUTPUT
+            if [ "${COUNT}" -gt "0" ]; then
+              echo "❌ BREAKING CHANGES detectados en microservice-a: ${COUNT}"
+              echo "msvc_a_status=FAILED" >> $GITHUB_OUTPUT
+            else
+              echo "✅ Sin breaking changes en microservice-a"
+              echo "msvc_a_status=PASSED" >> $GITHUB_OUTPUT
+            fi
+          else
+            echo "ℹ️ Spec OpenAPI no encontrada para microservice-a — saltando"
+            echo "msvc_a_status=SKIPPED" >> $GITHUB_OUTPUT
+            echo "breaking_count_a=0" >> $GITHUB_OUTPUT
+          fi
+
+      - name: "🔴 QG3 · Detectar Breaking Changes en microservice-b"
+        id: contract-msvc-b
+        continue-on-error: true
+        run: |
+          if [ -f /tmp/openapi-baseline/microservice-b.yaml ] && \
+             [ -f microservice-b/docs/openapi.yaml ]; then
+            RESULT=$(oasdiff breaking \
+              /tmp/openapi-baseline/microservice-b.yaml \
+              microservice-b/docs/openapi.yaml \
+              --format text 2>&1 || true)
+            echo "${RESULT}"
+            COUNT=$(echo "${RESULT}" | grep -c "breaking" || echo 0)
+            echo "breaking_count_b=${COUNT}" >> $GITHUB_OUTPUT
+            if [ "${COUNT}" -gt "0" ]; then
+              echo "❌ BREAKING CHANGES detectados en microservice-b: ${COUNT}"
+              echo "msvc_b_status=FAILED" >> $GITHUB_OUTPUT
+            else
+              echo "✅ Sin breaking changes en microservice-b"
+              echo "msvc_b_status=PASSED" >> $GITHUB_OUTPUT
+            fi
+          else
+            echo "ℹ️ Spec OpenAPI no encontrada para microservice-b — saltando"
+            echo "msvc_b_status=SKIPPED" >> $GITHUB_OUTPUT
+            echo "breaking_count_b=0" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Evaluar gate de contrato
+        id: check-contract
+        run: |
+          COUNT_A="${{ steps.contract-msvc-a.outputs.breaking_count_a || 0 }}"
+          COUNT_B="${{ steps.contract-msvc-b.outputs.breaking_count_b || 0 }}"
+          TOTAL=$(( COUNT_A + COUNT_B ))
+          echo "breaking_changes=${TOTAL}" >> $GITHUB_OUTPUT
+          echo "📊 Breaking changes totales: ${TOTAL} (microservice-a: ${COUNT_A}, microservice-b: ${COUNT_B})"
+          if [ "${TOTAL}" -gt "0" ]; then
+            echo "❌ QUALITY GATE 3 FALLÓ: ${TOTAL} breaking change(s) detectado(s)"
+            exit 1
+          fi
+          echo "✅ QUALITY GATE 3 SUPERADO: 0 breaking changes"
+
+
+  # ════════════════════════════════════════════════════════════════════════════
+  # JOB 4 · PERFORMANCE TESTING (k6 – smoke test ruta crítica)
+  # GATE: todos los thresholds k6 deben respetarse
+  #   - p95 flujo completo < 3s
+  #   - p95 login < 700ms
+  #   - p95 consulta < 900ms
+  #   - p95 actualización < 1200ms
+  #   - error rate < 1%
+  # ════════════════════════════════════════════════════════════════════════════
+  performance:
+    name: "4 · Performance — k6 Thresholds"
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    if: ${{ inputs.skip_performance != 'true' }}
+    outputs:
+      result: ${{ job.status }}
+      thresholds_passed: ${{ steps.run-k6.outputs.thresholds_passed }}
+
+    steps:
+      - name: Checkout código
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Login GHCR
+        run: |
+          echo "${{ secrets.GITHUB_TOKEN }}" \
+            | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+
+      - name: Iniciar entorno simulado (Docker Compose)
+        working-directory: simulation
+        timeout-minutes: 8
+        run: |
+          docker compose up -d --build --wait
+          echo "✅ Entorno de simulación listo para k6"
+
+      - name: Health check — microservice-a
+        run: |
+          curl --retry 10 --retry-delay 5 --retry-connrefused -sf \
+            http://localhost:8080/actuator/health | grep -q '"status":"UP"' \
+            && echo "✅ microservice-a healthy" \
+            || (echo "❌ microservice-a no responde"; exit 1)
+
+      - name: Instalar k6
+        run: |
+          sudo gpg --no-default-keyring \
+            --keyring /usr/share/keyrings/k6-archive-keyring.gpg \
+            --keyserver hkp://keyserver.ubuntu.com:80 \
+            --recv-keys C5AD17C747E3415A3642D57D77C6C491D6AC1D69
+          echo "deb [signed-by=/usr/share/keyrings/k6-archive-keyring.gpg] \
+            https://dl.k6.io/deb stable main" \
+            | sudo tee /etc/apt/sources.list.d/k6.list
+          sudo apt-get update -q
+          sudo apt-get install -yq k6
+
+      # QUALITY GATE 4: k6 falla automáticamente si algún threshold no se cumple
+      - name: "🔴 QG4 · Ejecutar k6 Smoke Test (thresholds habilitados)"
+        id: run-k6
+        run: |
+          mkdir -p tests/k6/results
+          set +e
+          k6 run \
+            --env BASE_URL=${{ env.BASE_URL }} \
+            --out json=tests/k6/results/smoke_summary.json \
+            tests/k6/smoke_recarga.js
+          K6_EXIT=$?
+          if [ ${K6_EXIT} -eq 0 ]; then
+            echo "thresholds_passed=true" >> $GITHUB_OUTPUT
+            echo "✅ QUALITY GATE 4 SUPERADO: todos los thresholds k6 OK"
+          elif [ ${K6_EXIT} -eq 99 ]; then
+            echo "thresholds_passed=false" >> $GITHUB_OUTPUT
+            echo "❌ QUALITY GATE 4 FALLÓ: uno o más thresholds k6 no cumplidos"
+          else
+            echo "thresholds_passed=false" >> $GITHUB_OUTPUT
+            echo "❌ k6 terminó con error (código: ${K6_EXIT})"
+          fi
+          exit ${K6_EXIT}
+
+      - name: Publicar resultados k6
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: qg-performance-${{ github.run_number }}
+          path: tests/k6/results/
+          retention-days: 30
+          if-no-files-found: warn
+
+      - name: Detener entorno simulado
+        if: always()
+        working-directory: simulation
+        run: docker compose down -v --remove-orphans
+
+
+  # ════════════════════════════════════════════════════════════════════════════
+  # JOB 5 · RPA — Automatización Web
+  # GATE: el flujo web debe completarse exitosamente (exit code 0)
+  # ════════════════════════════════════════════════════════════════════════════
+  rpa:
+    name: "5 · RPA — Flujo Web (Node/Playwright)"
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    if: ${{ inputs.skip_rpa != 'true' }}
+    outputs:
+      result: ${{ job.status }}
+
+    steps:
+      - name: Checkout código
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Configurar Node.js 20
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: rpa/package-lock.json
+
+      - name: Instalar dependencias RPA
+        working-directory: rpa
+        run: npm ci
+
+      - name: Instalar Playwright Chromium
+        working-directory: rpa
+        run: npx playwright install chromium --with-deps
+
+      # QUALITY GATE 5: flujo web debe completar sin error (exit code 0)
+      - name: "🔴 QG5 · Ejecutar Flujo RPA Web (Playwright)"
+        working-directory: rpa
+        env:
+          RPA_BASE_URL: ${{ secrets.SF_URL }}
+          RPA_USERNAME: ${{ secrets.SF_USERNAME }}
+          RPA_PASSWORD: ${{ secrets.SF_PASSWORD }}
+          RPA_SECURITY_TOKEN: ${{ secrets.SF_SECURITY_TOKEN }}
+          RPA_HEADLESS: "true"
+          RPA_SLOW_MO: "0"
+          RPA_RECORD_ID: "1"
+          RPA_TIMEOUT_MS: "30000"
+        run: |
+          node scripts/rpa-flow.js
+          echo "✅ QUALITY GATE 5 SUPERADO: flujo RPA completado exitosamente"
+
+      - name: Publicar evidencias RPA
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: qg-rpa-${{ github.run_number }}
+          path: rpa/results/
+          retention-days: 30
+          if-no-files-found: warn
+
+
+  # ════════════════════════════════════════════════════════════════════════════
+  # JOB 6 · QUALITY GATE CONSOLIDADO
+  # Evalúa los 5 gates y bloquea el pipeline si alguno falla.
+  # Genera un resumen detallado en GitHub Actions UI.
+  # ════════════════════════════════════════════════════════════════════════════
+  quality-gate:
+    name: "6 · Quality Gate Consolidado"
+    runs-on: ubuntu-latest
+    needs: [api-funcional, api-integracion, api-contrato, performance, rpa]
+    if: always()
+
+    steps:
+      # ── Evaluar GATE 1: API Funcional ─────────────────────────────────────
+      - name: "🔍 Gate 1 — API Testing Funcional (BLOQUEANTE)"
+        env:
+          RESULT: ${{ needs.api-funcional.result }}
+          PASSED: ${{ needs.api-funcional.outputs.tests_passed }}
+          FAILED: ${{ needs.api-funcional.outputs.tests_failed }}
+        run: |
+          echo "API Funcional result: ${RESULT}"
+          echo "  Tests pasados: ${PASSED:-?}"
+          echo "  Tests fallidos: ${FAILED:-?}"
+          if [ "${RESULT}" = "failure" ]; then
+            echo "❌ QUALITY GATE 1 FALLÓ: Smoke tests funcionales con errores"
+            echo "   Criterio: 0 smoke tests fallidos"
+            echo "   Resultado: ${FAILED:-desconocido} fallo(s)"
+            exit 1
+          elif [ "${RESULT}" = "success" ]; then
+            echo "✅ QUALITY GATE 1 SUPERADO: Todos los smoke tests pasaron (${PASSED:-?})"
+          else
+            echo "⚠️  Gate 1 estado: ${RESULT}"
+          fi
+
+      # ── Evaluar GATE 2: API Integración ──────────────────────────────────
+      - name: "🔍 Gate 2 — API Testing Integración (BLOQUEANTE)"
+        env:
+          RESULT: ${{ needs.api-integracion.result }}
+          PASSED: ${{ needs.api-integracion.outputs.tests_passed }}
+          FAILED: ${{ needs.api-integracion.outputs.tests_failed }}
+        run: |
+          echo "API Integración result: ${RESULT}"
+          echo "  Tests pasados: ${PASSED:-?}"
+          echo "  Tests fallidos: ${FAILED:-?}"
+          if [ "${RESULT}" = "failure" ]; then
+            echo "❌ QUALITY GATE 2 FALLÓ: Flujos E2E de integración con errores"
+            echo "   Criterio: todos los flujos E2E completan sin error"
+            echo "   Resultado: ${FAILED:-desconocido} fallo(s)"
+            exit 1
+          elif [ "${RESULT}" = "success" ]; then
+            echo "✅ QUALITY GATE 2 SUPERADO: Todos los flujos E2E completaron (${PASSED:-?})"
+          else
+            echo "⚠️  Gate 2 estado: ${RESULT}"
+          fi
+
+      # ── Evaluar GATE 3: API Contrato ──────────────────────────────────────
+      - name: "🔍 Gate 3 — API Testing Contrato (BLOQUEANTE)"
+        env:
+          RESULT: ${{ needs.api-contrato.result }}
+          BREAKING: ${{ needs.api-contrato.outputs.breaking_changes }}
+        run: |
+          echo "API Contrato result: ${RESULT}"
+          echo "  Breaking changes: ${BREAKING:-?}"
+          if [ "${RESULT}" = "failure" ]; then
+            echo "❌ QUALITY GATE 3 FALLÓ: Breaking changes detectados en OpenAPI"
+            echo "   Criterio: 0 breaking changes permitidos"
+            echo "   Resultado: ${BREAKING:-desconocido} breaking change(s)"
+            exit 1
+          elif [ "${RESULT}" = "success" ]; then
+            echo "✅ QUALITY GATE 3 SUPERADO: 0 breaking changes en contratos OpenAPI"
+          else
+            echo "⚠️  Gate 3 estado: ${RESULT}"
+          fi
+
+      # ── Evaluar GATE 4: Performance ───────────────────────────────────────
+      - name: "🔍 Gate 4 — Performance k6 Thresholds (BLOQUEANTE)"
+        env:
+          RESULT: ${{ needs.performance.result }}
+          THRESHOLDS_OK: ${{ needs.performance.outputs.thresholds_passed }}
+        run: |
+          echo "Performance result: ${RESULT}"
+          if [ "${RESULT}" = "failure" ]; then
+            echo "❌ QUALITY GATE 4 FALLÓ: Thresholds k6 no cumplidos"
+            echo "   Criterios:"
+            echo "     · p95 flujo completo < 3000ms"
+            echo "     · p95 login < 700ms"
+            echo "     · p95 consulta < 900ms"
+            echo "     · p95 actualización < 1200ms"
+            echo "     · error rate < 1%"
+            exit 1
+          elif [ "${RESULT}" = "success" ]; then
+            echo "✅ QUALITY GATE 4 SUPERADO: Todos los thresholds k6 respetados"
+          elif [ "${RESULT}" = "skipped" ]; then
+            echo "ℹ️  Gate 4 omitido (skip_performance=true)"
+          else
+            echo "⚠️  Gate 4 estado: ${RESULT}"
+          fi
+
+      # ── Evaluar GATE 5: RPA ───────────────────────────────────────────────
+      - name: "🔍 Gate 5 — RPA Flujo Web (BLOQUEANTE)"
+        env:
+          RESULT: ${{ needs.rpa.result }}
+        run: |
+          echo "RPA result: ${RESULT}"
+          if [ "${RESULT}" = "failure" ]; then
+            echo "❌ QUALITY GATE 5 FALLÓ: Flujo web RPA no completado"
+            echo "   Criterio: el flujo web debe completarse exitosamente"
+            exit 1
+          elif [ "${RESULT}" = "success" ]; then
+            echo "✅ QUALITY GATE 5 SUPERADO: Flujo web RPA completado exitosamente"
+          elif [ "${RESULT}" = "skipped" ]; then
+            echo "ℹ️  Gate 5 omitido (skip_rpa=true)"
+          else
+            echo "⚠️  Gate 5 estado: ${RESULT}"
+          fi
+
+      # ── Resumen consolidado en GitHub Actions UI ──────────────────────────
+      - name: Generar resumen de Quality Gates
+        if: always()
+        env:
+          R_FUNCIONAL: ${{ needs.api-funcional.result }}
+          R_INTEGRACION: ${{ needs.api-integracion.result }}
+          R_CONTRATO: ${{ needs.api-contrato.result }}
+          R_PERFORMANCE: ${{ needs.performance.result }}
+          R_RPA: ${{ needs.rpa.result }}
+          P_FUNCIONAL: ${{ needs.api-funcional.outputs.tests_passed }}
+          F_FUNCIONAL: ${{ needs.api-funcional.outputs.tests_failed }}
+          P_INTEGRACION: ${{ needs.api-integracion.outputs.tests_passed }}
+          F_INTEGRACION: ${{ needs.api-integracion.outputs.tests_failed }}
+          BREAKING: ${{ needs.api-contrato.outputs.breaking_changes }}
+        run: |
+          icon() {
+            case "$1" in
+              success) echo "✅";;
+              failure) echo "❌";;
+              skipped) echo "⏭️";;
+              *)        echo "⚠️";;
+            esac
+          }
+
+          {
+            echo "# 🏆 AT&T PoC QA — Quality Gates Report"
+            echo ""
+            echo "**Run:** \`${{ github.run_number }}\` | **Rama:** \`${{ github.ref_name }}\` | **Commit:** \`${{ github.sha }}\`"
+            echo ""
+            echo "## Resultados por Gate"
+            echo ""
+            echo "| # | Tipo de Prueba | Estado | Criterio | Detalle |"
+            echo "|---|----------------|--------|----------|---------|"
+            echo "| 1 | API Funcional (Smoke) | $(icon ${R_FUNCIONAL}) \`${R_FUNCIONAL}\` | 0 fallos | ✅ ${P_FUNCIONAL:-?} pasados / ❌ ${F_FUNCIONAL:-0} fallidos |"
+            echo "| 2 | API Integración (E2E) | $(icon ${R_INTEGRACION}) \`${R_INTEGRACION}\` | Todos E2E completan | ✅ ${P_INTEGRACION:-?} pasados / ❌ ${F_INTEGRACION:-0} fallidos |"
+            echo "| 3 | API Contrato (OpenAPI) | $(icon ${R_CONTRATO}) \`${R_CONTRATO}\` | 0 breaking changes | ${BREAKING:-?} breaking change(s) |"
+            echo "| 4 | Performance (k6) | $(icon ${R_PERFORMANCE}) \`${R_PERFORMANCE}\` | Todos los thresholds | p95<3s, login<700ms, consulta<900ms, error<1% |"
+            echo "| 5 | RPA Web (Playwright) | $(icon ${R_RPA}) \`${R_RPA}\` | Flujo completado | Verificar artefactos |"
+            echo ""
+            echo "## Thresholds k6 de Referencia"
+            echo ""
+            echo "| Métrica | Umbral máximo |"
+            echo "|---------|--------------|"
+            echo "| Flujo completo p95 | < 3000 ms |"
+            echo "| Login p95 | < 700 ms |"
+            echo "| Consulta cliente p95 | < 900 ms |"
+            echo "| Actualización/Recarga p95 | < 1200 ms |"
+            echo "| Error rate | < 1% |"
+            echo ""
+            echo "---"
+            echo "> 📁 Artefactos disponibles en la pestaña **Artifacts** de esta ejecución."
+          } >> $GITHUB_STEP_SUMMARY
+
+      # ── Notificación Slack en caso de fallo ───────────────────────────────
+      - name: "📢 Notificar fallo en Slack"
+        if: |
+          failure() &&
+          vars.SLACK_NOTIFICATIONS == 'true' &&
+          secrets.SLACK_WEBHOOK_URL != ''
+        env:
+          SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK_URL }}
+          R_FUNCIONAL: ${{ needs.api-funcional.result }}
+          R_INTEGRACION: ${{ needs.api-integracion.result }}
+          R_CONTRATO: ${{ needs.api-contrato.result }}
+          R_PERFORMANCE: ${{ needs.performance.result }}
+          R_RPA: ${{ needs.rpa.result }}
+        run: |
+          FAILED_GATES=""
+          [ "${R_FUNCIONAL}" = "failure" ]    && FAILED_GATES="${FAILED_GATES} API-Funcional"
+          [ "${R_INTEGRACION}" = "failure" ]  && FAILED_GATES="${FAILED_GATES} API-Integración"
+          [ "${R_CONTRATO}" = "failure" ]     && FAILED_GATES="${FAILED_GATES} API-Contrato"
+          [ "${R_PERFORMANCE}" = "failure" ]  && FAILED_GATES="${FAILED_GATES} Performance-k6"
+          [ "${R_RPA}" = "failure" ]          && FAILED_GATES="${FAILED_GATES} RPA-Web"
+
+          curl -s -X POST "${SLACK_WEBHOOK}" \
+            -H "Content-Type: application/json" \
+            --data "{
+              \"text\": \"❌ *Quality Gates FALLARON* — AT&T PoC QA\",
+              \"attachments\": [{
+                \"color\": \"danger\",
+                \"fields\": [
+                  {\"title\": \"Gates fallidos\", \"value\": \"${FAILED_GATES}\", \"short\": false},
+                  {\"title\": \"Rama\", \"value\": \"${{ github.ref_name }}\", \"short\": true},
+                  {\"title\": \"Run\", \"value\": \"#${{ github.run_number }}\", \"short\": true},
+                  {\"title\": \"URL\", \"value\": \"${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}\", \"short\": false}
+                ]
+              }]
+            }"
+
+      # ── Mensaje final ─────────────────────────────────────────────────────
+      - name: Resultado final del pipeline
+        if: success()
+        run: |
+          echo ""
+          echo "╔═══════════════════════════════════════════════════════╗"
+          echo "║  ✅  AT&T PoC QA — TODOS LOS QUALITY GATES SUPERADOS  ║"
+          echo "╠═══════════════════════════════════════════════════════╣"
+          echo "║  Gate 1 · API Funcional (Smoke)   : ${{ needs.api-funcional.result }}"
+          echo "║  Gate 2 · API Integración (E2E)   : ${{ needs.api-integracion.result }}"
+          echo "║  Gate 3 · API Contrato (OpenAPI)  : ${{ needs.api-contrato.result }}"
+          echo "║  Gate 4 · Performance (k6)        : ${{ needs.performance.result }}"
+          echo "║  Gate 5 · RPA Web (Playwright)    : ${{ needs.rpa.result }}"
+          echo "╠═══════════════════════════════════════════════════════╣"
+          echo "║  Rama  : ${{ github.ref_name }}"
+          echo "║  Commit: ${{ github.sha }}"
+          echo "╚═══════════════════════════════════════════════════════╝"
