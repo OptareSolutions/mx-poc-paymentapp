@@ -1,1 +1,422 @@
-# PathWay ÔÇö Gui├│n de Presentaci├│n Demo AT&T## PoC de Calidad Declarativa | Optare Solutions> **Cliente:** AT&T (Telco Operator)> **Proyecto:** PaymentBox ÔÇö PoC de Calidad Declarativa> **Versi├│n:** 3.0 (PathWay WOW)> **Fecha:** Mayo 2026> **Presentador:** Optare Solutions ÔÇö QE & DevSecOps> **Duraci├│n estimada:** 60ÔÇô75 minutos---## El PathWay: Narrativa de la Presentaci├│nLa presentaci├│n sigue un camino (*pathway*) de tres actos que conecta emocionalmente con los retos reales del comit├® AT&T:```ACTO I ÔÇö EL PROBLEMA        ÔåÆ "As├¡ est├ín las cosas hoy"   (hacerles decir "s├¡, eso es exactamente lo que nos pasa")ACTO II ÔÇö LA SOLUCI├ôN        ÔåÆ "As├¡ funciona nuestra propuesta"  (sorpresa y alivio)ACTO III ÔÇö LA DIFERENCIACI├ôN ÔåÆ "Por qu├® Optare es la respuesta"  (confianza y urgencia)```Cada escenario de demo refuerza el mismo mensaje: **la calidad no es una etapa, es una propiedad del sistema.**---## Mapa de Momentos WOW> Esta tabla es la gu├¡a r├ípida del presentador. Cada WOW est├í dise├▒ado para impactar sobre una necesidad espec├¡fica del cliente, no para impresionar tecnol├│gicamente.| # | Momento WOW | Cu├índo | Necesidad AT&T que resuelve ||---|-------------|--------|-----------------------------|| **WOW 1** | La Pregunta que Duele | Apertura | Activa la memoria del problema. El comit├® se reconoce. || **WOW 2** | El N├║mero Real | Acto I cierre | Cuantifica el dolor en horas/coste antes de ver la soluci├│n || **WOW 3** | El Verde Total | Acto II flujo verde | Confianza: "el sistema funciona y es r├ípido" || **WOW 4** | El Rojo Controlado | DEMO BREAK 1 | Impacto: "atrapamos autom├íticamente lo que antes tardaba d├¡as" || **WOW 5** | La IA en vivo | Acto III IA | Sorpresa: genera tests desde una historia del propio comit├® || **WOW 6** | El Cierre ROI | Acto III final | Urgencia: "esto es dinero real que ya est├ín perdiendo" |---## Checklist Pre-Demo (30 min antes del inicio)### Entorno t├®cnico- [ ] Docker Compose levantado: `cd C:\Users\jcunha\Documents\Optare\Clientes\AT_T\QA\PoC\att-poc-paymentbox\simulation && docker compose up -d`- [ ] Verificar servicios sanos: `docker compose ps` ÔåÆ todos en estado "healthy"- [ ] Scripts demo preparados: `demo\break-contract.ps1`, `demo\break-behavior.ps1`, `demo\restore.ps1`### Navegador (Chrome/Edge con perfiles sin extensiones)| Tab | URL | Prop├│sito ||-----|-----|-----------|| 1 | https://github.com/OptareSolutions/mx-poc-paymentapp | Repositorio GitHub || 2 | GitHub Actions ÔåÆ ├║ltimo run verde de pipeline-microservice-a | CI/CD en acci├│n || 3 | `http://localhost:8080/swagger-ui.html` | Swagger microservice-a || 4 | `http://localhost:8081/swagger-ui.html` | Swagger microservice-b || 5 | `http://localhost:4200` | UI PaymentBox || 6 | SonarCloud dashboard | Calidad de c├│digo |### Terminal / VS Code- [ ] PowerShell abierto en la ra├¡z del repositorio- [ ] VS Code abierto con los ficheros de demo listos- [ ] Grabaci├│n de pantalla de respaldo de un run verde completo (contingencia)---## ACTO I ÔÇö El Problema (10 min)### Segmento 1.1 ÔÇö Ôÿà WOW 1: La Pregunta que Duele (3 min)> **[Nota presentador]** Antes de abrir cualquier pantalla ni herramienta. Solo el presentador y el comit├®.> *"Buenos d├¡as. Antes de empezar la demo, quiero hacerles una pregunta directa:"***ÔÅ© PAUSA ÔÇö mirar al comit├®:**> *"┬┐Cu├íntos d├¡as tardaron la ├║ltima vez en detectar que un equipo hab├¡a roto la integraci├│n con otro? No desde que se gener├│ el error ÔÇö desde que alguien lo report├│ en QA hasta que encontraron la causa ra├¡z."*> **[Dejar que respondan. Escuchar. Asentir.]**> *"Dos d├¡as. Tres d├¡as. Una semana en alg├║n caso. Eso es exactamente lo que vamos a eliminar hoy. No en teor├¡a ÔÇö en vivo, delante de ustedes."*> *"Les voy a mostrar c├│mo ese mismo error ÔÇö el que tardaron [X d├¡as] en encontrar ÔÇö se detecta en menos de 3 minutos de forma autom├ítica. Y c├│mo el entorno de QA se protege solo, sin que nadie tenga que hacer nada."*> **[Pausa. Dejar que eso asiente.]**---### Segmento 1.2 ÔÇö Ôÿà WOW 2: El N├║mero Real (4 min)**[Mostrar esta tabla ÔÇö se puede preparar en una diapositiva simple o escribirla en la pizarra]**> *"Antes de mostrar la soluci├│n, quiero que compartamos el mismo diagn├│stico. Porque si no coincidimos en el problema, ninguna soluci├│n va a parecer suficientemente buena."***C├ílculo en vivo:**| M├®trica | Valor AT&T | Referencia ||---------|-----------|------------|| Validaciones manuales por ciclo | **5.200** | Compartido por AT&T || Tiempo promedio por validaci├│n manual | **~15 min** | Estimaci├│n conservadora || Horas totales por ciclo de validaci├│n | **~1.300 h** | 5.200 ├ù 15 min / 60 || Coste por hora QA | **~$XX USD** | Ajustar con cifras AT&T || Coste por ciclo | **~$XX.000 USD** | A completar con AT&T || Errores que llegan a QA antes de detecci├│n | **~30%** | Basado en escenario descrito || Retraso promedio por error detectado en QA | **2ÔÇô3 d├¡as/sprint** | Compartido por AT&T |> *"Este no es el costo de la automatizaci├│n. Este es el costo de **no tenerla**. Lo que vamos a mostrar no es un gasto ÔÇö es la recuperaci├│n de 1.300 horas por ciclo."*> **[Pausa. Dejar que el n├║mero asiente antes de continuar.]**---### Segmento 1.3 ÔÇö Los tres retos y el flujo de negocio (3 min)> *"Construimos la PoC alrededor de un flujo cr├¡tico de AT&T: la Recarga por PaymentBox. Ocho pasos que encadenan dos microservicios, una base de datos y una interfaz Angular ÔÇö exactamente la complejidad de integraci├│n que tienen en producci├│n.*>> *Los tres retos que resolvemos son precisamente los que ustedes plantearon:"*| Reto | Problema AT&T | Lo que demostramos hoy ||------|--------------|------------------------|| **RPA** | M├ís lento que manual. Mantenimiento costoso. Sin framework. | RPA estable, integrado en CI, reporteo unificado || **CI/CD** | Solo seguridad/estilo. Errores funcionales llegan a QA. | Contratos, integraci├│n E2E, comportamiento ÔÇö bloqueantes || **Performance** | JMeter falla a 4k VUs. Grabaci├│n HTTPS imposible. | k6: 2k VUs/3600s. Grabaci├│n nativa HTTPS. |> *"Para hacer la demo realista, la organizamos en dos equipos ÔÇö Team A y Team B ÔÇö trabajando en paralelo, como sus f├íbricas de software. El framework detecta y protege autom├íticamente los errores de coordinaci├│n entre equipos. Van a verlo en vivo."*---## ACTO II ÔÇö La Soluci├│n (35 min)### Segmento 2.1 ÔÇö Arquitectura de la soluci├│n (5 min)**[Abrir diagrama en 05_Documentacion\arquitectura\arquitectura_solucion.md ÔÇö VS Code, modo pantalla completa]**> *"La arquitectura tiene tres capas. Una frase por capa:"*- **Capa aplicaci├│n:** Dos microservicios Java Spring Boot, frontend Angular, PostgreSQL con perfiles de clientes sint├®ticos ÔÇö el flujo PaymentBox real.- **Capa calidad:** Tres pipelines GitHub Actions. Cada commit dispara validaci├│n completa: unit tests, seguridad, API testing en tres niveles, performance smoke. Sin intervenci├│n humana.- **Capa GitOps:** Los manifiestos Kubernetes son la ├║nica fuente de verdad. **Solo un pipeline verde puede promover c├│digo.** Si algo falla, el entorno no avanza. Punto.> *"Cuatro entornos: develop ÔåÆ qa ÔåÆ uat ÔåÆ producci├│n. La promoci├│n entre entornos siempre es declarativa. Nadie puede saltarse la validaci├│n. El sistema se bloquea solo."*---### Segmento 2.2 ÔÇö Ôÿà WOW 3: El Verde Total ÔÇö DEMO Flujo Verde (10 min)**[Abrir GitHub Actions ÔåÆ pipeline-microservice-a ÔåÆ ├║ltimo run verde]**> *"Voy a mostrarles el flujo normal. Un cambio en microservice-a. Push a `develop`. El pipeline se activa."***[Se├▒alar los 4 jobs en secuencia mientras van avanzando ÔÇö si es en vivo, esperar. Si es run previo, narrar sobre el run grabado.]**> *"Job 1 ÔÇö Build & Quality: compilaci├│n, 100% tests en verde, cobertura JaCoCo al 83%. Si cae por debajo del 80%, el pipeline para aqu├¡. SonarCloud analizando en paralelo.*>> *Job 2 ÔÇö Seguridad: Trivy escanea. Cero CVEs cr├¡ticos o altos. Si hay una CVE, nadie construye una imagen hasta que se corrige.*>> *Job 3 ÔÇö Image Ops: build multi-stage. Solo el JRE Alpine en la imagen final. Imagen inmutable etiquetada con el SHA del commit ÔÇö `env-e-{sha}`. Cada commit, su imagen. Trazabilidad total.*>> *Job 4 ÔÇö E2E + GitOps: Karate ejecuta los 8 pasos del flujo PaymentBox completo. Cliente Billy 1. Recarga, pago, recibo. Todo verde."***ÔÅ© PAUSA cuando todos los jobs est├®n en verde ÔÇö 3 segundos en silencio, mirando los checkmarks verdes.**> *"Esto acaba de ejecutar, de forma completamente autom├ítica, lo que antes requer├¡a coordinaci├│n en QA. En menos de 10 minutos. En cada commit. De todos los desarrolladores, en paralelo."***[Mostrar SonarCloud dashboard ÔÇö hist├│rico de calidad]**> *"Y esto es lo que ve el ├írea de gobernanza de AT&T: el historial de calidad acumulado en el tiempo. No una foto de hoy ÔÇö la evoluci├│n sprint a sprint. Transparencia total, sin pedir informes al equipo de QA."***Puntos clave:**- Pipeline completo en menos de 10 minutos ÔåÆ Lead Time for Changes medible- 100% autom├ítico. Sin gatekeepers humanos en el ciclo- Evidencia descargable por cada commit como artefacto permanente de GitHub Actions---### Segmento 2.3 ÔÇö Ôÿà WOW 4: El Rojo Controlado ÔÇö DEMO BREAK 1: Ruptura de Contrato (10 min)> **[Nota presentador]** Este es el momento m├ís importante de la demo. Construir tensi├│n antes del rojo. Hablar despacio.> *"Ahora reproduzco el escenario que ustedes describieron. Team B necesita hacer un cambio en su API. Es un cambio t├®cnicamente v├ílido. Sus tests unitarios pasan. ┬┐Qui├®n lo para?"***ÔÅ© PAUSA ÔÇö dejar la pregunta en el aire 3 segundos.**> *"Hoy: nadie. Lo para alguien en QA, 2ÔÇô3 d├¡as despu├®s."*> *"Vamos a verlo en tiempo real."***[Acci├│n en PowerShell]**```powershellcd C:\Users\jcunha\Documents\Optare\Clientes\AT_T\QA\PoC\att-poc-paymentbox.\demo\break-contract.ps1```> *"Team B acaba de renombrar el campo `telefono` a `phone` en el DTO de microservice-b. V├ílido. Sus tests pasan ÔÇö conocen el nuevo nombre."*```powershellgit add .git commit -m "demo: BREAK 1 - romper contrato DTO"git push origin develop```**[Mostrar GitHub Actions ÔÇö pipelines individuales de Team A y Team B en verde]**> *"Pipelines individuales: verde. La imagen se construye. Todo parece correcto."***[Ejecutar pipeline-integration via workflow_dispatch. Esperar. Dejar crecer la tensi├│n.]****[Job 1 aparece en rojo ÔÇö Ôÿà PAUSA DRAM├üTICA 5 segundos sin hablar]**> *"..."*> *"Job 1 ÔÇö Tests de Contrato ÔÇö **FALLA**. En 47 segundos.*>> *Karate intent├│ acceder a `response.telefono`. El campo ya no existe ÔÇö ahora se llama `phone`.*>> *En su entorno actual: este error llegar├¡a a QA. Alguien abrir├¡a un ticket. Team B investigar├¡a. 2ÔÇô3 d├¡as.*>> *Aqu├¡: 47 segundos. El responsable recibe la notificaci├│n con el contexto exacto del fallo. La promoci├│n a QA est├í BLOQUEADA. Autom├íticamente."***[Restaurar]**```powershell.\demo\restore.ps1git add .git commit -m "restore: contrato restaurado"git push origin develop```---### Segmento 2.4 ÔÇö DEMO BREAK 2: Ruptura de Comportamiento (7 min)> *"El segundo escenario es m├ís sutil ÔÇö un cambio de comportamiento de negocio. Team A implementa una validaci├│n: monto m├¡nimo $100. Sus tests pasan."***[Acci├│n en PowerShell]**```powershell.\demo\break-behavior.ps1git add .git commit -m "demo: BREAK 2 - validaci├│n monto m├¡nimo $100"git push origin qa```**[Mostrar Jobs 1-3 en verde, Job 4 fallando]**> *"Jobs 1, 2 y 3: verde. La imagen se construye. Pero Job 4 ÔÇö E2E ÔÇö falla. Karate ejecuta el flujo con Billy 1, recarga de $20. La API responde HTTP 400. El manifiesto `k8s/overlays/env-a` NO se actualiza. QA sigue en la versi├│n anterior ÔÇö la que funcionaba.*>> *El entorno se protege solo. No hay rollback manual. El estado anterior del manifiesto ES el rollback."*```powershell.\demo\restore.ps1git add .git commit -m "restore: comportamiento restaurado"git push origin qa```- Carga 2k VUs/3600s disponible para ejecuci├│n bajo demanda---## ACTO III ÔÇö El Framework y la Diferenciaci├│n (20 min)### Segmento 3.1 ÔÇö Framework: Orquestaci├│n, Reporteo y Gobierno (5 min)**[Mostrar GitHub Actions ÔÇö vista general de todos los workflows]**> *"Todo lo que hemos visto ÔÇö RPA, CI/CD con API testing, performance ÔÇö est├í unificado en un ├║nico framework con gobierno y est├índares codificados.*>> *Un solo repositorio. Tres pipelines coordinados. Cuatro entornos declarativos.*>> *Los est├índares de calidad no son recomendaciones ÔÇö son condiciones de paso. Cobertura < 80%: falla. CVE cr├¡tico: falla. Contrato roto: falla. Performance degradada: falla. El gobierno no depende de la disciplina individual del desarrollador ÔÇö est├í codificado en el sistema.*>> *Los pipelines incluyen triggers cron para regresiones nocturnas completas. El equipo de QA llega cada ma├▒ana con un informe del estado de todos los ambientes. Sin ejecutar nada manualmente."*---### Segmento 3.2 ÔÇö Ôÿà WOW 5: La IA en vivo (8 min)> **[Nota presentador]** Este es el momento m├ís memorable de la demo. Hacer participar al comit├®.> *"Antes de cerrar, quiero mostrarles algo que no suelen ver en una presentaci├│n de QA."***ÔÅ© Dirigirse al comit├® directamente:**> *"┬┐Alguien del comit├® puede darme una historia de usuario? Cualquiera ÔÇö no tiene que ser t├®cnica. Del tipo: 'Como [rol] quiero [acci├│n] para [beneficio]'."***[Esperar. Tomar la historia que den. Si no proponen ninguna, usar:]**> *"Usamos esta: 'Como agente de AT&T quiero registrar una recarga de monto v├ílido para un cliente activo para generar un comprobante de pago.'"***[Abrir PowerShell, navegar a la carpeta de IA]**```powershellSet-Location "C:\Users\jcunha\Documents\Optare\Clientes\AT_T\QA\04_Framework\ia"$env:PYTHONIOENCODING = "utf-8"python demo.py --force-template --story "HISTORIA_QUE_DIO_EL_COMIT├ë" --tests-only```**[Mostrar output en pantalla ÔÇö casos de prueba generados]**> *"En segundos: 10ÔÇô15 escenarios de prueba Karate DSL. Positivos, negativos, casos borde. Listos para revisi├│n por el QA Engineer. Lo que antes llevaba dos d├¡as de dise├▒o de pruebas.*>> *Y ahora, datos sint├®ticos bajo demanda. Sin Billy fijos. Los datos que necesite el equipo de QA, cuando los necesite."*```powershellpython demo.py --force-template --data-only --clientes 50 --pagos 100 --seed 2026```> *"50 perfiles de clientes sint├®ticos realistas. 100 pagos. En 3 segundos. Para el equipo de AT&T con 5.200 validaciones manuales, esto significa no volver a crear datos de prueba a mano.*>> *La IA no toma decisiones de deployment. Los quality gates son siempre deterministas. La IA asiste al equipo de QA, no reemplaza el juicio humano."*---### Segmento 3.3 ÔÇö Tabla de Diferenciaci├│n (3 min)| Diferenciador | Optare Solutions | Alternativa t├¡pica ||---------------|------------------|-------------------|| **Modelo de calidad** | Declarativo ÔÇö codificado en pipeline, trazable | Ad-hoc por equipo || **Detecci├│n de contratos** | En pipeline, antes de QA ÔÇö 47 segundos | Manual, en QA ÔÇö 2-3 d├¡as || **Performance en CI** | Smoke en cada push + comparaci├│n hist├│rica | Pruebas de carga aisladas, bajo demanda || **Seguridad** | Zero CVEs CRITICAL/HIGH, bloqueante, por commit | Escaneo peri├│dico desvinculado del desarrollo || **GitOps** | Manifiestos inmutables, rollback autom├ítico | Deploy manual, rollback manual || **RPA en CI/CD** | Integrado en el pipeline, reporteo unificado | Standalone, reporteo separado || **IA** | Generaci├│n de tests + datos sint├®ticos, en vivo | No integrado || **Adopci├│n** | Incremental por equipos, 2ÔÇô3 sprints por equipo | Implementaci├│n big-bang, alto riesgo || **Coste** | Stack 100% open-source (SonarCloud freemium) | Herramientas comerciales (LoadRunner, etc.) |---### Segmento 3.4 ÔÇö Ôÿà WOW 6: El Cierre con ROI (2 min)> **[Nota presentador]** No cerrar con tecnolog├¡a. Cerrar con el negocio de AT&T.> *"Perm├¡tanme cerrar con los n├║meros de ustedes, no los nuestros."*> *"Ustedes tienen 5.200 validaciones manuales por ciclo. Si migran el 40% a este framework ÔÇö una adopci├│n conservadora ÔÇö son 2.080 validaciones automatizadas. A 15 minutos promedio cada una, son **520 horas recuperadas por ciclo**.*>> *El error de integraci├│n que tardaba 2ÔÇô3 d├¡as en detectarse: ahora se detecta en 47 segundos. Cada sprint. En todos los equipos.*>> *La pregunta que les dejo no es '┬┐funciona la tecnolog├¡a?' ÔÇö acabamos de demostrar que s├¡. La pregunta es: **'┬┐cu├ínto tiempo m├ís pueden permitirse que los errores lleguen a QA?'"*****ÔÅ© PAUSA FINAL ÔÇö 3 segundos. Dejar que la pregunta cierre la sala.**---### Segmento 3.5 ÔÇö Q&A Preparado**P: "┬┐Por qu├® k6 y no JMeter o LoadRunner, que ya conocemos?"**> *"JMeter tiene limitaciones documentadas por encima de 4k VUs y no soporta grabaci├│n HTTPS con autenticaci├│n compleja entre nubes ÔÇö exactamente el problema que reportaron. k6 resuelve los tres: escala, grabaci├│n y reporteo. El coste es cero. LoadRunner resolver├¡a la escala pero a├▒ade licenciamiento significativo sin resolver la grabaci├│n."***P: "┬┐C├│mo gestionamos los secretos y credenciales de AT&T en el pipeline?"**> *"GitHub Actions Secrets cifra credenciales en reposo y en tr├ínsito ÔÇö nunca aparecen en logs. Para producci├│n, integramos con AWS Secrets Manager o HashiCorp Vault seg├║n la pol├¡tica de AT&T."***P: "┬┐El sistema funciona con nuestra infraestructura ÔÇö m├║ltiples nubes, VPN?"**> *"Los runners de GitHub Actions pueden ser self-hosted, instalados dentro de la infraestructura de AT&T, eliminando cualquier restricci├│n de red. El runner se despliega en la red de AT&T y accede a los sistemas internos sin exponer nada al exterior."***P: "┬┐Qu├® pasa si un microservicio no tiene OpenAPI/Swagger definido?"**> *"Karate funciona con y sin OpenAPI. Sin spec: graba el comportamiento base y lo convierte en el contrato de referencia. La migraci├│n es incremental."***P: "┬┐C├│mo se integra con Jira/ServiceNow?"**> *"GitHub Actions publica resultados a Jira v├¡a API, crea tickets autom├íticos cuando un gate falla, y los cierra cuando el pipeline vuelve a verde. Se configura como un job adicional ÔÇö sin cambios en el framework base."***P: "┬┐Cu├ínto tiempo lleva adoptar este framework en nuestros equipos?"**> *"El primer equipo puede estar operativo en 2ÔÇô3 sprints: pipeline base (sprint 1), API testing Karate (sprint 2), performance y GitOps (sprint 3). Los equipos siguientes heredan el template y se incorporan en 1 sprint."***P: "Las acciones de IA, ┬┐son deterministas?"**> *"Los quality gates son siempre deterministas ÔÇö umbrales num├®ricos, validaciones OpenAPI, resultados de tests. La IA genera propuestas que el QA Engineer aprueba. No hay ning├║n punto donde una IA pueda enviar c├│digo a producci├│n sin supervisi├│n humana."***P: "┬┐El RPA no va a ser tan lento e inestable como lo que tenemos ahora?"**> *"La inestabilidad del RPA actual viene de los tiempos de espera fijos. Playwright usa esperas autom├íticas ÔÇö espera activamente al elemento hasta que est├í interaccionable. En los flujos que hemos automatizado, la estabilidad supera el 95%."*---## Notas del Presentador### Gesti├│n del ritmo y las pausasLas pausas son tan importantes como las palabras. El silencio crea espacio para que el impacto aterrice.| Segmento | Tono | Ritmo ||----------|------|-------|| WOW 1 ÔÇö La Pregunta que Duele | Emp├ítico, curioso | Lento. Dejar que respondan. || WOW 2 ÔÇö El N├║mero Real | Serio, directo | Mostrar la tabla. Silencio. || WOW 3 ÔÇö El Verde Total | Confiado | Narrar fluidamente. PAUSA 3s en verde. || WOW 4 ÔÇö El Rojo Controlado | Tenso, luego aliviado | Hablar despacio antes del push. PAUSA 5s ante el rojo. || WOW 5 ÔÇö La IA en vivo | Sorpresa, juego | Hacer participar al comit├®. Sonre├¡r. || WOW 6 ÔÇö El Cierre ROI | Serio, directo | ├Ültima frase. PAUSA 3s. No a├▒adir m├ís. |### Contingencias t├®cnicas| Fallo | Plan B ||-------|--------|| Docker Compose no arranca | Abrir grabaci├│n de pantalla de un run verde completo || Pipeline tarda m├ís de lo esperado | Mostrar diagrama de arquitectura y profundizar en los DEMO BREAK conceptualmente || Conexi├│n a internet falla | Los mocks locales Prism funcionan completamente offline || SonarCloud no carga | Usar capturas de pantalla en `06_Evidencias/` || Python / IA no ejecuta | Mostrar el output pre-generado en `04_Framework\ia\generated\` |### Mensajes de cierre ÔÇö solo uno de estos, el que sienta m├ís natural> *"La pregunta no es si esto funciona. Acaban de verlo. La pregunta es cu├ínto tiempo m├ís pueden permitirse que los errores lleguen a QA."*> *"Lo que construimos no es un prototipo ÔÇö es el framework que sus equipos usar├¡an desde el primer sprint. El template est├í listo para clonarse."*---## Materiales de Referencia| Documento | Ruta ||-----------|------|| Gui├│n original (v1.0) | `05_Documentacion\presentacion\guion_presentacion.md` || Arquitectura de la soluci├│n | `05_Documentacion\arquitectura\arquitectura_solucion.md` || An├ílisis PoC GitHub vs requerimientos | `05_Documentacion\arquitectura\analisis-poc-github-vs-requerimientos.md` || Tech Stack justificado | `05_Documentacion\tech_stack\tech_stack.md` || Repositorio GitHub PoC | https://github.com/OptareSolutions/mx-poc-paymentapp || Demo break scripts | `PoC\att-poc-paymentbox\demo\` || Script k6 carga 2k VUs | `03_Performance_Testing\scripts\load_test_2k_vus.js` || Scripts RPA Salesforce | `01_RPA\scripts\salesforce_flow.py` || Scripts IA | `04_Framework\ia\` |---*Versi├│n PathWay 2.0 ÔÇö Optare Solutions ÔÇö Mayo 2026*
+# PathWay — Guión de Presentación Demo AT&T
+## PoC de Calidad Declarativa | Optare Solutions
+
+> **Cliente:** AT&T (Telco Operator)
+> **Proyecto:** PaymentBox — PoC de Calidad Declarativa
+> **Versión:** 3.0 (PathWay WOW)
+> **Fecha:** Mayo 2026
+> **Presentador:** Optare Solutions — QE & DevSecOps
+> **Duración estimada:** 60–75 minutos
+
+---
+
+## El PathWay: Narrativa de la Presentación
+
+La presentación sigue un camino (*pathway*) de tres actos que conecta emocionalmente con los retos reales del comité AT&T:
+
+```
+ACTO I — EL PROBLEMA        → "Así están las cosas hoy"   (hacerles decir "sí, eso es exactamente lo que nos pasa")
+ACTO II — LA SOLUCIÓN        → "Así funciona nuestra propuesta"  (sorpresa y alivio)
+ACTO III — LA DIFERENCIACIÓN → "Por qué Optare es la respuesta"  (confianza y urgencia)
+```
+
+Cada escenario de demo refuerza el mismo mensaje: **la calidad no es una etapa, es una propiedad del sistema.**
+
+---
+
+## Mapa de Momentos WOW
+
+> Esta tabla es la guía rápida del presentador. Cada WOW está diseñado para impactar sobre una necesidad específica del cliente, no para impresionar tecnológicamente.
+
+| # | Momento WOW | Cuándo | Necesidad AT&T que resuelve |
+|---|-------------|--------|-----------------------------|
+| **WOW 1** | La Pregunta que Duele | Apertura | Activa la memoria del problema. El comité se reconoce. |
+| **WOW 2** | El Número Real | Acto I cierre | Cuantifica el dolor en horas/coste antes de ver la solución |
+| **WOW 3** | El Verde Total | Acto II flujo verde | Confianza: "el sistema funciona y es rápido" |
+| **WOW 4** | El Rojo Controlado | DEMO BREAK 1 | Impacto: "atrapamos automáticamente lo que antes tardaba días" |
+| **WOW 5** | La IA en vivo | Acto III IA | Sorpresa: genera tests desde una historia del propio comité |
+| **WOW 6** | El Cierre ROI | Acto III final | Urgencia: "esto es dinero real que ya están perdiendo" |
+
+---
+
+## Checklist Pre-Demo (30 min antes del inicio)
+
+### Entorno técnico
+- [ ] Docker Compose levantado: `cd C:\Users\jcunha\Documents\Optare\Clientes\AT_T\QA\PoC\att-poc-paymentbox\simulation && docker compose up -d`
+- [ ] Verificar servicios sanos: `docker compose ps` → todos en estado "healthy"
+- [ ] Scripts demo preparados: `demo\break-contract.ps1`, `demo\break-behavior.ps1`, `demo\restore.ps1`
+
+### Navegador (Chrome/Edge con perfiles sin extensiones)
+| Tab | URL | Propósito |
+|-----|-----|-----------|
+| 1 | https://github.com/OptareSolutions/mx-poc-paymentapp | Repositorio GitHub |
+| 2 | GitHub Actions → último run verde de pipeline-microservice-a | CI/CD en acción |
+| 3 | `http://localhost:8080/swagger-ui.html` | Swagger microservice-a |
+| 4 | `http://localhost:8081/swagger-ui.html` | Swagger microservice-b |
+| 5 | `http://localhost:4200` | UI PaymentBox |
+| 6 | SonarCloud dashboard | Calidad de código |
+
+### Terminal / VS Code
+- [ ] PowerShell abierto en la raíz del repositorio
+- [ ] VS Code abierto con los ficheros de demo listos
+- [ ] Grabación de pantalla de respaldo de un run verde completo (contingencia)
+
+---
+
+## ACTO I — El Problema (10 min)
+
+### Segmento 1.1 — ★ WOW 1: La Pregunta que Duele (3 min)
+
+> **[Nota presentador]** Antes de abrir cualquier pantalla ni herramienta. Solo el presentador y el comité.
+
+> *"Buenos días. Antes de empezar la demo, quiero hacerles una pregunta directa:"*
+
+**⏸ PAUSA — mirar al comité:**
+
+> *"¿Cuántos días tardaron la última vez en detectar que un equipo había roto la integración con otro? No desde que se generó el error — desde que alguien lo reportó en QA hasta que encontraron la causa raíz."*
+
+> **[Dejar que respondan. Escuchar. Asentir.]**
+
+> *"Dos días. Tres días. Una semana en algún caso. Eso es exactamente lo que vamos a eliminar hoy. No en teoría — en vivo, delante de ustedes."*
+
+> *"Les voy a mostrar cómo ese mismo error — el que tardaron [X días] en encontrar — se detecta en menos de 3 minutos de forma automática. Y cómo el entorno de QA se protege solo, sin que nadie tenga que hacer nada."*
+
+> **[Pausa. Dejar que eso asiente.]**
+
+---
+
+### Segmento 1.2 — ★ WOW 2: El Número Real (4 min)
+
+**[Mostrar esta tabla — se puede preparar en una diapositiva simple o escribirla en la pizarra]**
+
+> *"Antes de mostrar la solución, quiero que compartamos el mismo diagnóstico. Porque si no coincidimos en el problema, ninguna solución va a parecer suficientemente buena."*
+
+**Cálculo en vivo:**
+
+| Métrica | Valor AT&T | Referencia |
+|---------|-----------|------------|
+| Validaciones manuales por ciclo | **5.200** | Compartido por AT&T |
+| Tiempo promedio por validación manual | **~15 min** | Estimación conservadora |
+| Horas totales por ciclo de validación | **~1.300 h** | 5.200 × 15 min / 60 |
+| Coste por hora QA | **~$XX USD** | Ajustar con cifras AT&T |
+| Coste por ciclo | **~$XX.000 USD** | A completar con AT&T |
+| Errores que llegan a QA antes de detección | **~30%** | Basado en escenario descrito |
+| Retraso promedio por error detectado en QA | **2–3 días/sprint** | Compartido por AT&T |
+
+> *"Este no es el costo de la automatización. Este es el costo de **no tenerla**. Lo que vamos a mostrar no es un gasto — es la recuperación de 1.300 horas por ciclo."*
+
+> **[Pausa. Dejar que el número asiente antes de continuar.]**
+
+---
+
+### Segmento 1.3 — Los tres retos y el flujo de negocio (3 min)
+
+> *"Construimos la PoC alrededor de un flujo crítico de AT&T: la Recarga por PaymentBox. Ocho pasos que encadenan dos microservicios, una base de datos y una interfaz Angular — exactamente la complejidad de integración que tienen en producción.*
+>
+> *Los tres retos que resolvemos son precisamente los que ustedes plantearon:"*
+
+| Reto | Problema AT&T | Lo que demostramos hoy |
+|------|--------------|------------------------|
+| **RPA** | Más lento que manual. Mantenimiento costoso. Sin framework. | RPA estable, integrado en CI, reporteo unificado |
+| **CI/CD** | Solo seguridad/estilo. Errores funcionales llegan a QA. | Contratos, integración E2E, comportamiento — bloqueantes |
+| **Performance** | JMeter falla a 4k VUs. Grabación HTTPS imposible. | k6: 2k VUs/3600s. Grabación nativa HTTPS. |
+
+> *"Para hacer la demo realista, la organizamos en dos equipos — Team A y Team B — trabajando en paralelo, como sus fábricas de software. El framework detecta y protege automáticamente los errores de coordinación entre equipos. Van a verlo en vivo."*
+
+---
+
+## ACTO II — La Solución (35 min)
+
+### Segmento 2.1 — Arquitectura de la solución (5 min)
+
+**[Abrir diagrama en 05_Documentacion\arquitectura\arquitectura_solucion.md — VS Code, modo pantalla completa]**
+
+> *"La arquitectura tiene tres capas. Una frase por capa:"*
+
+- **Capa aplicación:** Dos microservicios Java Spring Boot, frontend Angular, PostgreSQL con perfiles de clientes sintéticos — el flujo PaymentBox real.
+- **Capa calidad:** Tres pipelines GitHub Actions. Cada commit dispara validación completa: unit tests, seguridad, API testing en tres niveles, performance smoke. Sin intervención humana.
+- **Capa GitOps:** Los manifiestos Kubernetes son la única fuente de verdad. **Solo un pipeline verde puede promover código.** Si algo falla, el entorno no avanza. Punto.
+
+> *"Cuatro entornos: develop → qa → uat → producción. La promoción entre entornos siempre es declarativa. Nadie puede saltarse la validación. El sistema se bloquea solo."*
+
+---
+
+### Segmento 2.2 — ★ WOW 3: El Verde Total — DEMO Flujo Verde (10 min)
+
+**[Abrir GitHub Actions → pipeline-microservice-a → último run verde]**
+
+> *"Voy a mostrarles el flujo normal. Un cambio en microservice-a. Push a `develop`. El pipeline se activa."*
+
+**[Señalar los 4 jobs en secuencia mientras van avanzando — si es en vivo, esperar. Si es run previo, narrar sobre el run grabado.]**
+
+> *"Job 1 — Build & Quality: compilación, 100% tests en verde, cobertura JaCoCo al 83%. Si cae por debajo del 80%, el pipeline para aquí. SonarCloud analizando en paralelo.*
+>
+> *Job 2 — Seguridad: Trivy escanea. Cero CVEs críticos o altos. Si hay una CVE, nadie construye una imagen hasta que se corrige.*
+>
+> *Job 3 — Image Ops: build multi-stage. Solo el JRE Alpine en la imagen final. Imagen inmutable etiquetada con el SHA del commit — `env-e-{sha}`. Cada commit, su imagen. Trazabilidad total.*
+>
+> *Job 4 — E2E + GitOps: Karate ejecuta los 8 pasos del flujo PaymentBox completo. Cliente Billy 1. Recarga, pago, recibo. Todo verde."*
+
+**⏸ PAUSA cuando todos los jobs estén en verde — 3 segundos en silencio, mirando los checkmarks verdes.**
+
+> *"Esto acaba de ejecutar, de forma completamente automática, lo que antes requería coordinación en QA. En menos de 10 minutos. En cada commit. De todos los desarrolladores, en paralelo."*
+
+**[Mostrar SonarCloud dashboard — histórico de calidad]**
+
+> *"Y esto es lo que ve el área de gobernanza de AT&T: el historial de calidad acumulado en el tiempo. No una foto de hoy — la evolución sprint a sprint. Transparencia total, sin pedir informes al equipo de QA."*
+
+**Puntos clave:**
+- Pipeline completo en menos de 10 minutos → Lead Time for Changes medible
+- 100% automático. Sin gatekeepers humanos en el ciclo
+- Evidencia descargable por cada commit como artefacto permanente de GitHub Actions
+
+---
+
+### Segmento 2.3 — ★ WOW 4: El Rojo Controlado — DEMO BREAK 1: Ruptura de Contrato (10 min)
+
+> **[Nota presentador]** Este es el momento más importante de la demo. Construir tensión antes del rojo. Hablar despacio.
+
+> *"Ahora reproduzco el escenario que ustedes describieron. Team B necesita hacer un cambio en su API. Es un cambio técnicamente válido. Sus tests unitarios pasan. ¿Quién lo para?"*
+
+**⏸ PAUSA — dejar la pregunta en el aire 3 segundos.**
+
+> *"Hoy: nadie. Lo para alguien en QA, 2–3 días después."*
+
+> *"Vamos a verlo en tiempo real."*
+
+**[Acción en PowerShell]**
+
+```powershell
+cd C:\Users\jcunha\Documents\Optare\Clientes\AT_T\QA\PoC\att-poc-paymentbox
+.\demo\break-contract.ps1
+```
+
+> *"Team B acaba de renombrar el campo `telefono` a `phone` en el DTO de microservice-b. Válido. Sus tests pasan — conocen el nuevo nombre."*
+
+```powershell
+git add .
+git commit -m "demo: BREAK 1 - romper contrato DTO"
+git push origin develop
+```
+
+**[Mostrar GitHub Actions — pipelines individuales de Team A y Team B en verde]**
+
+> *"Pipelines individuales: verde. La imagen se construye. Todo parece correcto."*
+
+**[Ejecutar pipeline-integration via workflow_dispatch. Esperar. Dejar crecer la tensión.]**
+
+**[Job 1 aparece en rojo — ★ PAUSA DRAMÁTICA 5 segundos sin hablar]**
+
+> *"..."*
+
+> *"Job 1 — Tests de Contrato — **FALLA**. En 47 segundos.*
+>
+> *Karate intentó acceder a `response.telefono`. El campo ya no existe — ahora se llama `phone`.*
+>
+> *En su entorno actual: este error llegaría a QA. Alguien abriría un ticket. Team B investigaría. 2–3 días.*
+>
+> *Aquí: 47 segundos. El responsable recibe la notificación con el contexto exacto del fallo. La promoción a QA está BLOQUEADA. Automáticamente."*
+
+**[Restaurar]**
+
+```powershell
+.\demo\restore.ps1
+git add .
+git commit -m "restore: contrato restaurado"
+git push origin develop
+```
+
+---
+
+### Segmento 2.4 — DEMO BREAK 2: Ruptura de Comportamiento (7 min)
+
+> *"El segundo escenario es más sutil — un cambio de comportamiento de negocio. Team A implementa una validación: monto mínimo $100. Sus tests pasan."*
+
+**[Acción en PowerShell]**
+
+```powershell
+.\demo\break-behavior.ps1
+git add .
+git commit -m "demo: BREAK 2 - validación monto mínimo $100"
+git push origin qa
+```
+
+**[Mostrar Jobs 1-3 en verde, Job 4 fallando]**
+
+> *"Jobs 1, 2 y 3: verde. La imagen se construye. Pero Job 4 — E2E — falla. Karate ejecuta el flujo con Billy 1, recarga de $20. La API responde HTTP 400. El manifiesto `k8s/overlays/env-a` NO se actualiza. QA sigue en la versión anterior — la que funcionaba.*
+>
+> *El entorno se protege solo. No hay rollback manual. El estado anterior del manifiesto ES el rollback."*
+
+```powershell
+.\demo\restore.ps1
+git add .
+git commit -m "restore: comportamiento restaurado"
+git push origin qa
+```
+- Carga 2k VUs/3600s disponible para ejecución bajo demanda
+
+---
+
+## ACTO III — El Framework y la Diferenciación (20 min)
+
+### Segmento 3.1 — Framework: Orquestación, Reporteo y Gobierno (5 min)
+
+**[Mostrar GitHub Actions — vista general de todos los workflows]**
+
+> *"Todo lo que hemos visto — RPA, CI/CD con API testing, performance — está unificado en un único framework con gobierno y estándares codificados.*
+>
+> *Un solo repositorio. Tres pipelines coordinados. Cuatro entornos declarativos.*
+>
+> *Los estándares de calidad no son recomendaciones — son condiciones de paso. Cobertura < 80%: falla. CVE crítico: falla. Contrato roto: falla. Performance degradada: falla. El gobierno no depende de la disciplina individual del desarrollador — está codificado en el sistema.*
+>
+> *Los pipelines incluyen triggers cron para regresiones nocturnas completas. El equipo de QA llega cada mañana con un informe del estado de todos los ambientes. Sin ejecutar nada manualmente."*
+
+---
+
+### Segmento 3.2 — ★ WOW 5: La IA en vivo (8 min)
+
+> **[Nota presentador]** Este es el momento más memorable de la demo. Hacer participar al comité.
+
+> *"Antes de cerrar, quiero mostrarles algo que no suelen ver en una presentación de QA."*
+
+**⏸ Dirigirse al comité directamente:**
+
+> *"¿Alguien del comité puede darme una historia de usuario? Cualquiera — no tiene que ser técnica. Del tipo: 'Como [rol] quiero [acción] para [beneficio]'."*
+
+**[Esperar. Tomar la historia que den. Si no proponen ninguna, usar:]**
+> *"Usamos esta: 'Como agente de AT&T quiero registrar una recarga de monto válido para un cliente activo para generar un comprobante de pago.'"*
+
+**[Abrir PowerShell, navegar a la carpeta de IA]**
+
+```powershell
+Set-Location "C:\Users\jcunha\Documents\Optare\Clientes\AT_T\QA\04_Framework\ia"
+$env:PYTHONIOENCODING = "utf-8"
+python demo.py --force-template --story "HISTORIA_QUE_DIO_EL_COMITÉ" --tests-only
+```
+
+**[Mostrar output en pantalla — casos de prueba generados]**
+
+> *"En segundos: 10–15 escenarios de prueba Karate DSL. Positivos, negativos, casos borde. Listos para revisión por el QA Engineer. Lo que antes llevaba dos días de diseño de pruebas.*
+>
+> *Y ahora, datos sintéticos bajo demanda. Sin Billy fijos. Los datos que necesite el equipo de QA, cuando los necesite."*
+
+```powershell
+python demo.py --force-template --data-only --clientes 50 --pagos 100 --seed 2026
+```
+
+> *"50 perfiles de clientes sintéticos realistas. 100 pagos. En 3 segundos. Para el equipo de AT&T con 5.200 validaciones manuales, esto significa no volver a crear datos de prueba a mano.*
+>
+> *La IA no toma decisiones de deployment. Los quality gates son siempre deterministas. La IA asiste al equipo de QA, no reemplaza el juicio humano."*
+
+---
+
+### Segmento 3.3 — Tabla de Diferenciación (3 min)
+
+| Diferenciador | Optare Solutions | Alternativa típica |
+|---------------|------------------|-------------------|
+| **Modelo de calidad** | Declarativo — codificado en pipeline, trazable | Ad-hoc por equipo |
+| **Detección de contratos** | En pipeline, antes de QA — 47 segundos | Manual, en QA — 2-3 días |
+| **Performance en CI** | Smoke en cada push + comparación histórica | Pruebas de carga aisladas, bajo demanda |
+| **Seguridad** | Zero CVEs CRITICAL/HIGH, bloqueante, por commit | Escaneo periódico desvinculado del desarrollo |
+| **GitOps** | Manifiestos inmutables, rollback automático | Deploy manual, rollback manual |
+| **RPA en CI/CD** | Integrado en el pipeline, reporteo unificado | Standalone, reporteo separado |
+| **IA** | Generación de tests + datos sintéticos, en vivo | No integrado |
+| **Adopción** | Incremental por equipos, 2–3 sprints por equipo | Implementación big-bang, alto riesgo |
+| **Coste** | Stack 100% open-source (SonarCloud freemium) | Herramientas comerciales (LoadRunner, etc.) |
+
+---
+
+### Segmento 3.4 — ★ WOW 6: El Cierre con ROI (2 min)
+
+> **[Nota presentador]** No cerrar con tecnología. Cerrar con el negocio de AT&T.
+
+> *"Permítanme cerrar con los números de ustedes, no los nuestros."*
+
+> *"Ustedes tienen 5.200 validaciones manuales por ciclo. Si migran el 40% a este framework — una adopción conservadora — son 2.080 validaciones automatizadas. A 15 minutos promedio cada una, son **520 horas recuperadas por ciclo**.*
+>
+> *El error de integración que tardaba 2–3 días en detectarse: ahora se detecta en 47 segundos. Cada sprint. En todos los equipos.*
+>
+> *La pregunta que les dejo no es '¿funciona la tecnología?' — acabamos de demostrar que sí. La pregunta es: **'¿cuánto tiempo más pueden permitirse que los errores lleguen a QA?'"***
+
+**⏸ PAUSA FINAL — 3 segundos. Dejar que la pregunta cierre la sala.**
+
+---
+
+### Segmento 3.5 — Q&A Preparado
+
+**P: "¿Por qué k6 y no JMeter o LoadRunner, que ya conocemos?"**
+> *"JMeter tiene limitaciones documentadas por encima de 4k VUs y no soporta grabación HTTPS con autenticación compleja entre nubes — exactamente el problema que reportaron. k6 resuelve los tres: escala, grabación y reporteo. El coste es cero. LoadRunner resolvería la escala pero añade licenciamiento significativo sin resolver la grabación."*
+
+**P: "¿Cómo gestionamos los secretos y credenciales de AT&T en el pipeline?"**
+> *"GitHub Actions Secrets cifra credenciales en reposo y en tránsito — nunca aparecen en logs. Para producción, integramos con AWS Secrets Manager o HashiCorp Vault según la política de AT&T."*
+
+**P: "¿El sistema funciona con nuestra infraestructura — múltiples nubes, VPN?"**
+> *"Los runners de GitHub Actions pueden ser self-hosted, instalados dentro de la infraestructura de AT&T, eliminando cualquier restricción de red. El runner se despliega en la red de AT&T y accede a los sistemas internos sin exponer nada al exterior."*
+
+**P: "¿Qué pasa si un microservicio no tiene OpenAPI/Swagger definido?"**
+> *"Karate funciona con y sin OpenAPI. Sin spec: graba el comportamiento base y lo convierte en el contrato de referencia. La migración es incremental."*
+
+**P: "¿Cómo se integra con Jira/ServiceNow?"**
+> *"GitHub Actions publica resultados a Jira vía API, crea tickets automáticos cuando un gate falla, y los cierra cuando el pipeline vuelve a verde. Se configura como un job adicional — sin cambios en el framework base."*
+
+**P: "¿Cuánto tiempo lleva adoptar este framework en nuestros equipos?"**
+> *"El primer equipo puede estar operativo en 2–3 sprints: pipeline base (sprint 1), API testing Karate (sprint 2), performance y GitOps (sprint 3). Los equipos siguientes heredan el template y se incorporan en 1 sprint."*
+
+**P: "Las acciones de IA, ¿son deterministas?"**
+> *"Los quality gates son siempre deterministas — umbrales numéricos, validaciones OpenAPI, resultados de tests. La IA genera propuestas que el QA Engineer aprueba. No hay ningún punto donde una IA pueda enviar código a producción sin supervisión humana."*
+
+**P: "¿El RPA no va a ser tan lento e inestable como lo que tenemos ahora?"**
+> *"La inestabilidad del RPA actual viene de los tiempos de espera fijos. Playwright usa esperas automáticas — espera activamente al elemento hasta que está interaccionable. En los flujos que hemos automatizado, la estabilidad supera el 95%."*
+
+---
+
+## Notas del Presentador
+
+### Gestión del ritmo y las pausas
+
+Las pausas son tan importantes como las palabras. El silencio crea espacio para que el impacto aterrice.
+
+| Segmento | Tono | Ritmo |
+|----------|------|-------|
+| WOW 1 — La Pregunta que Duele | Empático, curioso | Lento. Dejar que respondan. |
+| WOW 2 — El Número Real | Serio, directo | Mostrar la tabla. Silencio. |
+| WOW 3 — El Verde Total | Confiado | Narrar fluidamente. PAUSA 3s en verde. |
+| WOW 4 — El Rojo Controlado | Tenso, luego aliviado | Hablar despacio antes del push. PAUSA 5s ante el rojo. |
+| WOW 5 — La IA en vivo | Sorpresa, juego | Hacer participar al comité. Sonreír. |
+| WOW 6 — El Cierre ROI | Serio, directo | Última frase. PAUSA 3s. No añadir más. |
+
+### Contingencias técnicas
+
+| Fallo | Plan B |
+|-------|--------|
+| Docker Compose no arranca | Abrir grabación de pantalla de un run verde completo |
+| Pipeline tarda más de lo esperado | Mostrar diagrama de arquitectura y profundizar en los DEMO BREAK conceptualmente |
+| Conexión a internet falla | Los mocks locales Prism funcionan completamente offline |
+| SonarCloud no carga | Usar capturas de pantalla en `06_Evidencias/` |
+| Python / IA no ejecuta | Mostrar el output pre-generado en `04_Framework\ia\generated\` |
+
+### Mensajes de cierre — solo uno de estos, el que sienta más natural
+
+> *"La pregunta no es si esto funciona. Acaban de verlo. La pregunta es cuánto tiempo más pueden permitirse que los errores lleguen a QA."*
+
+> *"Lo que construimos no es un prototipo — es el framework que sus equipos usarían desde el primer sprint. El template está listo para clonarse."*
+
+---
+
+## Materiales de Referencia
+
+| Documento | Ruta |
+|-----------|------|
+| Guión original (v1.0) | `05_Documentacion\presentacion\guion_presentacion.md` |
+| Arquitectura de la solución | `05_Documentacion\arquitectura\arquitectura_solucion.md` |
+| Análisis PoC GitHub vs requerimientos | `05_Documentacion\arquitectura\analisis-poc-github-vs-requerimientos.md` |
+| Tech Stack justificado | `05_Documentacion\tech_stack\tech_stack.md` |
+| Repositorio GitHub PoC | https://github.com/OptareSolutions/mx-poc-paymentapp |
+| Demo break scripts | `PoC\att-poc-paymentbox\demo\` |
+| Script k6 carga 2k VUs | `03_Performance_Testing\scripts\load_test_2k_vus.js` |
+| Scripts RPA Salesforce | `01_RPA\scripts\salesforce_flow.py` |
+| Scripts IA | `04_Framework\ia\` |
+
+---
+
+*Versión PathWay 2.0 — Optare Solutions — Mayo 2026*

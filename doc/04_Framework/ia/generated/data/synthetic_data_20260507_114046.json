@@ -1,0 +1,142 @@
+{
+  "metadata": {
+    "generado_en": "2026-05-07T11:40:46.422587",
+    "parametros": {
+      "n_clientes": 5,
+      "n_pagos": 10,
+      "seed": 43,
+      "context": "demo",
+      "locale": "es_MX",
+      "faker_version": "20+"
+    },
+    "summary": {
+      "total_clientes": 5,
+      "clientes_activos": 3,
+      "clientes_inactivos": 1,
+      "clientes_bloqueados": 1,
+      "total_pagos": 10,
+      "pagos_aplicados": 6,
+      "pagos_pendientes": 0,
+      "monto_total": 940.0
+    }
+  },
+  "clientes": [
+    {
+      "telefono": "5001",
+      "fullName": "Hugo Colón Ríos",
+      "status": "ACTIVO"
+    },
+    {
+      "telefono": "5006",
+      "fullName": "Sra. Micaela Preciado",
+      "status": "INACTIVO"
+    },
+    {
+      "telefono": "5009",
+      "fullName": "Andrés Carlos Castellanos Núñez",
+      "status": "BLOQUEADO"
+    },
+    {
+      "telefono": "5017",
+      "fullName": "Julio Teodoro Santillán Jurado",
+      "status": "ACTIVO"
+    },
+    {
+      "telefono": "5019",
+      "fullName": "Sra. Cristina Ballesteros",
+      "status": "ACTIVO"
+    }
+  ],
+  "pagos": [
+    {
+      "numeroOrden": "385741883",
+      "telefono": "5017",
+      "monto": 20.0,
+      "metodoPago": "TARJETA",
+      "status": "APLICADO",
+      "folio": "X-85578",
+      "operador": "BLUE"
+    },
+    {
+      "numeroOrden": "813921051",
+      "telefono": "5019",
+      "monto": 10.0,
+      "metodoPago": "TARJETA",
+      "status": "CANCELADO",
+      "folio": null,
+      "operador": "BLUE"
+    },
+    {
+      "numeroOrden": "206986608",
+      "telefono": "5017",
+      "monto": 150.0,
+      "metodoPago": "OODI",
+      "status": "FALLIDO",
+      "folio": null,
+      "operador": "BLUE"
+    },
+    {
+      "numeroOrden": "103827609",
+      "telefono": "5019",
+      "monto": 20.0,
+      "metodoPago": "EFECTIVO",
+      "status": "APLICADO",
+      "folio": "X-31865",
+      "operador": "BLUE"
+    },
+    {
+      "numeroOrden": "734447368",
+      "telefono": "5017",
+      "monto": 30.0,
+      "metodoPago": "OODI",
+      "status": "CANCELADO",
+      "folio": null,
+      "operador": "BLUE"
+    },
+    {
+      "numeroOrden": "511781078",
+      "telefono": "5017",
+      "monto": 100.0,
+      "metodoPago": "TARJETA",
+      "status": "APLICADO",
+      "folio": "X-68074",
+      "operador": "BLUE"
+    },
+    {
+      "numeroOrden": "883702946",
+      "telefono": "5019",
+      "monto": 300.0,
+      "metodoPago": "EFECTIVO",
+      "status": "APLICADO",
+      "folio": "P-69799",
+      "operador": "BLUE"
+    },
+    {
+      "numeroOrden": "305717022",
+      "telefono": "5017",
+      "monto": 100.0,
+      "metodoPago": "TARJETA",
+      "status": "APLICADO",
+      "folio": "X-52906",
+      "operador": "BLUE"
+    },
+    {
+      "numeroOrden": "830500888",
+      "telefono": "5001",
+      "monto": 200.0,
+      "metodoPago": "OODI",
+      "status": "FALLIDO",
+      "folio": null,
+      "operador": "BLUE"
+    },
+    {
+      "numeroOrden": "171061624",
+      "telefono": "5001",
+      "monto": 10.0,
+      "metodoPago": "TARJETA",
+      "status": "APLICADO",
+      "folio": "P-38785",
+      "operador": "BLUE"
+    }
+  ]
+}

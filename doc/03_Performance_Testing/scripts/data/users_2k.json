@@ -1,0 +1,802 @@
+[
+  {
+    "id": "user-1",
+    "telefono": "4541",
+    "nombre": "Usuario Test 1",
+    "operador": "BLUE",
+    "monto": 10.0,
+    "metodoPago": "EFECTIVO"
+  },
+  {
+    "id": "user-2",
+    "telefono": "4542",
+    "nombre": "Usuario Test 2",
+    "operador": "RED",
+    "monto": 20.0,
+    "metodoPago": "TARJETA"
+  },
+  {
+    "id": "user-3",
+    "telefono": "4543",
+    "nombre": "Usuario Test 3",
+    "operador": "GREEN",
+    "monto": 30.0,
+    "metodoPago": "TRANSFERENCIA"
+  },
+  {
+    "id": "user-4",
+    "telefono": "4544",
+    "nombre": "Usuario Test 4",
+    "operador": "BLUE",
+    "monto": 50.0,
+    "metodoPago": "EFECTIVO"
+  },
+  {
+    "id": "user-5",
+    "telefono": "4545",
+    "nombre": "Usuario Test 5",
+    "operador": "RED",
+    "monto": 100.0,
+    "metodoPago": "TARJETA"
+  },
+  {
+    "id": "user-6",
+    "telefono": "4546",
+    "nombre": "Usuario Test 6",
+    "operador": "GREEN",
+    "monto": 150.0,
+    "metodoPago": "TRANSFERENCIA"
+  },
+  {
+    "id": "user-7",
+    "telefono": "4547",
+    "nombre": "Usuario Test 7",
+    "operador": "BLUE",
+    "monto": 200.0,
+    "metodoPago": "EFECTIVO"
+  },
+  {
+    "id": "user-8",
+    "telefono": "4548",
+    "nombre": "Usuario Test 8",
+    "operador": "RED",
+    "monto": 10.0,
+    "metodoPago": "TARJETA"
+  },
+  {
+    "id": "user-9",
+    "telefono": "4549",
+    "nombre": "Usuario Test 9",
+    "operador": "GREEN",
+    "monto": 20.0,
+    "metodoPago": "TRANSFERENCIA"
+  },
+  {
+    "id": "user-10",
+    "telefono": "4550",
+    "nombre": "Usuario Test 10",
+    "operador": "BLUE",
+    "monto": 30.0,
+    "metodoPago": "EFECTIVO"
+  },
+  {
+    "id": "user-11",
+    "telefono": "4551",
+    "nombre": "Usuario Test 11",
+    "operador": "RED",
+    "monto": 50.0,
+    "metodoPago": "TARJETA"
+  },
+  {
+    "id": "user-12",
+    "telefono": "4552",
+    "nombre": "Usuario Test 12",
+    "operador": "GREEN",
+    "monto": 100.0,
+    "metodoPago": "TRANSFERENCIA"
+  },
+  {
+    "id": "user-13",
+    "telefono": "4553",
+    "nombre": "Usuario Test 13",
+    "operador": "BLUE",
+    "monto": 150.0,
+    "metodoPago": "EFECTIVO"
+  },
+  {
+    "id": "user-14",
+    "telefono": "4554",
+    "nombre": "Usuario Test 14",
+    "operador": "RED",
+    "monto": 200.0,
+    "metodoPago": "TARJETA"
+  },
+  {
+    "id": "user-15",
+    "telefono": "4555",
+    "nombre": "Usuario Test 15",
+    "operador": "GREEN",
+    "monto": 10.0,
+    "metodoPago": "TRANSFERENCIA"
+  },
+  {
+    "id": "user-16",
+    "telefono": "4556",
+    "nombre": "Usuario Test 16",
+    "operador": "BLUE",
+    "monto": 20.0,
+    "metodoPago": "EFECTIVO"
+  },
+  {
+    "id": "user-17",
+    "telefono": "4557",
+    "nombre": "Usuario Test 17",
+    "operador": "RED",
+    "monto": 30.0,
+    "metodoPago": "TARJETA"
+  },
+  {
+    "id": "user-18",
+    "telefono": "4558",
+    "nombre": "Usuario Test 18",
+    "operador": "GREEN",
+    "monto": 50.0,
+    "metodoPago": "TRANSFERENCIA"
+  },
+  {
+    "id": "user-19",
+    "telefono": "4559",
+    "nombre": "Usuario Test 19",
+    "operador": "BLUE",
+    "monto": 100.0,
+    "metodoPago": "EFECTIVO"
+  },
+  {
+    "id": "user-20",
+    "telefono": "4560",
+    "nombre": "Usuario Test 20",
+    "operador": "RED",
+    "monto": 150.0,
+    "metodoPago": "TARJETA"
+  },
+  {
+    "id": "user-21",
+    "telefono": "4561",
+    "nombre": "Usuario Test 21",
+    "operador": "GREEN",
+    "monto": 200.0,
+    "metodoPago": "TRANSFERENCIA"
+  },
+  {
+    "id": "user-22",
+    "telefono": "4562",
+    "nombre": "Usuario Test 22",
+    "operador": "BLUE",
+    "monto": 10.0,
+    "metodoPago": "EFECTIVO"
+  },
+  {
+    "id": "user-23",
+    "telefono": "4563",
+    "nombre": "Usuario Test 23",
+    "operador": "RED",
+    "monto": 20.0,
+    "metodoPago": "TARJETA"
+  },
+  {
+    "id": "user-24",
+    "telefono": "4564",
+    "nombre": "Usuario Test 24",
+    "operador": "GREEN",
+    "monto": 30.0,
+    "metodoPago": "TRANSFERENCIA"
+  },
+  {
+    "id": "user-25",
+    "telefono": "4565",
+    "nombre": "Usuario Test 25",
+    "operador": "BLUE",
+    "monto": 50.0,
+    "metodoPago": "EFECTIVO"
+  },
+  {
+    "id": "user-26",
+    "telefono": "4566",
+    "nombre": "Usuario Test 26",
+    "operador": "RED",
+    "monto": 100.0,
+    "metodoPago": "TARJETA"
+  },
+  {
+    "id": "user-27",
+    "telefono": "4567",
+    "nombre": "Usuario Test 27",
+    "operador": "GREEN",
+    "monto": 150.0,
+    "metodoPago": "TRANSFERENCIA"
+  },
+  {
+    "id": "user-28",
+    "telefono": "4568",
+    "nombre": "Usuario Test 28",
+    "operador": "BLUE",
+    "monto": 200.0,
+    "metodoPago": "EFECTIVO"
+  },
+  {
+    "id": "user-29",
+    "telefono": "4569",
+    "nombre": "Usuario Test 29",
+    "operador": "RED",
+    "monto": 10.0,
+    "metodoPago": "TARJETA"
+  },
+  {
+    "id": "user-30",
+    "telefono": "4570",
+    "nombre": "Usuario Test 30",
+    "operador": "GREEN",
+    "monto": 20.0,
+    "metodoPago": "TRANSFERENCIA"
+  },
+  {
+    "id": "user-31",
+    "telefono": "4571",
+    "nombre": "Usuario Test 31",
+    "operador": "BLUE",
+    "monto": 30.0,
+    "metodoPago": "EFECTIVO"
+  },
+  {
+    "id": "user-32",
+    "telefono": "4572",
+    "nombre": "Usuario Test 32",
+    "operador": "RED",
+    "monto": 50.0,
+    "metodoPago": "TARJETA"
+  },
+  {
+    "id": "user-33",
+    "telefono": "4573",
+    "nombre": "Usuario Test 33",
+    "operador": "GREEN",
+    "monto": 100.0,
+    "metodoPago": "TRANSFERENCIA"
+  },
+  {
+    "id": "user-34",
+    "telefono": "4574",
+    "nombre": "Usuario Test 34",
+    "operador": "BLUE",
+    "monto": 150.0,
+    "metodoPago": "EFECTIVO"
+  },
+  {
+    "id": "user-35",
+    "telefono": "4575",
+    "nombre": "Usuario Test 35",
+    "operador": "RED",
+    "monto": 200.0,
+    "metodoPago": "TARJETA"
+  },
+  {
+    "id": "user-36",
+    "telefono": "4576",
+    "nombre": "Usuario Test 36",
+    "operador": "GREEN",
+    "monto": 10.0,
+    "metodoPago": "TRANSFERENCIA"
+  },
+  {
+    "id": "user-37",
+    "telefono": "4577",
+    "nombre": "Usuario Test 37",
+    "operador": "BLUE",
+    "monto": 20.0,
+    "metodoPago": "EFECTIVO"
+  },
+  {
+    "id": "user-38",
+    "telefono": "4578",
+    "nombre": "Usuario Test 38",
+    "operador": "RED",
+    "monto": 30.0,
+    "metodoPago": "TARJETA"
+  },
+  {
+    "id": "user-39",
+    "telefono": "4579",
+    "nombre": "Usuario Test 39",
+    "operador": "GREEN",
+    "monto": 50.0,
+    "metodoPago": "TRANSFERENCIA"
+  },
+  {
+    "id": "user-40",
+    "telefono": "4580",
+    "nombre": "Usuario Test 40",
+    "operador": "BLUE",
+    "monto": 100.0,
+    "metodoPago": "EFECTIVO"
+  },
+  {
+    "id": "user-41",
+    "telefono": "4581",
+    "nombre": "Usuario Test 41",
+    "operador": "RED",
+    "monto": 150.0,
+    "metodoPago": "TARJETA"
+  },
+  {
+    "id": "user-42",
+    "telefono": "4582",
+    "nombre": "Usuario Test 42",
+    "operador": "GREEN",
+    "monto": 200.0,
+    "metodoPago": "TRANSFERENCIA"
+  },
+  {
+    "id": "user-43",
+    "telefono": "4583",
+    "nombre": "Usuario Test 43",
+    "operador": "BLUE",
+    "monto": 10.0,
+    "metodoPago": "EFECTIVO"
+  },
+  {
+    "id": "user-44",
+    "telefono": "4584",
+    "nombre": "Usuario Test 44",
+    "operador": "RED",
+    "monto": 20.0,
+    "metodoPago": "TARJETA"
+  },
+  {
+    "id": "user-45",
+    "telefono": "4585",
+    "nombre": "Usuario Test 45",
+    "operador": "GREEN",
+    "monto": 30.0,
+    "metodoPago": "TRANSFERENCIA"
+  },
+  {
+    "id": "user-46",
+    "telefono": "4586",
+    "nombre": "Usuario Test 46",
+    "operador": "BLUE",
+    "monto": 50.0,
+    "metodoPago": "EFECTIVO"
+  },
+  {
+    "id": "user-47",
+    "telefono": "4587",
+    "nombre": "Usuario Test 47",
+    "operador": "RED",
+    "monto": 100.0,
+    "metodoPago": "TARJETA"
+  },
+  {
+    "id": "user-48",
+    "telefono": "4588",
+    "nombre": "Usuario Test 48",
+    "operador": "GREEN",
+    "monto": 150.0,
+    "metodoPago": "TRANSFERENCIA"
+  },
+  {
+    "id": "user-49",
+    "telefono": "4589",
+    "nombre": "Usuario Test 49",
+    "operador": "BLUE",
+    "monto": 200.0,
+    "metodoPago": "EFECTIVO"
+  },
+  {
+    "id": "user-50",
+    "telefono": "4590",
+    "nombre": "Usuario Test 50",
+    "operador": "RED",
+    "monto": 10.0,
+    "metodoPago": "TARJETA"
+  },
+  {
+    "id": "user-51",
+    "telefono": "4591",
+    "nombre": "Usuario Test 51",
+    "operador": "GREEN",
+    "monto": 20.0,
+    "metodoPago": "TRANSFERENCIA"
+  },
+  {
+    "id": "user-52",
+    "telefono": "4592",
+    "nombre": "Usuario Test 52",
+    "operador": "BLUE",
+    "monto": 30.0,
+    "metodoPago": "EFECTIVO"
+  },
+  {
+    "id": "user-53",
+    "telefono": "4593",
+    "nombre": "Usuario Test 53",
+    "operador": "RED",
+    "monto": 50.0,
+    "metodoPago": "TARJETA"
+  },
+  {
+    "id": "user-54",
+    "telefono": "4594",
+    "nombre": "Usuario Test 54",
+    "operador": "GREEN",
+    "monto": 100.0,
+    "metodoPago": "TRANSFERENCIA"
+  },
+  {
+    "id": "user-55",
+    "telefono": "4595",
+    "nombre": "Usuario Test 55",
+    "operador": "BLUE",
+    "monto": 150.0,
+    "metodoPago": "EFECTIVO"
+  },
+  {
+    "id": "user-56",
+    "telefono": "4596",
+    "nombre": "Usuario Test 56",
+    "operador": "RED",
+    "monto": 200.0,
+    "metodoPago": "TARJETA"
+  },
+  {
+    "id": "user-57",
+    "telefono": "4597",
+    "nombre": "Usuario Test 57",
+    "operador": "GREEN",
+    "monto": 10.0,
+    "metodoPago": "TRANSFERENCIA"
+  },
+  {
+    "id": "user-58",
+    "telefono": "4598",
+    "nombre": "Usuario Test 58",
+    "operador": "BLUE",
+    "monto": 20.0,
+    "metodoPago": "EFECTIVO"
+  },
+  {
+    "id": "user-59",
+    "telefono": "4599",
+    "nombre": "Usuario Test 59",
+    "operador": "RED",
+    "monto": 30.0,
+    "metodoPago": "TARJETA"
+  },
+  {
+    "id": "user-60",
+    "telefono": "4600",
+    "nombre": "Usuario Test 60",
+    "operador": "GREEN",
+    "monto": 50.0,
+    "metodoPago": "TRANSFERENCIA"
+  },
+  {
+    "id": "user-61",
+    "telefono": "4601",
+    "nombre": "Usuario Test 61",
+    "operador": "BLUE",
+    "monto": 100.0,
+    "metodoPago": "EFECTIVO"
+  },
+  {
+    "id": "user-62",
+    "telefono": "4602",
+    "nombre": "Usuario Test 62",
+    "operador": "RED",
+    "monto": 150.0,
+    "metodoPago": "TARJETA"
+  },
+  {
+    "id": "user-63",
+    "telefono": "4603",
+    "nombre": "Usuario Test 63",
+    "operador": "GREEN",
+    "monto": 200.0,
+    "metodoPago": "TRANSFERENCIA"
+  },
+  {
+    "id": "user-64",
+    "telefono": "4604",
+    "nombre": "Usuario Test 64",
+    "operador": "BLUE",
+    "monto": 10.0,
+    "metodoPago": "EFECTIVO"
+  },
+  {
+    "id": "user-65",
+    "telefono": "4605",
+    "nombre": "Usuario Test 65",
+    "operador": "RED",
+    "monto": 20.0,
+    "metodoPago": "TARJETA"
+  },
+  {
+    "id": "user-66",
+    "telefono": "4606",
+    "nombre": "Usuario Test 66",
+    "operador": "GREEN",
+    "monto": 30.0,
+    "metodoPago": "TRANSFERENCIA"
+  },
+  {
+    "id": "user-67",
+    "telefono": "4607",
+    "nombre": "Usuario Test 67",
+    "operador": "BLUE",
+    "monto": 50.0,
+    "metodoPago": "EFECTIVO"
+  },
+  {
+    "id": "user-68",
+    "telefono": "4608",
+    "nombre": "Usuario Test 68",
+    "operador": "RED",
+    "monto": 100.0,
+    "metodoPago": "TARJETA"
+  },
+  {
+    "id": "user-69",
+    "telefono": "4609",
+    "nombre": "Usuario Test 69",
+    "operador": "GREEN",
+    "monto": 150.0,
+    "metodoPago": "TRANSFERENCIA"
+  },
+  {
+    "id": "user-70",
+    "telefono": "4610",
+    "nombre": "Usuario Test 70",
+    "operador": "BLUE",
+    "monto": 200.0,
+    "metodoPago": "EFECTIVO"
+  },
+  {
+    "id": "user-71",
+    "telefono": "4611",
+    "nombre": "Usuario Test 71",
+    "operador": "RED",
+    "monto": 10.0,
+    "metodoPago": "TARJETA"
+  },
+  {
+    "id": "user-72",
+    "telefono": "4612",
+    "nombre": "Usuario Test 72",
+    "operador": "GREEN",
+    "monto": 20.0,
+    "metodoPago": "TRANSFERENCIA"
+  },
+  {
+    "id": "user-73",
+    "telefono": "4613",
+    "nombre": "Usuario Test 73",
+    "operador": "BLUE",
+    "monto": 30.0,
+    "metodoPago": "EFECTIVO"
+  },
+  {
+    "id": "user-74",
+    "telefono": "4614",
+    "nombre": "Usuario Test 74",
+    "operador": "RED",
+    "monto": 50.0,
+    "metodoPago": "TARJETA"
+  },
+  {
+    "id": "user-75",
+    "telefono": "4615",
+    "nombre": "Usuario Test 75",
+    "operador": "GREEN",
+    "monto": 100.0,
+    "metodoPago": "TRANSFERENCIA"
+  },
+  {
+    "id": "user-76",
+    "telefono": "4616",
+    "nombre": "Usuario Test 76",
+    "operador": "BLUE",
+    "monto": 150.0,
+    "metodoPago": "EFECTIVO"
+  },
+  {
+    "id": "user-77",
+    "telefono": "4617",
+    "nombre": "Usuario Test 77",
+    "operador": "RED",
+    "monto": 200.0,
+    "metodoPago": "TARJETA"
+  },
+  {
+    "id": "user-78",
+    "telefono": "4618",
+    "nombre": "Usuario Test 78",
+    "operador": "GREEN",
+    "monto": 10.0,
+    "metodoPago": "TRANSFERENCIA"
+  },
+  {
+    "id": "user-79",
+    "telefono": "4619",
+    "nombre": "Usuario Test 79",
+    "operador": "BLUE",
+    "monto": 20.0,
+    "metodoPago": "EFECTIVO"
+  },
+  {
+    "id": "user-80",
+    "telefono": "4620",
+    "nombre": "Usuario Test 80",
+    "operador": "RED",
+    "monto": 30.0,
+    "metodoPago": "TARJETA"
+  },
+  {
+    "id": "user-81",
+    "telefono": "4621",
+    "nombre": "Usuario Test 81",
+    "operador": "GREEN",
+    "monto": 50.0,
+    "metodoPago": "TRANSFERENCIA"
+  },
+  {
+    "id": "user-82",
+    "telefono": "4622",
+    "nombre": "Usuario Test 82",
+    "operador": "BLUE",
+    "monto": 100.0,
+    "metodoPago": "EFECTIVO"
+  },
+  {
+    "id": "user-83",
+    "telefono": "4623",
+    "nombre": "Usuario Test 83",
+    "operador": "RED",
+    "monto": 150.0,
+    "metodoPago": "TARJETA"
+  },
+  {
+    "id": "user-84",
+    "telefono": "4624",
+    "nombre": "Usuario Test 84",
+    "operador": "GREEN",
+    "monto": 200.0,
+    "metodoPago": "TRANSFERENCIA"
+  },
+  {
+    "id": "user-85",
+    "telefono": "4625",
+    "nombre": "Usuario Test 85",
+    "operador": "BLUE",
+    "monto": 10.0,
+    "metodoPago": "EFECTIVO"
+  },
+  {
+    "id": "user-86",
+    "telefono": "4626",
+    "nombre": "Usuario Test 86",
+    "operador": "RED",
+    "monto": 20.0,
+    "metodoPago": "TARJETA"
+  },
+  {
+    "id": "user-87",
+    "telefono": "4627",
+    "nombre": "Usuario Test 87",
+    "operador": "GREEN",
+    "monto": 30.0,
+    "metodoPago": "TRANSFERENCIA"
+  },
+  {
+    "id": "user-88",
+    "telefono": "4628",
+    "nombre": "Usuario Test 88",
+    "operador": "BLUE",
+    "monto": 50.0,
+    "metodoPago": "EFECTIVO"
+  },
+  {
+    "id": "user-89",
+    "telefono": "4629",
+    "nombre": "Usuario Test 89",
+    "operador": "RED",
+    "monto": 100.0,
+    "metodoPago": "TARJETA"
+  },
+  {
+    "id": "user-90",
+    "telefono": "4630",
+    "nombre": "Usuario Test 90",
+    "operador": "GREEN",
+    "monto": 150.0,
+    "metodoPago": "TRANSFERENCIA"
+  },
+  {
+    "id": "user-91",
+    "telefono": "4631",
+    "nombre": "Usuario Test 91",
+    "operador": "BLUE",
+    "monto": 200.0,
+    "metodoPago": "EFECTIVO"
+  },
+  {
+    "id": "user-92",
+    "telefono": "4632",
+    "nombre": "Usuario Test 92",
+    "operador": "RED",
+    "monto": 10.0,
+    "metodoPago": "TARJETA"
+  },
+  {
+    "id": "user-93",
+    "telefono": "4633",
+    "nombre": "Usuario Test 93",
+    "operador": "GREEN",
+    "monto": 20.0,
+    "metodoPago": "TRANSFERENCIA"
+  },
+  {
+    "id": "user-94",
+    "telefono": "4634",
+    "nombre": "Usuario Test 94",
+    "operador": "BLUE",
+    "monto": 30.0,
+    "metodoPago": "EFECTIVO"
+  },
+  {
+    "id": "user-95",
+    "telefono": "4635",
+    "nombre": "Usuario Test 95",
+    "operador": "RED",
+    "monto": 50.0,
+    "metodoPago": "TARJETA"
+  },
+  {
+    "id": "user-96",
+    "telefono": "4636",
+    "nombre": "Usuario Test 96",
+    "operador": "GREEN",
+    "monto": 100.0,
+    "metodoPago": "TRANSFERENCIA"
+  },
+  {
+    "id": "user-97",
+    "telefono": "4637",
+    "nombre": "Usuario Test 97",
+    "operador": "BLUE",
+    "monto": 150.0,
+    "metodoPago": "EFECTIVO"
+  },
+  {
+    "id": "user-98",
+    "telefono": "4638",
+    "nombre": "Usuario Test 98",
+    "operador": "RED",
+    "monto": 200.0,
+    "metodoPago": "TARJETA"
+  },
+  {
+    "id": "user-99",
+    "telefono": "4639",
+    "nombre": "Usuario Test 99",
+    "operador": "GREEN",
+    "monto": 10.0,
+    "metodoPago": "TRANSFERENCIA"
+  },
+  {
+    "id": "user-100",
+    "telefono": "4640",
+    "nombre": "Usuario Test 100",
+    "operador": "BLUE",
+    "monto": 20.0,
+    "metodoPago": "EFECTIVO"
+  }
+]

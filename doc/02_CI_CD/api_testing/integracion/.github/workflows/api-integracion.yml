@@ -1,0 +1,392 @@
+name: "🔗 API Integration Tests — E2E PaymentBox"
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Trigger: PR y push a ramas de desarrollo + manual
+# Propósito: Ejecutar suite E2E de integración que encadena múltiples endpoints
+#            entre microservice-a, microservice-b y mocks externos.
+#
+# Flujo del pipeline:
+#   Job 1 — health-check:   Verifica que los servicios arrancan correctamente
+#   Job 2 — auth-tests:     Flujo de autenticación completo (login/refresh/logout)
+#   Job 3 — integracion:    Tests E2E (cliente + recarga encadenada)
+#   Job 4 — report:         Agrega y publica informe consolidado
+# ──────────────────────────────────────────────────────────────────────────────
+
+on:
+  push:
+    branches:
+      - develop
+      - 'feature/**'
+      - 'release/**'
+    paths:
+      - 'tests/integration-karate/**'
+      - 'microservice-a/**'
+      - 'microservice-b/**'
+  pull_request:
+    branches:
+      - develop
+      - qa
+    paths:
+      - 'tests/integration-karate/**'
+      - 'microservice-a/**'
+      - 'microservice-b/**'
+  workflow_dispatch:
+    inputs:
+      karate_env:
+        description: "Entorno Karate (local | ci | staging)"
+        required: false
+        default: "ci"
+        type: choice
+        options: [ci, staging]
+      tags:
+        description: "Tags a ejecutar (vacío = @integracion completa)"
+        required: false
+        default: ""
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Permissions: least privilege
+# ──────────────────────────────────────────────────────────────────────────────
+permissions:
+  contents: read
+
+# Cancelar ejecuciones previas en la misma rama para PRs
+concurrency:
+  group: "api-integracion-${{ github.ref }}"
+  cancel-in-progress: true
+
+env:
+  KARATE_ENV: ${{ inputs.karate_env || 'ci' }}
+  JAVA_VERSION: "17"
+  REGISTRY: ghcr.io
+
+# ══════════════════════════════════════════════════════════════════════════════
+# JOB 1 — Levantar entorno y verificar health
+# ══════════════════════════════════════════════════════════════════════════════
+jobs:
+  health-check:
+    name: "1 — 🏥 Levantar Entorno Docker + Health Check"
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repositorio
+        # actions/checkout v4.2.2 — pinned to immutable commit SHA
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Login GHCR
+        # docker/login-action v3.3.0
+        uses: docker/login-action@9780b0c442fbb1117ed29e0efdff1e18412f7567 # v3.3.0
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Levantar servicios (docker compose)
+        run: |
+          cd simulation
+          docker compose pull microservice-a microservice-b || true
+          docker compose up -d db-simulado mock-operador mock-recibo mock-auth \
+                               microservice-b microservice-a --no-build
+          echo "⏳ Esperando arranque de servicios (90s)..."
+          sleep 90
+          docker compose ps
+
+      - name: Health check microservice-b (puerto 18081 en CI)
+        run: |
+          echo "🔍 Verificando microservice-b..."
+          for i in $(seq 1 20); do
+            STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
+              http://localhost:18081/actuator/health 2>/dev/null || echo "000")
+            if [ "$STATUS" = "200" ]; then
+              echo "✅ microservice-b UP (intento $i)"
+              break
+            fi
+            echo "⏳ Intento $i — status: $STATUS"
+            sleep 5
+          done
+          [ "$STATUS" != "200" ] && \
+            { cd simulation && docker compose logs microservice-b; exit 1; }
+
+      - name: Health check microservice-a (puerto 8080 en CI)
+        run: |
+          echo "🔍 Verificando microservice-a..."
+          for i in $(seq 1 20); do
+            STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
+              http://localhost:8080/actuator/health 2>/dev/null || echo "000")
+            if [ "$STATUS" = "200" ]; then
+              echo "✅ microservice-a UP (intento $i)"
+              break
+            fi
+            echo "⏳ Intento $i — status: $STATUS"
+            sleep 5
+          done
+          [ "$STATUS" != "200" ] && \
+            { cd simulation && docker compose logs microservice-a; exit 1; }
+
+      - name: Verificar mock-auth disponible (puerto 9000)
+        run: |
+          echo "🔍 Verificando mock-auth..."
+          for i in $(seq 1 10); do
+            STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
+              http://localhost:9000/health 2>/dev/null || echo "000")
+            if [ "$STATUS" = "200" ] || [ "$STATUS" = "404" ]; then
+              echo "✅ mock-auth responde (intento $i)"
+              break
+            fi
+            sleep 3
+          done
+
+      - name: Parar entorno
+        if: always()
+        run: cd simulation && docker compose down -v
+
+# ══════════════════════════════════════════════════════════════════════════════
+# JOB 2 — Tests de Autenticación E2E
+# ══════════════════════════════════════════════════════════════════════════════
+  auth-tests:
+    name: "2 — 🔐 Flujo de Autenticación E2E"
+    runs-on: ubuntu-latest
+    needs: health-check
+
+    permissions:
+      contents: read
+      checks: write   # para publicar resultados de tests
+
+    steps:
+      - name: Checkout repositorio
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Configurar JDK ${{ env.JAVA_VERSION }}
+        # actions/setup-java v4.5.0
+        uses: actions/setup-java@3a4f6e1af504cf6a31855fa899c6aa5355ba6c12 # v4.5.0
+        with:
+          java-version: ${{ env.JAVA_VERSION }}
+          distribution: temurin
+          cache: maven
+
+      - name: Login GHCR
+        uses: docker/login-action@9780b0c442fbb1117ed29e0efdff1e18412f7567 # v3.3.0
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Levantar entorno completo
+        run: |
+          cd simulation
+          docker compose up -d db-simulado mock-operador mock-recibo mock-auth \
+                               microservice-b microservice-a --no-build
+          sleep 90
+
+      - name: Ejecutar tests de autenticación (Karate)
+        working-directory: tests/integration-karate
+        env:
+          AUTH_USER: ${{ secrets.TEST_AUTH_USER || 'agente01' }}
+          AUTH_PASS: ${{ secrets.TEST_AUTH_PASS || 'pass1234' }}
+        run: |
+          mvn test \
+            -Dkarate.env=${{ env.KARATE_ENV }} \
+            -Dtest=IntegracionRunner#testAuthFlow \
+            --no-transfer-progress
+
+      - name: Publicar resultados — auth
+        if: always()
+        # actions/upload-artifact v4.4.3
+        uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882 # v4.4.3
+        with:
+          name: auth-test-report-${{ github.run_id }}
+          path: tests/integration-karate/target/surefire-reports/
+          retention-days: 30
+
+      - name: Parar entorno
+        if: always()
+        run: cd simulation && docker compose down -v
+
+# ══════════════════════════════════════════════════════════════════════════════
+# JOB 3 — Tests de Integración E2E (cliente + recarga)
+# ══════════════════════════════════════════════════════════════════════════════
+  integracion-e2e:
+    name: "3 — 🔗 Tests E2E Integración (Cliente + Recarga)"
+    runs-on: ubuntu-latest
+    needs: [health-check, auth-tests]
+
+    permissions:
+      contents: read
+      checks: write
+
+    steps:
+      - name: Checkout repositorio
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Configurar JDK ${{ env.JAVA_VERSION }}
+        uses: actions/setup-java@3a4f6e1af504cf6a31855fa899c6aa5355ba6c12 # v4.5.0
+        with:
+          java-version: ${{ env.JAVA_VERSION }}
+          distribution: temurin
+          cache: maven
+
+      - name: Login GHCR
+        uses: docker/login-action@9780b0c442fbb1117ed29e0efdff1e18412f7567 # v3.3.0
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Levantar entorno completo
+        run: |
+          cd simulation
+          docker compose up -d --no-build
+          echo "⏳ Esperando arranque completo (90s)..."
+          sleep 90
+          docker compose ps
+
+      - name: Health checks (microservice-a + microservice-b)
+        run: |
+          for SVC_URL in \
+            http://localhost:18081/actuator/health \
+            http://localhost:8080/actuator/health; do
+            for i in $(seq 1 20); do
+              STATUS=$(curl -s -o /dev/null -w "%{http_code}" "$SVC_URL" || echo "000")
+              [ "$STATUS" = "200" ] && echo "✅ $SVC_URL UP" && break
+              sleep 5
+            done
+            [ "$STATUS" != "200" ] && echo "❌ $SVC_URL no responde" && exit 1
+          done
+
+      - name: Ejecutar tests de integración cliente (microservice-a ↔ microservice-b)
+        working-directory: tests/integration-karate
+        run: |
+          TAGS="${{ inputs.tags }}"
+          if [ -n "$TAGS" ]; then
+            mvn test \
+              -Dkarate.env=${{ env.KARATE_ENV }} \
+              -Dtest=IntegracionRunner#testClienteIntegracion \
+              -Dkarate.options="--tags $TAGS" \
+              --no-transfer-progress
+          else
+            mvn test \
+              -Dkarate.env=${{ env.KARATE_ENV }} \
+              -Dtest=IntegracionRunner#testClienteIntegracion \
+              --no-transfer-progress
+          fi
+
+      - name: Ejecutar tests E2E recarga (8 pasos encadenados)
+        working-directory: tests/integration-karate
+        run: |
+          mvn test \
+            -Dkarate.env=${{ env.KARATE_ENV }} \
+            -Dtest=IntegracionRunner#testRecargaE2E \
+            --no-transfer-progress
+
+      - name: Ejecutar ruta crítica completa
+        working-directory: tests/integration-karate
+        run: |
+          mvn test \
+            -Dkarate.env=${{ env.KARATE_ENV }} \
+            -Dtest=IntegracionRunner#testCriticalPath \
+            --no-transfer-progress
+
+      - name: Publicar resultados — integración E2E
+        if: always()
+        uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882 # v4.4.3
+        with:
+          name: integracion-e2e-report-${{ github.run_id }}
+          path: |
+            tests/integration-karate/target/surefire-reports/
+            tests/integration-karate/target/karate-reports/
+          retention-days: 30
+
+      - name: Publicar resumen en GitHub Step Summary
+        if: always()
+        run: |
+          echo "## 🔗 Resultados Tests E2E Integración" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Suite | Estado |" >> $GITHUB_STEP_SUMMARY
+          echo "|-------|--------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Auth Flow (login/refresh/logout) | ${{ job.status == 'success' && '✅' || '❌' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Cliente Integración (msvc-a ↔ msvc-b) | ${{ job.status == 'success' && '✅' || '❌' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Recarga E2E (8 pasos encadenados) | ${{ job.status == 'success' && '✅' || '❌' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Ruta Crítica | ${{ job.status == 'success' && '✅' || '❌' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Entorno:** \`${{ env.KARATE_ENV }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "**Run ID:** \`${{ github.run_id }}\`" >> $GITHUB_STEP_SUMMARY
+
+      - name: Parar entorno
+        if: always()
+        run: cd simulation && docker compose down -v
+
+# ══════════════════════════════════════════════════════════════════════════════
+# JOB 4 — Reporte Consolidado de Evidencias
+# ══════════════════════════════════════════════════════════════════════════════
+  report:
+    name: "4 — 📊 Reporte Consolidado de Evidencias"
+    runs-on: ubuntu-latest
+    needs: [auth-tests, integracion-e2e]
+    if: always()
+
+    permissions:
+      contents: read
+
+    steps:
+      - name: Descargar artefactos — auth
+        # actions/download-artifact v4.1.8
+        uses: actions/download-artifact@fa0a91b85d4f404e444306234d4bf7d2b3aedc95 # v4.1.8
+        with:
+          name: auth-test-report-${{ github.run_id }}
+          path: evidencias/auth/
+        continue-on-error: true
+
+      - name: Descargar artefactos — integración E2E
+        uses: actions/download-artifact@fa0a91b85d4f404e444306234d4bf7d2b3aedc95 # v4.1.8
+        with:
+          name: integracion-e2e-report-${{ github.run_id }}
+          path: evidencias/integracion/
+        continue-on-error: true
+
+      - name: Generar índice de evidencias
+        run: |
+          mkdir -p evidencias
+          cat > evidencias/RESUMEN.md << EOF
+          # Evidencias E2E Integration Tests — AT&T PaymentBox
+          
+          **Fecha:** $(date -u '+%Y-%m-%d %H:%M UTC')
+          **Run ID:** ${{ github.run_id }}
+          **Commit:** ${{ github.sha }}
+          **Rama:** ${{ github.ref_name }}
+          **Entorno Karate:** ${{ env.KARATE_ENV }}
+          
+          ## Resultados
+          
+          | Job | Estado |
+          |-----|--------|
+          | Auth Tests | ${{ needs.auth-tests.result }} |
+          | Integración E2E | ${{ needs.integracion-e2e.result }} |
+          
+          ## Escenarios cubiertos
+          
+          ### Auth Flow
+          - AUTH-01: Login exitoso → access_token + refresh_token
+          - AUTH-04: Acceso a endpoint protegido con token Bearer
+          - AUTH-06: Refresh de token (rotación sin re-login)
+          - AUTH-08: Logout e invalidación
+          - AUTH-09: Flujo crítico completo login → uso → refresh → logout
+          
+          ### Integración Cliente (microservice-a ↔ microservice-b)
+          - DEP-01: Consulta directa microservice-b
+          - DEP-03: Coherencia de datos entre servicios
+          - DEP-05: Transporte de ID de cliente en flujo de pago
+          - DEP-08: Health checks de ambos servicios
+          
+          ### Recarga E2E (8 pasos encadenados)
+          - REC-INT-01: Flujo completo encadenado (teléfono → folio → recibo)
+          - REC-INT-02: Data-driven para múltiples clientes
+          - REC-INT-05: Unicidad de folios (token de correlación)
+          - REC-INT-06: Validación operador externo → montos → pago
+          EOF
+          echo "✅ Índice de evidencias generado"
+
+      - name: Publicar evidencias consolidadas
+        uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882 # v4.4.3
+        with:
+          name: evidencias-integracion-${{ github.run_id }}
+          path: evidencias/
+          retention-days: 90

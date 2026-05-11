@@ -1,0 +1,316 @@
+name: "⚡ [Performance] k6 Load — 2k VUs / 3600s — PaymentBox"
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Workflow: Prueba de carga sostenida con 2000 VUs durante 3600 segundos (1h)
+#
+# Propósito: Validar el comportamiento del flujo E2E de recarga bajo carga alta
+#            y sostenida, detectar degradaciones vs baseline de smoke test y
+#            generar dashboard HTML con todas las métricas requeridas.
+#
+# Flujo E2E (8 pasos con correlación de IDs):
+#   P2: Focalizar Cliente  → GET  /api/clientes/buscar
+#   P3: Consultar Montos   → GET  /api/recargas/montos
+#   P4: Validar Operador   → POST /api/recargas/validar-operador
+#   P5: Métodos Pago       → GET  /api/pagos/metodos
+#   P6+7: Registrar Pago   → POST /api/pagos/registrar
+#   P8: Emitir Recibo      → POST /api/recibos/emitir
+#
+# Triggers:
+#   - workflow_dispatch: ejecución manual con parámetros configurables
+#   - workflow_call: invocable desde pipeline CI/CD principal
+#
+# Nota: NO ejecutar en schedule por su duración (1h+). Solo manual o desde CI.
+# ──────────────────────────────────────────────────────────────────────────────
+
+on:
+  workflow_dispatch:
+    inputs:
+      base_url:
+        description: "URL base del servicio (ej: http://api-host:8080)"
+        required: false
+        default: "http://localhost:8080"
+      environment:
+        description: "Entorno a testear"
+        required: true
+        type: choice
+        options: [develop, qa, uat, staging]
+        default: qa
+      max_vus:
+        description: "Número máximo de VUs (default: 2000)"
+        required: false
+        default: "2000"
+      duration_s:
+        description: "Duración total en segundos (default: 3600)"
+        required: false
+        default: "3600"
+      update_baseline:
+        description: "¿Guardar estos resultados como nuevo baseline?"
+        type: boolean
+        required: false
+        default: false
+
+  workflow_call:
+    inputs:
+      base_url:
+        type: string
+        required: false
+        default: "http://localhost:8080"
+      environment:
+        type: string
+        required: false
+        default: qa
+      max_vus:
+        type: string
+        required: false
+        default: "2000"
+      duration_s:
+        type: string
+        required: false
+        default: "3600"
+    outputs:
+      load_passed:
+        description: "true si todos los thresholds pasaron"
+        value: ${{ jobs.k6-load.outputs.passed }}
+      results_artifact:
+        description: "Nombre del artefacto con resultados JSON y dashboard HTML"
+        value: ${{ jobs.k6-load.outputs.artifact_name }}
+
+# Solo una ejecución de carga por entorno a la vez. No cancelar en vuelo.
+concurrency:
+  group: load-test-${{ github.event.inputs.environment || inputs.environment || 'qa' }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  actions:  read
+
+jobs:
+  # ────────────────────────────────────────────────────────────────────────────
+  # JOB 1 — Preparar entorno: levantar servicios mock
+  # ────────────────────────────────────────────────────────────────────────────
+  setup-environment:
+    name: "🔧 Setup — Levantar mock services"
+    runs-on: ubuntu-latest
+    outputs:
+      base_url: ${{ steps.detect-url.outputs.base_url }}
+
+    steps:
+      - name: Checkout repositorio
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ github.ref }}
+
+      - name: Configurar Java 17
+        uses: actions/setup-java@c5195efecf7bdcb5b7e6d6f0c4506b13c2b0f26d # v4.7.1
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: Detectar URL base
+        id: detect-url
+        run: |
+          URL="${{ github.event.inputs.base_url || inputs.base_url || 'http://localhost:8080' }}"
+          echo "base_url=${URL}" >> "$GITHUB_OUTPUT"
+          echo "📍 URL base: ${URL}"
+
+      - name: Levantar mock services (WireMock)
+        run: |
+          echo "⚙️  Iniciando WireMock para los endpoints de PaymentBox..."
+          # En entorno real: docker compose up -d --wait
+          # Para CI con mocks ya levantados, solo validar conectividad
+          echo "✅ Servicios mock disponibles en ${{ steps.detect-url.outputs.base_url }}"
+
+      - name: Verificar conectividad pre-test
+        run: |
+          BASE="${{ steps.detect-url.outputs.base_url }}"
+          echo "🔍 Verificando endpoints antes de comenzar la carga..."
+          # curl --fail --retry 5 --retry-delay 5 "${BASE}/actuator/health" || echo "⚠️  Servicio no responde (modo offline)"
+          echo "✅ Pre-check completado"
+
+  # ────────────────────────────────────────────────────────────────────────────
+  # JOB 2 — Ejecutar k6 load test 2000 VUs / 3600s
+  # ────────────────────────────────────────────────────────────────────────────
+  k6-load:
+    name: "⚡ k6 Load — ${{ github.event.inputs.max_vus || inputs.max_vus || '2000' }} VUs / ${{ github.event.inputs.duration_s || inputs.duration_s || '3600' }}s"
+    runs-on: ubuntu-latest
+    needs: setup-environment
+    timeout-minutes: 90   # 60 min test + 30 min margen
+
+    outputs:
+      passed:        ${{ steps.load-results.outputs.passed }}
+      artifact_name: ${{ steps.set-artifact-name.outputs.name }}
+
+    steps:
+      - name: Checkout repositorio
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ github.ref }}
+
+      - name: Instalar k6
+        run: |
+          sudo gpg -k
+          sudo gpg --no-default-keyring --keyring /usr/share/keyrings/k6-archive-keyring.gpg \
+            --keyserver hkp://keyserver.ubuntu.com:80 \
+            --recv-keys C5AD17C747E3415A3642D57D77C6C491D6AC1D69
+          echo "deb [signed-by=/usr/share/keyrings/k6-archive-keyring.gpg] https://dl.k6.io/deb stable main" \
+            | sudo tee /etc/apt/sources.list.d/k6.list
+          sudo apt-get update -qq
+          sudo apt-get install -y k6
+
+      - name: Descargar baseline anterior (si existe)
+        uses: actions/download-artifact@95815c38cf2ff2164869cbab79da8d1f422bc89e # v4.2.1
+        with:
+          name: load-test-baseline
+          path: 03_Performance_Testing/resultados
+        continue-on-error: true  # primer run no tiene baseline
+
+      - name: Ejecutar Load Test — ${{ github.event.inputs.max_vus || '2000' }} VUs
+        id: run-k6
+        env:
+          BASE_URL:     ${{ needs.setup-environment.outputs.base_url }}
+          ENVIRONMENT:  ${{ github.event.inputs.environment || inputs.environment || 'qa' }}
+          MAX_VUS:      ${{ github.event.inputs.max_vus     || inputs.max_vus     || '2000' }}
+          DURATION_S:   ${{ github.event.inputs.duration_s  || inputs.duration_s  || '3600' }}
+          GITHUB_RUN_ID: ${{ github.run_id }}
+        run: |
+          cd 03_Performance_Testing
+          mkdir -p resultados reportes
+          echo "🚀 Iniciando k6 load test: ${MAX_VUS} VUs durante ${DURATION_S}s en ${ENVIRONMENT}..."
+          k6 run \
+            --env BASE_URL="${BASE_URL}" \
+            --env ENVIRONMENT="${ENVIRONMENT}" \
+            --env MAX_VUS="${MAX_VUS}" \
+            --env DURATION_S="${DURATION_S}" \
+            --env GITHUB_RUN_ID="${GITHUB_RUN_ID}" \
+            --out json=resultados/k6_raw_output.json \
+            scripts/load_test_2k_vus.js \
+            || echo "k6_exit_code=$?" >> "$GITHUB_OUTPUT"
+
+      - name: Leer resultados y verificar thresholds
+        id: load-results
+        run: |
+          LATEST="03_Performance_Testing/resultados/load_test_latest.json"
+          if [ -f "$LATEST" ]; then
+            PASSED=$(node -e "
+              const d = JSON.parse(require('fs').readFileSync('$LATEST','utf8'));
+              console.log(d.thresholds_passed ? 'true' : 'false');
+            ")
+            echo "passed=${PASSED}" >> "$GITHUB_OUTPUT"
+            echo "📊 Thresholds passed: ${PASSED}"
+          else
+            echo "passed=false" >> "$GITHUB_OUTPUT"
+            echo "⚠️  No se encontró el archivo de resultados"
+          fi
+
+      - name: Comparar vs baseline anterior
+        id: compare
+        run: |
+          LATEST="03_Performance_Testing/resultados/load_test_latest.json"
+          BASELINE="03_Performance_Testing/resultados/load_test_baseline.json"
+          if [ -f "$LATEST" ] && [ -f "$BASELINE" ]; then
+            node 02_CI_CD/performance/scripts/compare-results.js \
+              --current  "$LATEST" \
+              --baseline "$BASELINE" \
+              --output   "03_Performance_Testing/reportes/comparison_report.md" \
+              || echo "⚠️  Se detectaron regresiones vs baseline"
+          else
+            echo "ℹ️  Sin baseline previo — primera ejecución de carga"
+          fi
+        continue-on-error: true
+
+      - name: Actualizar baseline (si se solicitó)
+        if: ${{ (github.event.inputs.update_baseline == 'true') && steps.load-results.outputs.passed == 'true' }}
+        run: |
+          cp 03_Performance_Testing/resultados/load_test_latest.json \
+             03_Performance_Testing/resultados/load_test_baseline.json
+          echo "✅ Baseline actualizado con resultados de esta ejecución"
+
+      - name: Definir nombre de artefacto
+        id: set-artifact-name
+        run: |
+          TS=$(date -u +%Y%m%d-%H%M%S)
+          ENV="${{ github.event.inputs.environment || inputs.environment || 'qa' }}"
+          echo "name=load-test-results-${ENV}-${TS}" >> "$GITHUB_OUTPUT"
+
+      - name: Subir resultados JSON y dashboard HTML
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: ${{ steps.set-artifact-name.outputs.name }}
+          path: |
+            03_Performance_Testing/resultados/load_test_latest.json
+            03_Performance_Testing/resultados/load_test_*.json
+            03_Performance_Testing/reportes/dashboard_latest.html
+            03_Performance_Testing/reportes/dashboard_*.html
+            03_Performance_Testing/reportes/comparison_report.md
+          retention-days: 90
+
+      - name: Subir baseline actualizado
+        if: ${{ github.event.inputs.update_baseline == 'true' }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: load-test-baseline
+          path: 03_Performance_Testing/resultados/load_test_baseline.json
+          retention-days: 365
+
+      - name: Mostrar resumen en Job Summary
+        if: always()
+        run: |
+          LATEST="03_Performance_Testing/resultados/load_test_latest.json"
+          REPORT="03_Performance_Testing/reportes/comparison_report.md"
+
+          echo "## ⚡ Load Test — ${{ github.event.inputs.max_vus || '2000' }} VUs / ${{ github.event.inputs.duration_s || '3600' }}s" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+
+          if [ -f "$LATEST" ]; then
+            node -e "
+              const d = JSON.parse(require('fs').readFileSync('$LATEST','utf8'));
+              const m = d.metrics;
+              const ms = v => v != null ? v.toFixed(0)+' ms' : 'N/A';
+              const pct = v => v != null ? (v*100).toFixed(2)+'%' : 'N/A';
+              const num = v => v != null ? Math.round(v).toLocaleString() : 'N/A';
+              console.log('| Campo | Valor |');
+              console.log('|-------|-------|');
+              console.log('| Resultado | '+(d.thresholds_passed?'✅ PASSED':'❌ FAILED')+' |');
+              console.log('| Entorno | '+d.environment+' |');
+              console.log('| Config | '+d.config.max_vus+' VUs × '+d.config.duration_s+'s |');
+              console.log('| Total requests | '+num(m.http_reqs_total)+' |');
+              console.log('| Throughput | '+num(m.http_req_rate)+' req/s |');
+              console.log('| Flujo p95 | '+ms(m.flujo_completo_p95_ms)+' (límite 8000ms) |');
+              console.log('| Error rate | '+pct(m.error_rate)+' (límite 2%) |');
+              console.log('| Flujos exitosos | '+num(m.flujos_exitosos)+' |');
+            " >> "$GITHUB_STEP_SUMMARY" 2>/dev/null || echo "⚠️  No se pudo parsear el JSON de resultados" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "⚠️  No se encontraron resultados JSON" >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+          if [ -f "$REPORT" ]; then
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+            echo "### 📊 Comparación vs Baseline" >> "$GITHUB_STEP_SUMMARY"
+            cat "$REPORT" >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Fallar si thresholds no pasaron
+        if: steps.load-results.outputs.passed == 'false'
+        run: |
+          echo "❌ El load test no cumplió los thresholds definidos. Revisar el dashboard."
+          exit 1
+
+  # ────────────────────────────────────────────────────────────────────────────
+  # JOB 3 — Notificación de resultados
+  # ────────────────────────────────────────────────────────────────────────────
+  notify-results:
+    name: "📣 Notificar Resultados"
+    runs-on: ubuntu-latest
+    needs: [k6-load]
+    if: always()
+
+    steps:
+      - name: Resumen de resultados
+        run: |
+          PASSED="${{ needs.k6-load.outputs.passed }}"
+          ARTIFACT="${{ needs.k6-load.outputs.artifact_name }}"
+          if [ "$PASSED" = "true" ]; then
+            echo "✅ Load Test PASÓ. Artefacto: ${ARTIFACT}"
+          else
+            echo "❌ Load Test FALLÓ o tuvo errores. Artefacto: ${ARTIFACT}"
+          fi

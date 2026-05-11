@@ -1,0 +1,15 @@
+{
+  "name": "att-rpa-automation",
+  "version": "1.0.0",
+  "description": "Lightweight RPA automation using Playwright for CI/CD pipeline",
+  "scripts": {
+    "rpa": "node scripts/rpa-flow.js",
+    "test": "node scripts/rpa-flow.js"
+  },
+  "dependencies": {
+    "playwright": "^1.44.0"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
