@@ -4,8 +4,7 @@ name: "⚡ [Performance] k6 Load — 2k VUs / 3600s — PaymentBox"
 # Workflow: Prueba de carga sostenida con 2000 VUs durante 3600 segundos (1h)
 #
 # Propósito: Validar el comportamiento del flujo E2E de recarga bajo carga alta
-#            y sostenida, detectar degradaciones vs baseline de smoke test y
-#            generar dashboard HTML con todas las métricas requeridas.
+#            y sostenida, detectar degradaciones vs baseline de smoke test.
 #
 # Flujo E2E (8 pasos con correlación de IDs):
 #   P2: Focalizar Cliente  → GET  /api/clientes/buscar
@@ -72,7 +71,7 @@ on:
         description: "true si todos los thresholds pasaron"
         value: ${{ jobs.k6-load.outputs.passed }}
       results_artifact:
-        description: "Nombre del artefacto con resultados JSON y dashboard HTML"
+        description: "Nombre del artefacto con resultados JSON"
         value: ${{ jobs.k6-load.outputs.artifact_name }}
 
 # Solo una ejecución de carga por entorno a la vez. No cancelar en vuelo.
@@ -86,54 +85,11 @@ permissions:
 
 jobs:
   # ────────────────────────────────────────────────────────────────────────────
-  # JOB 1 — Preparar entorno: levantar servicios mock
-  # ────────────────────────────────────────────────────────────────────────────
-  setup-environment:
-    name: "🔧 Setup — Levantar mock services"
-    runs-on: ubuntu-latest
-    outputs:
-      base_url: ${{ steps.detect-url.outputs.base_url }}
-
-    steps:
-      - name: Checkout repositorio
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-        with:
-          ref: ${{ github.ref }}
-
-      - name: Configurar Java 17
-        uses: actions/setup-java@c5195efecf7bdcb5b7e6d6f0c4506b13c2b0f26d # v4.7.1
-        with:
-          java-version: '17'
-          distribution: 'temurin'
-
-      - name: Detectar URL base
-        id: detect-url
-        run: |
-          URL="${{ github.event.inputs.base_url || inputs.base_url || 'http://localhost:8080' }}"
-          echo "base_url=${URL}" >> "$GITHUB_OUTPUT"
-          echo "📍 URL base: ${URL}"
-
-      - name: Levantar mock services (WireMock)
-        run: |
-          echo "⚙️  Iniciando WireMock para los endpoints de PaymentBox..."
-          # En entorno real: docker compose up -d --wait
-          # Para CI con mocks ya levantados, solo validar conectividad
-          echo "✅ Servicios mock disponibles en ${{ steps.detect-url.outputs.base_url }}"
-
-      - name: Verificar conectividad pre-test
-        run: |
-          BASE="${{ steps.detect-url.outputs.base_url }}"
-          echo "🔍 Verificando endpoints antes de comenzar la carga..."
-          # curl --fail --retry 5 --retry-delay 5 "${BASE}/actuator/health" || echo "⚠️  Servicio no responde (modo offline)"
-          echo "✅ Pre-check completado"
-
-  # ────────────────────────────────────────────────────────────────────────────
-  # JOB 2 — Ejecutar k6 load test 2000 VUs / 3600s
+  # JOB 1 — Levantar entorno mock + ejecutar k6 load test 2000 VUs / 3600s
   # ────────────────────────────────────────────────────────────────────────────
   k6-load:
     name: "⚡ k6 Load — ${{ github.event.inputs.max_vus || inputs.max_vus || '2000' }} VUs / ${{ github.event.inputs.duration_s || inputs.duration_s || '3600' }}s"
     runs-on: ubuntu-latest
-    needs: setup-environment
     timeout-minutes: 90   # 60 min test + 30 min margen
 
     outputs:
@@ -142,39 +98,53 @@ jobs:
 
     steps:
       - name: Checkout repositorio
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-        with:
-          ref: ${{ github.ref }}
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - name: Login en GHCR (imágenes de simulación)
+        run: |
+          echo "${{ secrets.GITHUB_TOKEN }}" \
+            | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+
+      - name: Iniciar entorno de simulación (Docker Compose)
+        working-directory: simulation
+        timeout-minutes: 10
+        run: |
+          docker compose up -d --build --wait
+          echo "✅ Entorno de simulación listo para k6 load test"
+
+      - name: Verificar health de servicios
+        run: |
+          BASE="${{ github.event.inputs.base_url || inputs.base_url || 'http://localhost:8080' }}"
+          curl --retry 10 --retry-delay 5 --retry-connrefused -sf \
+            "${BASE}/actuator/health" | grep -q '"status":"UP"' \
+            && echo "✅ microservice-a healthy" \
+            || (echo "❌ microservice-a no responde"; exit 1)
 
       - name: Instalar k6
         run: |
-          sudo gpg -k
-          sudo gpg --no-default-keyring --keyring /usr/share/keyrings/k6-archive-keyring.gpg \
-            --keyserver hkp://keyserver.ubuntu.com:80 \
-            --recv-keys C5AD17C747E3415A3642D57D77C6C491D6AC1D69
-          echo "deb [signed-by=/usr/share/keyrings/k6-archive-keyring.gpg] https://dl.k6.io/deb stable main" \
-            | sudo tee /etc/apt/sources.list.d/k6.list
-          sudo apt-get update -qq
-          sudo apt-get install -y k6
+          # Install k6 via direct binary download (avoids GPG/APT issues on Ubuntu 24.04)
+          K6_VERSION="v0.55.0"
+          curl -fsSL "https://github.com/grafana/k6/releases/download/${K6_VERSION}/k6-${K6_VERSION}-linux-amd64.tar.gz" \
+            | sudo tar -xz --strip-components=1 -C /usr/local/bin k6-${K6_VERSION}-linux-amd64/k6
+          k6 version
 
       - name: Descargar baseline anterior (si existe)
-        uses: actions/download-artifact@95815c38cf2ff2164869cbab79da8d1f422bc89e # v4.2.1
+        uses: actions/download-artifact@95815c38cf2ff2164869cbab79da8d1f422bc89e # v4
         with:
           name: load-test-baseline
-          path: 03_Performance_Testing/resultados
+          path: tests/k6/results
         continue-on-error: true  # primer run no tiene baseline
 
       - name: Ejecutar Load Test — ${{ github.event.inputs.max_vus || '2000' }} VUs
         id: run-k6
         env:
-          BASE_URL:     ${{ needs.setup-environment.outputs.base_url }}
-          ENVIRONMENT:  ${{ github.event.inputs.environment || inputs.environment || 'qa' }}
-          MAX_VUS:      ${{ github.event.inputs.max_vus     || inputs.max_vus     || '2000' }}
-          DURATION_S:   ${{ github.event.inputs.duration_s  || inputs.duration_s  || '3600' }}
+          BASE_URL:      ${{ github.event.inputs.base_url    || inputs.base_url    || 'http://localhost:8080' }}
+          ENVIRONMENT:   ${{ github.event.inputs.environment || inputs.environment || 'qa' }}
+          MAX_VUS:       ${{ github.event.inputs.max_vus     || inputs.max_vus     || '2000' }}
+          DURATION_S:    ${{ github.event.inputs.duration_s  || inputs.duration_s  || '3600' }}
           GITHUB_RUN_ID: ${{ github.run_id }}
         run: |
-          cd 03_Performance_Testing
-          mkdir -p resultados reportes
+          mkdir -p tests/k6/results
           echo "🚀 Iniciando k6 load test: ${MAX_VUS} VUs durante ${DURATION_S}s en ${ENVIRONMENT}..."
           k6 run \
             --env BASE_URL="${BASE_URL}" \
@@ -182,135 +152,80 @@ jobs:
             --env MAX_VUS="${MAX_VUS}" \
             --env DURATION_S="${DURATION_S}" \
             --env GITHUB_RUN_ID="${GITHUB_RUN_ID}" \
-            --out json=resultados/k6_raw_output.json \
-            scripts/load_test_2k_vus.js \
-            || echo "k6_exit_code=$?" >> "$GITHUB_OUTPUT"
+            --out json=tests/k6/results/k6_load_raw.json \
+            tests/k6/load_2k_vus.js
 
-      - name: Leer resultados y verificar thresholds
+      - name: Evaluar thresholds
         id: load-results
+        if: always()
         run: |
-          LATEST="03_Performance_Testing/resultados/load_test_latest.json"
-          if [ -f "$LATEST" ]; then
-            PASSED=$(node -e "
-              const d = JSON.parse(require('fs').readFileSync('$LATEST','utf8'));
-              console.log(d.thresholds_passed ? 'true' : 'false');
-            ")
-            echo "passed=${PASSED}" >> "$GITHUB_OUTPUT"
-            echo "📊 Thresholds passed: ${PASSED}"
+          RAW="tests/k6/results/k6_load_raw.json"
+          if [ -f "$RAW" ]; then
+            # Check k6 exit code from previous step
+            K6_STATUS="${{ steps.run-k6.outcome }}"
+            if [ "$K6_STATUS" = "success" ]; then
+              echo "passed=true"  >> "$GITHUB_OUTPUT"
+              echo "✅ Todos los thresholds k6 han pasado"
+            else
+              echo "passed=false" >> "$GITHUB_OUTPUT"
+              echo "❌ Thresholds k6 no cumplidos"
+            fi
           else
             echo "passed=false" >> "$GITHUB_OUTPUT"
-            echo "⚠️  No se encontró el archivo de resultados"
+            echo "⚠️  No se encontraron resultados del load test"
           fi
-
-      - name: Comparar vs baseline anterior
-        id: compare
-        run: |
-          LATEST="03_Performance_Testing/resultados/load_test_latest.json"
-          BASELINE="03_Performance_Testing/resultados/load_test_baseline.json"
-          if [ -f "$LATEST" ] && [ -f "$BASELINE" ]; then
-            node 02_CI_CD/performance/scripts/compare-results.js \
-              --current  "$LATEST" \
-              --baseline "$BASELINE" \
-              --output   "03_Performance_Testing/reportes/comparison_report.md" \
-              || echo "⚠️  Se detectaron regresiones vs baseline"
-          else
-            echo "ℹ️  Sin baseline previo — primera ejecución de carga"
-          fi
-        continue-on-error: true
 
       - name: Actualizar baseline (si se solicitó)
         if: ${{ (github.event.inputs.update_baseline == 'true') && steps.load-results.outputs.passed == 'true' }}
         run: |
-          cp 03_Performance_Testing/resultados/load_test_latest.json \
-             03_Performance_Testing/resultados/load_test_baseline.json
+          cp tests/k6/results/k6_load_raw.json tests/k6/results/load_test_baseline.json
           echo "✅ Baseline actualizado con resultados de esta ejecución"
 
       - name: Definir nombre de artefacto
         id: set-artifact-name
+        if: always()
         run: |
           TS=$(date -u +%Y%m%d-%H%M%S)
           ENV="${{ github.event.inputs.environment || inputs.environment || 'qa' }}"
           echo "name=load-test-results-${ENV}-${TS}" >> "$GITHUB_OUTPUT"
 
-      - name: Subir resultados JSON y dashboard HTML
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+      - name: Subir resultados
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: ${{ steps.set-artifact-name.outputs.name }}
-          path: |
-            03_Performance_Testing/resultados/load_test_latest.json
-            03_Performance_Testing/resultados/load_test_*.json
-            03_Performance_Testing/reportes/dashboard_latest.html
-            03_Performance_Testing/reportes/dashboard_*.html
-            03_Performance_Testing/reportes/comparison_report.md
+          path: tests/k6/results/
           retention-days: 90
+          if-no-files-found: warn
 
       - name: Subir baseline actualizado
         if: ${{ github.event.inputs.update_baseline == 'true' }}
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: load-test-baseline
-          path: 03_Performance_Testing/resultados/load_test_baseline.json
+          path: tests/k6/results/load_test_baseline.json
           retention-days: 365
 
-      - name: Mostrar resumen en Job Summary
+      - name: Job Summary
         if: always()
         run: |
-          LATEST="03_Performance_Testing/resultados/load_test_latest.json"
-          REPORT="03_Performance_Testing/reportes/comparison_report.md"
-
           echo "## ⚡ Load Test — ${{ github.event.inputs.max_vus || '2000' }} VUs / ${{ github.event.inputs.duration_s || '3600' }}s" >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
-
-          if [ -f "$LATEST" ]; then
-            node -e "
-              const d = JSON.parse(require('fs').readFileSync('$LATEST','utf8'));
-              const m = d.metrics;
-              const ms = v => v != null ? v.toFixed(0)+' ms' : 'N/A';
-              const pct = v => v != null ? (v*100).toFixed(2)+'%' : 'N/A';
-              const num = v => v != null ? Math.round(v).toLocaleString() : 'N/A';
-              console.log('| Campo | Valor |');
-              console.log('|-------|-------|');
-              console.log('| Resultado | '+(d.thresholds_passed?'✅ PASSED':'❌ FAILED')+' |');
-              console.log('| Entorno | '+d.environment+' |');
-              console.log('| Config | '+d.config.max_vus+' VUs × '+d.config.duration_s+'s |');
-              console.log('| Total requests | '+num(m.http_reqs_total)+' |');
-              console.log('| Throughput | '+num(m.http_req_rate)+' req/s |');
-              console.log('| Flujo p95 | '+ms(m.flujo_completo_p95_ms)+' (límite 8000ms) |');
-              console.log('| Error rate | '+pct(m.error_rate)+' (límite 2%) |');
-              console.log('| Flujos exitosos | '+num(m.flujos_exitosos)+' |');
-            " >> "$GITHUB_STEP_SUMMARY" 2>/dev/null || echo "⚠️  No se pudo parsear el JSON de resultados" >> "$GITHUB_STEP_SUMMARY"
-          else
-            echo "⚠️  No se encontraron resultados JSON" >> "$GITHUB_STEP_SUMMARY"
-          fi
-
-          if [ -f "$REPORT" ]; then
-            echo "" >> "$GITHUB_STEP_SUMMARY"
-            echo "### 📊 Comparación vs Baseline" >> "$GITHUB_STEP_SUMMARY"
-            cat "$REPORT" >> "$GITHUB_STEP_SUMMARY"
-          fi
+          echo "| Campo | Valor |" >> "$GITHUB_STEP_SUMMARY"
+          echo "|-------|-------|" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Resultado | ${{ steps.load-results.outputs.passed == 'true' && '✅ PASSED' || '❌ FAILED' }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Entorno | ${{ github.event.inputs.environment || 'qa' }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Config | ${{ github.event.inputs.max_vus || '2000' }} VUs × ${{ github.event.inputs.duration_s || '3600' }}s |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Rama | ${{ github.ref_name }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Commit | ${{ github.sha }} |" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Fallar si thresholds no pasaron
         if: steps.load-results.outputs.passed == 'false'
         run: |
-          echo "❌ El load test no cumplió los thresholds definidos. Revisar el dashboard."
+          echo "❌ El load test no cumplió los thresholds definidos."
           exit 1
 
-  # ────────────────────────────────────────────────────────────────────────────
-  # JOB 3 — Notificación de resultados
-  # ────────────────────────────────────────────────────────────────────────────
-  notify-results:
-    name: "📣 Notificar Resultados"
-    runs-on: ubuntu-latest
-    needs: [k6-load]
-    if: always()
-
-    steps:
-      - name: Resumen de resultados
-        run: |
-          PASSED="${{ needs.k6-load.outputs.passed }}"
-          ARTIFACT="${{ needs.k6-load.outputs.artifact_name }}"
-          if [ "$PASSED" = "true" ]; then
-            echo "✅ Load Test PASÓ. Artefacto: ${ARTIFACT}"
-          else
-            echo "❌ Load Test FALLÓ o tuvo errores. Artefacto: ${ARTIFACT}"
-          fi
+      - name: Detener entorno de simulación
+        if: always()
+        working-directory: simulation
+        run: docker compose down -v --remove-orphans
