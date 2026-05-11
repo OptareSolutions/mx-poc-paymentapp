@@ -406,5 +406,5 @@ docker compose ps
 | Script de restauración | `demo\restore.ps1` |
 | Docker Compose entorno | `simulation\docker-compose.yml` |
 | Documentación Framework | `C:\Users\jcunha\Documents\Optare\Clientes\AT_T\QA\04_Framework\` |
-| GitLab Proyecto QA_POC | `https://git.optare.net/` |
+| GitLab Proyecto QA_POC | `https://git.optare.net/jcunha/QA_POC_ATT` |
 | GitHub Actions | Repositorio att-poc-paymentbox → Tab Actions |
