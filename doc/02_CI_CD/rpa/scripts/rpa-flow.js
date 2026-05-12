@@ -32,7 +32,7 @@ const fs = require('fs');
 const path = require('path');
 
 const RESULTS_DIR = path.resolve(__dirname, '../results');
-const AUTH_FILE = path.resolve(__dirname, '../../../sf-auth.json');
+const AUTH_FILE = path.resolve(__dirname, '../../../../sf-auth.json');
 
 fs.mkdirSync(RESULTS_DIR, { recursive: true });
 
