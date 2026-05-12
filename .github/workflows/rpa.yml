@@ -38,7 +38,7 @@ jobs:
       RPA_USERNAME:     ${{ secrets.RPA_USERNAME }}
       RPA_PASSWORD:     ${{ secrets.RPA_PASSWORD }}
       RPA_PRODUCT_NAME: ${{ github.event.inputs.product_name || 'Paquete Básico' }}
-      RPA_PRODUCT_PRICE:${{ github.event.inputs.product_price || '1500' }}
+      RPA_PRODUCT_PRICE: ${{ github.event.inputs.product_price || '1500' }}
       RPA_TIMEOUT_MS:   '60000'
 
     steps:
