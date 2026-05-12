@@ -9,10 +9,14 @@ on:
       - '.github/workflows/rpa.yml'
   workflow_dispatch:
     inputs:
-      record_id:
-        description: 'Record ID to query'
+      product_name:
+        description: 'Product name to add to the Opportunity'
         required: false
-        default: '1'
+        default: 'Paquete Básico'
+      product_price:
+        description: 'Unit price for the product'
+        required: false
+        default: '1500'
 
 # Least-privilege permissions
 permissions:
@@ -27,14 +31,15 @@ jobs:
   rpa:
     name: Run RPA Flow
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 30
 
     env:
-      RPA_BASE_URL:  ${{ secrets.RPA_BASE_URL }}
-      RPA_USERNAME:  ${{ secrets.RPA_USERNAME }}
-      RPA_PASSWORD:  ${{ secrets.RPA_PASSWORD }}
-      RPA_RECORD_ID: ${{ github.event.inputs.record_id || '1' }}
-      RPA_TIMEOUT_MS: '30000'
+      RPA_BASE_URL:     ${{ secrets.RPA_BASE_URL }}
+      RPA_USERNAME:     ${{ secrets.RPA_USERNAME }}
+      RPA_PASSWORD:     ${{ secrets.RPA_PASSWORD }}
+      RPA_PRODUCT_NAME: ${{ github.event.inputs.product_name || 'Paquete Básico' }}
+      RPA_PRODUCT_PRICE:${{ github.event.inputs.product_price || '1500' }}
+      RPA_TIMEOUT_MS:   '60000'
 
     steps:
       - name: Checkout repository
