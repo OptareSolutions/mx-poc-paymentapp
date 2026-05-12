@@ -86,9 +86,16 @@ async function soql(query) {
   return sfRequest(`/services/data/${API_VERSION}/query?q=${encoded}`);
 }
 
-async function createRecord(objectName, payload) {
+async function createRecord(objectName, payload, options = {}) {
+  const headers = {};
+
+  if (options.allowDuplicates) {
+    headers['Sforce-Duplicate-Rule-Header'] = 'allowSave=true';
+  }
+
   return sfRequest(`/services/data/${API_VERSION}/sobjects/${objectName}`, {
     method: 'POST',
+    headers,
     body: JSON.stringify(payload)
   });
 }
@@ -192,8 +199,8 @@ async function main() {
     throw new Error(`Invalid RPA_PRODUCT_PRICE: ${process.env.RPA_PRODUCT_PRICE}`);
   }
 
-  const accountName = `Cliente Demo GitHub RPA ${Date.now()}`;
-  const contactLastName = `Contacto RPA ${Date.now()}`;
+  const accountName = `ATTF-RPA-${runId}`;
+  const contactLastName = `Contact-${runId}`;
 
   console.log('Connected to Salesforce:', instanceUrl);
   console.log('Starting Salesforce RPA/API flow');
@@ -213,12 +220,18 @@ async function main() {
   let account = await findAccountByName(accountName);
 
   if (!account) {
-    const createdAccount = await createRecord('Account', {
-      Name: accountName,
-      Phone: '+351000000000',
-      BillingCity: 'Lisboa',
-      BillingCountry: 'Portugal'
-    });
+    const createdAccount = await createRecord(
+  'Account',
+  {
+    Name: accountName,
+    Phone: `+34${Date.now().toString().slice(-9)}`,
+    BillingCity: 'Vigo',
+    BillingCountry: 'Spain'
+  },
+  {
+    allowDuplicates: true
+  }
+);
 
     account = {
       Id: createdAccount.id,
