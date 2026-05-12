@@ -182,7 +182,9 @@ jobs:
 
       - name: "Quality Gates · Preparar bytecode para SonarCloud"
         working-directory: ${{ inputs.microservice_name }}
-        run: gradle classes --no-daemon
+        run: |
+          gradle classes testClasses --no-daemon
+          mkdir -p build/classes/java/main build/classes/java/test
 
       - name: "Quality Gates · SonarCloud analisis de codigo"
         uses: SonarSource/sonarcloud-github-action@e44258b109568baa0df60ed515909fc6c72cba92 # v3.0.0
@@ -206,7 +208,7 @@ jobs:
           trivyignores: .trivyignore
 
       - name: "Quality Gates · Upload SARIF filesystem"
-        if: always()
+        if: always() && hashFiles('trivy-fs-results.sarif') != ''
         uses: github/codeql-action/upload-sarif@fca7ace96b7d713c7035871441bd52efbe39e27e # v3.28.19
         with:
           sarif_file: trivy-fs-results.sarif
