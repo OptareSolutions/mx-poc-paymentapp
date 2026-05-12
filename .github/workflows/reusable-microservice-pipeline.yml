@@ -17,7 +17,7 @@
 # Deliver job (step 5) only runs on push events (post-merge deploys).
 # On pull_request events it is skipped — validation only, no deploy.
 # ==============================================================================
-name: "Reusable Microservice Pipeline"
+name: "Reusable: Microservice CI/CD pipeline"
 
 on:
   workflow_call:

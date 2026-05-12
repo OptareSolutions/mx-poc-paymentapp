@@ -1,7 +1,8 @@
 # [microservice-b] CI - Caller para reusable-microservice-pipeline.yml
 # Equipo: Customer Profile (Team B) | test_runner: smoke (contract test)
 # Ambientes: E->dev | A->qa | F->preprod | PRODUCCION->prod
-name: "[microservice-b] CI/CD"
+name: "[microservice-b] CICD"
+run-name: "${{ github.event_name == 'pull_request' && format('[microservice-b] CICD · #{0}: {1}', github.event.pull_request.number, github.event.pull_request.title) || '[microservice-b] CICD' }}"
 
 on:
   push:
@@ -30,7 +31,7 @@ concurrency:
 
 jobs:
   pipeline:
-    name: "Build → Test → Quality Gates → Publish → Deliver"
+    name: CICD
     uses: ./.github/workflows/reusable-microservice-pipeline.yml
     with:
       microservice_name: microservice-b
