@@ -21,6 +21,6 @@ images:
   - name: ghcr.io/optaresolutions/mx-poc-paymentapp/microservice-a
     newTag: "env-e-0000000"
   - name: ghcr.io/optaresolutions/mx-poc-paymentapp/microservice-b
-    newTag: "env-e-0000000"
+    newTag: "env-e-f79a991"
   - name: ghcr.io/optaresolutions/mx-poc-paymentapp/ui-paymentbox
     newTag: "env-e-0000000"
