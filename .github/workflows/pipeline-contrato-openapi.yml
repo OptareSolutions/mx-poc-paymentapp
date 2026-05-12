@@ -1,4 +1,4 @@
-name: "🔍 API Contract — Breaking Changes OpenAPI"
+name: "API Contract — Quality Gates · Breaking Changes OpenAPI"
 
 # ------------------------------------------------------------------------------
 # Detección de breaking changes en especificaciones OpenAPI/Swagger.
@@ -53,19 +53,19 @@ permissions:
 jobs:
   # ── Job: Detectar qué servicios tienen cambios ──────────────────────────────
   detect-changes:
-    name: "0 — Detectar servicios con cambios"
+    name: "1 · Build · Detectar servicios con cambios"
     runs-on: ubuntu-latest
     outputs:
       check-msvc-a: ${{ steps.filter.outputs.microservice-a }}
       check-msvc-b: ${{ steps.filter.outputs.microservice-b }}
 
     steps:
-      - name: Checkout
+      - name: "Build · Checkout"
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           fetch-depth: 0
 
-      - name: Detectar servicios con cambios
+      - name: "Build · Detectar servicios con cambios"
         id: filter
         run: |
           BASE_REF="${{ github.base_ref || 'main' }}"
@@ -106,18 +106,18 @@ jobs:
 
   # ── Job: Verificar microservice-a ───────────────────────────────────────────
   check-microservice-a:
-    name: "1 — 🔍 Breaking Changes microservice-a"
+    name: "3 · Quality Gates · Breaking Changes microservice-a"
     runs-on: ubuntu-latest
     needs: detect-changes
     if: needs.detect-changes.outputs.check-msvc-a == 'true'
 
     steps:
-      - name: Checkout rama actual (revision)
+      - name: "Quality Gates · Checkout rama actual (revision)"
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           fetch-depth: 0
 
-      - name: Preparar spec actual (revision)
+      - name: "Quality Gates · Preparar spec actual (revision)"
         id: current-spec
         run: |
           SPEC_STATIC="microservice-a/docs/openapi.yaml"
@@ -136,7 +136,7 @@ jobs:
             echo "found=false" >> $GITHUB_OUTPUT
           fi
 
-      - name: Obtener spec baseline (rama base)
+      - name: "Quality Gates · Obtener spec baseline (rama base)"
         id: base-spec
         if: steps.current-spec.outputs.found == 'true'
         run: |
@@ -163,7 +163,7 @@ jobs:
             echo "found=false" >> $GITHUB_OUTPUT
           fi
 
-      - name: Instalar oasdiff
+      - name: "Quality Gates · Instalar oasdiff"
         if: steps.current-spec.outputs.found == 'true' && steps.base-spec.outputs.found == 'true'
         run: |
           OASDIFF_VERSION="v1.10.20"
@@ -173,7 +173,7 @@ jobs:
           sudo mv /tmp/oasdiff /usr/local/bin/oasdiff
           oasdiff --version
 
-      - name: Analizar diferencias (diff completo)
+      - name: "Quality Gates · Analizar diferencias (diff completo)"
         if: steps.current-spec.outputs.found == 'true' && steps.base-spec.outputs.found == 'true'
         run: |
           echo "====== DIFERENCIAS OPENAPI — microservice-a ======"
@@ -181,7 +181,7 @@ jobs:
             --format text 2>&1 | tee /tmp/diff-msvc-a.txt || true
           echo "=================================================="
 
-      - name: 🔍 Detectar breaking changes — microservice-a
+      - name: "Quality Gates · Detectar breaking changes — microservice-a"
         if: steps.current-spec.outputs.found == 'true' && steps.base-spec.outputs.found == 'true'
         id: breaking
         run: |
@@ -206,7 +206,7 @@ jobs:
             echo "✅ Sin breaking changes en microservice-a"
           fi
 
-      - name: Subir reporte de breaking changes
+      - name: "Quality Gates · Subir reporte de breaking changes"
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
@@ -217,7 +217,7 @@ jobs:
           retention-days: 30
           if-no-files-found: ignore
 
-      - name: ❌ Bloquear pipeline por breaking changes
+      - name: "Quality Gates · Bloquear pipeline por breaking changes"
         if: steps.breaking.outputs.breaking_found == 'true'
         run: |
           echo ""
@@ -239,18 +239,18 @@ jobs:
 
   # ── Job: Verificar microservice-b ───────────────────────────────────────────
   check-microservice-b:
-    name: "2 — 🔍 Breaking Changes microservice-b"
+    name: "3 · Quality Gates · Breaking Changes microservice-b"
     runs-on: ubuntu-latest
     needs: detect-changes
     if: needs.detect-changes.outputs.check-msvc-b == 'true'
 
     steps:
-      - name: Checkout rama actual (revision)
+      - name: "Quality Gates · Checkout rama actual (revision)"
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           fetch-depth: 0
 
-      - name: Preparar spec actual (revision)
+      - name: "Quality Gates · Preparar spec actual (revision)"
         id: current-spec
         run: |
           SPEC_STATIC="microservice-b/docs/openapi.yaml"
@@ -269,7 +269,7 @@ jobs:
             echo "found=false" >> $GITHUB_OUTPUT
           fi
 
-      - name: Obtener spec baseline (rama base)
+      - name: "Quality Gates · Obtener spec baseline (rama base)"
         id: base-spec
         if: steps.current-spec.outputs.found == 'true'
         run: |
@@ -293,7 +293,7 @@ jobs:
             echo "found=false" >> $GITHUB_OUTPUT
           fi
 
-      - name: Instalar oasdiff
+      - name: "Quality Gates · Instalar oasdiff"
         if: steps.current-spec.outputs.found == 'true' && steps.base-spec.outputs.found == 'true'
         run: |
           OASDIFF_VERSION="v1.10.20"
@@ -303,7 +303,7 @@ jobs:
           sudo mv /tmp/oasdiff /usr/local/bin/oasdiff
           oasdiff --version
 
-      - name: Analizar diferencias (diff completo)
+      - name: "Quality Gates · Analizar diferencias (diff completo)"
         if: steps.current-spec.outputs.found == 'true' && steps.base-spec.outputs.found == 'true'
         run: |
           echo "====== DIFERENCIAS OPENAPI — microservice-b ======"
@@ -311,7 +311,7 @@ jobs:
             --format text 2>&1 | tee /tmp/diff-msvc-b.txt || true
           echo "=================================================="
 
-      - name: 🔍 Detectar breaking changes — microservice-b
+      - name: "Quality Gates · Detectar breaking changes — microservice-b"
         if: steps.current-spec.outputs.found == 'true' && steps.base-spec.outputs.found == 'true'
         id: breaking
         run: |
@@ -336,7 +336,7 @@ jobs:
             echo "✅ Sin breaking changes en microservice-b"
           fi
 
-      - name: Subir reporte de breaking changes
+      - name: "Quality Gates · Subir reporte de breaking changes"
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
@@ -347,7 +347,7 @@ jobs:
           retention-days: 30
           if-no-files-found: ignore
 
-      - name: ❌ Bloquear pipeline por breaking changes
+      - name: "Quality Gates · Bloquear pipeline por breaking changes"
         if: steps.breaking.outputs.breaking_found == 'true'
         run: |
           echo ""
@@ -369,13 +369,13 @@ jobs:
 
   # ── Job: Resumen final ───────────────────────────────────────────────────────
   summary:
-    name: "3 — 📋 Resumen Contract Check"
+    name: "3 · Quality Gates · Resumen Contract Check"
     runs-on: ubuntu-latest
     needs: [detect-changes, check-microservice-a, check-microservice-b]
     if: always()
 
     steps:
-      - name: Evaluar resultado global
+      - name: "Quality Gates · Evaluar resultado global"
         run: |
           A_RESULT="${{ needs.check-microservice-a.result }}"
           B_RESULT="${{ needs.check-microservice-b.result }}"

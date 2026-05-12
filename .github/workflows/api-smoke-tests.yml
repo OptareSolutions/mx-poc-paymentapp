@@ -1,4 +1,4 @@
-name: "[API] Smoke Tests Funcionales — AT&T PoC"
+name: "[API] Test · Smoke Tests Funcionales — AT&T PoC"
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Propósito: Ejecutar smoke tests funcionales sobre los endpoints críticos de
@@ -51,17 +51,17 @@ concurrency:
 # ──────────────────────────────────────────────────────────────────────────────
 jobs:
   api-smoke-tests:
-    name: "API Smoke Tests — Endpoints Críticos"
+    name: "2 · Test · API Smoke Tests — Endpoints Críticos"
     runs-on: ubuntu-latest
     timeout-minutes: 20
 
     steps:
       # ── 1. Checkout ──────────────────────────────────────────────────────────
-      - name: Checkout
+      - name: "Test · Checkout"
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
 
       # ── 2. Configurar JDK 17 para Karate/Maven ──────────────────────────────
-      - name: Configurar JDK 17
+      - name: "Test · Configurar JDK 17"
         uses: actions/setup-java@c1e323688fd81a25caa38c78aa6df2d33d3e20d9 # v4.8.0
         with:
           java-version: "17"
@@ -69,7 +69,7 @@ jobs:
           cache: maven
 
       # ── 3. Cache Maven (~/.m2) ───────────────────────────────────────────────
-      - name: Cache Maven
+      - name: "Test · Cache Maven"
         uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
         with:
           path: ~/.m2/repository
@@ -79,7 +79,7 @@ jobs:
             ${{ runner.os }}-maven-
 
       # ── 4. Iniciar entorno simulado (docker-compose) ─────────────────────────
-      - name: Iniciar entorno simulado
+      - name: "Test · Iniciar entorno simulado"
         run: |
           cd simulation
           docker compose up -d --build
@@ -88,7 +88,7 @@ jobs:
           docker compose ps
 
       # ── 5. Health check microservice-b ───────────────────────────────────────
-      - name: Health check — microservice-b
+      - name: "Test · Health check — microservice-b"
         run: |
           for i in $(seq 1 15); do
             STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:18081/actuator/health || echo "000")
@@ -100,7 +100,7 @@ jobs:
           done
 
       # ── 6. Health check microservice-a ───────────────────────────────────────
-      - name: Health check — microservice-a
+      - name: "Test · Health check — microservice-a"
         run: |
           for i in $(seq 1 15); do
             STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8080/actuator/health || echo "000")
@@ -112,7 +112,7 @@ jobs:
           done
 
       # ── 7. Ejecutar Karate Smoke Tests (@smoke) ───────────────────────────────
-      - name: Ejecutar API Smoke Tests (Karate @smoke)
+      - name: "Test · Ejecutar API Smoke Tests (Karate @smoke)"
         working-directory: tests/functional-karate
         run: |
           mvn test \
@@ -122,7 +122,7 @@ jobs:
             -Dsurefire.failIfNoSpecifiedTests=false
 
       # ── 8. Publicar resultados JUnit en GitHub Actions ────────────────────────
-      - name: Publicar resultados de tests
+      - name: "Test · Publicar resultados de tests"
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
@@ -133,7 +133,7 @@ jobs:
           retention-days: 30
 
       # ── 9. Resumen de resultados en el Job Summary ────────────────────────────
-      - name: Resumen de resultados
+      - name: "Test · Resumen de resultados"
         if: always()
         run: |
           echo "## 🧪 API Smoke Test Results" >> $GITHUB_STEP_SUMMARY
@@ -162,6 +162,6 @@ jobs:
           fi
 
       # ── 10. Parar entorno simulado ────────────────────────────────────────────
-      - name: Parar entorno simulado
+      - name: "Test · Parar entorno simulado"
         if: always()
         run: cd simulation && docker compose down -v

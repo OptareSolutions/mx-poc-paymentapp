@@ -2,7 +2,7 @@
 # Equipo: PaymentBox Core (Team A) | test_runner: karate (E2E + k6 + Selenium)
 # Ambientes: develop->env-e | qa->env-a | uat->env-u | main->prod
 # DEMO BREAK 2 activo en rama qa (Karate falla con monto minimo $100)
-name: "[microservice-a] CI . Build . Calidad . Seguridad . Deploy"
+name: "[microservice-a] CI · Build · Test · Quality Gates · Publish · Deliver"
 
 on:
   push:
@@ -21,6 +21,7 @@ concurrency:
 
 jobs:
   pipeline:
+    name: "Build → Test → Quality Gates → Publish → Deliver"
     uses: ./.github/workflows/reusable-microservice-pipeline.yml
     with:
       microservice_name: microservice-a
