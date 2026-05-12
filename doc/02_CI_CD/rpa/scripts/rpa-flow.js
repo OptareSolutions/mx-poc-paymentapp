@@ -149,6 +149,32 @@ async function runRpa() {
     await page.click('#Login');
     await waitForSF(page);
     await screenshot(page, '01-logged-in');
+
+    // Detect MFA / identity verification screen — fails fast with clear message
+    const mfaDetected = await page.locator(
+      '[class*="verifyPage"], #verifyPage, input[id="emc"], input[name="otp"], ' +
+      'input[id="tc"], [id*="verify"], button[id="save"], ' +
+      'h2:has-text("Verify Your Identity"), h2:has-text("Verificar su identidad")'
+    ).count();
+    if (mfaDetected > 0) {
+      await screenshot(page, '01-mfa-detected');
+      throw new Error(
+        'MFA_BLOCKED: Salesforce is requesting identity verification (OTP). ' +
+        'The automation user does not have the "Waive MFA" permission applied. ' +
+        'Fix: Setup → Permission Sets → create/open a set with ' +
+        '"Waive Multi-Factor Authentication for Exempt Users" enabled → ' +
+        'assign it to the automation user (Setup → Users → [user] → Permission Set Assignments). ' +
+        'Also ensure the org-level MFA enforcement is NOT set to "Required for all users" ' +
+        'under Setup → Identity → MFA Assistant.'
+      );
+    }
+
+    // Verify we are actually on a Salesforce app page, not stuck on login
+    const loginFormStillVisible = await page.locator('#username, #Login').count();
+    if (loginFormStillVisible > 0) {
+      throw new Error('LOGIN_FAILED: Still on login page after submit. Check RPA_USERNAME and RPA_PASSWORD secrets.');
+    }
+
     result.steps.push({ step: 1, action: 'login', status: 'ok' });
 
     // ── Step 2: Create Account ─────────────────────────────────────────────────
@@ -156,9 +182,35 @@ async function runRpa() {
     await page.goto(`${CONFIG.baseUrl}/lightning/o/Account/new`, { waitUntil: 'domcontentloaded' });
     await waitForSF(page);
 
+    // Wait for the New Account modal/form to fully render
+    await page.waitForSelector(
+      'lightning-record-edit-form, records-record-edit-view-header, .modal-container',
+      { timeout: CONFIG.timeout }
+    );
+    await waitForSF(page);
+
     // ⚙️ ADAPT field labels to your org's Account page layout
-    await page.fill('[placeholder="Account Name"], input[name="Name"]', CONFIG.customer.accountName);
-    await page.fill('[placeholder="Phone"], input[name="Phone"]', CONFIG.customer.phone);
+    // Tries English label first, then Spanish, then falls back to field name selectors
+    const accountNameInput = page.locator([
+      'lightning-input-field[data-field="Name"] input',
+      'lightning-input-field[field-name="Name"] input',
+      'input[placeholder="Account Name"]',
+      'input[placeholder="Nombre de cuenta"]',
+      'input[name="Name"]',
+    ].join(', ')).first();
+    await accountNameInput.waitFor({ state: 'visible', timeout: CONFIG.timeout });
+    await accountNameInput.fill(CONFIG.customer.accountName);
+
+    const phoneInput = page.locator([
+      'lightning-input-field[data-field="Phone"] input',
+      'lightning-input-field[field-name="Phone"] input',
+      'input[placeholder="Account Phone"]',
+      'input[placeholder="Teléfono"]',
+      'input[name="Phone"]',
+    ].join(', ')).first();
+    if (await phoneInput.count() > 0) {
+      await phoneInput.fill(CONFIG.customer.phone);
+    }
 
     // Type: Customer (⚙️ ADAPT picklist value to your org)
     const typeInput = page.locator('lightning-combobox[data-field-id="Type"] button, [data-field="Type"] button').first();
