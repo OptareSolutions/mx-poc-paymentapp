@@ -192,6 +192,8 @@ async function mockPaymentAuthorization(amount) {
 async function main() {
   const startedAt = new Date();
 
+  const runId = Date.now();
+
   const productName = process.env.RPA_PRODUCT_NAME || 'Paquete Básico';
   const productPrice = Number(process.env.RPA_PRODUCT_PRICE || '1500');
 
