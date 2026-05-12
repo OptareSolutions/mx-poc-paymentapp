@@ -58,6 +58,8 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+    outputs:
+      app-version: ${{ steps.project-version.outputs.version }}
 
     steps:
       - name: "Build · Checkout source"
@@ -73,6 +75,18 @@ jobs:
         uses: gradle/actions/setup-gradle@06832c7b30a0129d7fb559bcc6e43d26f6374244 # v4.3.1
         with:
           gradle-version: "8.7"
+
+      - name: "Build · Get version from Gradle"
+        id: project-version
+        working-directory: ${{ inputs.microservice_name }}
+        run: |
+          VERSION=$(gradle properties -q --no-daemon | awk -F': ' '$1 == "version" {print $2; exit}')
+          if [ -z "$VERSION" ]; then
+            echo "No se pudo obtener la version del proyecto"
+            exit 1
+          fi
+          echo "VERSION=${VERSION}" >> $GITHUB_ENV
+          echo "version=${VERSION}" >> $GITHUB_OUTPUT
 
       - name: "Build · Generar JAR sin tests"
         working-directory: ${{ inputs.microservice_name }}
@@ -220,7 +234,7 @@ jobs:
   publish:
     name: "4 · Publish · Docker build + scan + GHCR [${{ inputs.microservice_name }}]"
     runs-on: ubuntu-latest
-    needs: quality-gates
+    needs: [build, quality-gates]
     permissions:
       contents: read
       packages: write
@@ -252,11 +266,12 @@ jobs:
             *)          echo "overlay=env-e" >> $GITHUB_OUTPUT ; echo "name=E (manual)"     >> $GITHUB_OUTPUT ; echo "prefix=env-e" >> $GITHUB_OUTPUT ;;
           esac
 
-      - name: "Publish · Calcular tag de imagen (${{ steps.env-info.outputs.prefix }}-{sha})"
+      - name: "Publish · Calcular tag de imagen ({version}-{sha}.{run_number})"
         id: image-tag
         run: |
-          SHORT_SHA=$(echo "${{ github.sha }}" | cut -c1-7)
-          TAG="${{ steps.env-info.outputs.prefix }}-${SHORT_SHA}"
+          SHORT_SHA="${GITHUB_SHA::7}"
+          VERSION="${{ needs.build.outputs.app-version }}"
+          TAG="${VERSION}-${SHORT_SHA}.${{ github.run_number }}"
           FULL="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${TAG}"
           echo "tag=${TAG}"         >> $GITHUB_OUTPUT
           echo "full_image=${FULL}" >> $GITHUB_OUTPUT
