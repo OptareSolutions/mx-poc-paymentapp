@@ -1,0 +1,103 @@
+name: RPA – Web Automation
+
+on:
+  push:
+    branches-ignore:
+      - main
+    paths:
+      - 'doc/02_CI_CD/rpa/**'
+      - '.github/workflows/rpa.yml'
+  workflow_dispatch:
+    inputs:
+      product_name:
+        description: 'Product name to add to the Opportunity'
+        required: false
+        default: 'Paquete Básico'
+      product_price:
+        description: 'Unit price for the product'
+        required: false
+        default: '1500'
+
+# Least-privilege permissions
+permissions:
+  contents: read
+
+# Cancel outdated runs on the same branch (keeps runners free)
+concurrency:
+  group: rpa-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  rpa:
+    name: Run RPA Flow
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    env:
+      RPA_BASE_URL:     ${{ secrets.RPA_BASE_URL }}
+      RPA_USERNAME:     ${{ secrets.RPA_USERNAME }}
+      RPA_PASSWORD:     ${{ secrets.RPA_PASSWORD }}
+      RPA_PRODUCT_NAME: ${{ github.event.inputs.product_name || 'Paquete Básico' }}
+      RPA_PRODUCT_PRICE: ${{ github.event.inputs.product_price || '1500' }}
+      RPA_TIMEOUT_MS:   '60000'
+      # Salesforce JWT Auth
+      SALESFORCE_CLIENT_ID:     ${{ secrets.SALESFORCE_CLIENT_ID }}
+      SALESFORCE_USERNAME:      ${{ secrets.SALESFORCE_USERNAME }}
+      SALESFORCE_INSTANCE_URL:  ${{ secrets.SALESFORCE_INSTANCE_URL }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Set up Node.js 20
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: doc/02_CI_CD/rpa/package-lock.json
+
+      - name: Install dependencies
+        working-directory: doc/02_CI_CD/rpa
+        run: npm ci
+
+      - name: Install Playwright browsers (Chromium only)
+        working-directory: doc/02_CI_CD/rpa
+        run: npx playwright install chromium --with-deps
+      
+      - name: Install Salesforce CLI
+        run: npm install --global @salesforce/cli
+
+      - name: Create Salesforce JWT key file
+        run: |
+          echo "${{ secrets.SALESFORCE_JWT_KEY }}" > server.key
+          chmod 600 server.key
+
+      - name: Authenticate to Salesforce (JWT)
+        run: |
+          sf org login jwt \
+            --client-id "$SALESFORCE_CLIENT_ID" \
+            --jwt-key-file server.key \
+            --username "$SALESFORCE_USERNAME" \
+            --instance-url "$SALESFORCE_INSTANCE_URL" \
+            --alias rpa-org
+
+      - name: Export Salesforce session info
+        run: |
+          sf org display --target-org rpa-org --json > sf-auth.json
+
+      - name: Validate Salesforce connection
+        run: |
+          cat sf-auth.json
+
+      - name: Run RPA flow
+        working-directory: doc/02_CI_CD/rpa
+        run: node scripts/rpa-flow.js
+
+      - name: Upload results & screenshots
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: rpa-results-${{ github.run_number }}
+          path: doc/02_CI_CD/rpa/results/
+          retention-days: 30
+          if-no-files-found: warn

@@ -529,7 +529,15 @@ jobs:
           git add k8s/overlays/${{ env.OVERLAY }}/kustomization.yaml
           git diff --staged --quiet && echo "Sin cambios" && exit 0
           git commit -m "gitops(${{ inputs.microservice_name }}): ${IMAGE_TAG} -> ${ENV_NAME} [skip ci]"
-          git push
+          # Retry loop: pull --rebase before each push to handle concurrent GitOps pushes
+          n=0
+          until [ $n -ge 5 ]; do
+            git pull --rebase && git push && break
+            n=$((n + 1))
+            echo "Push attempt $n failed, retrying in $((n * 2))s..."
+            sleep $((n * 2))
+          done
+          [ $n -lt 5 ] || { echo "GitOps push failed after 5 attempts"; exit 1; }
 
       - name: "Deliver · ArgoCD (simulado) sync ${{ env.ENV_NAME }}"
         run: |
@@ -664,7 +672,15 @@ jobs:
           git add k8s/overlays/${{ env.OVERLAY }}/kustomization.yaml
           git diff --staged --quiet && echo "Sin cambios" && exit 0
           git commit -m "gitops(${{ inputs.microservice_name }}): ${IMAGE_TAG} -> ${ENV_NAME} [skip ci]"
-          git push
+          # Retry loop: pull --rebase before each push to handle concurrent GitOps pushes
+          n=0
+          until [ $n -ge 5 ]; do
+            git pull --rebase && git push && break
+            n=$((n + 1))
+            echo "Push attempt $n failed, retrying in $((n * 2))s..."
+            sleep $((n * 2))
+          done
+          [ $n -lt 5 ] || { echo "GitOps push failed after 5 attempts"; exit 1; }
 
       - name: "Deliver · ArgoCD (simulado) sync ${{ env.ENV_NAME }}"
         run: |
