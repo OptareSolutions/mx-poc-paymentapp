@@ -19,7 +19,7 @@ resources:
 # Tags promovidas automaticamente pelo pipeline-integration.yml (uat→main)
 images:
   - name: ghcr.io/optaresolutions/mx-poc-paymentapp/microservice-a
-    newTag: "prod-19579ac"
+    newTag: "prod-0b955cb"
   - name: ghcr.io/optaresolutions/mx-poc-paymentapp/microservice-b
     newTag: "prod-0b955cb"
   - name: ghcr.io/optaresolutions/mx-poc-paymentapp/ui-paymentbox
