@@ -1,12 +1,21 @@
 # [microservice-b] CI - Caller para reusable-microservice-pipeline.yml
 # Equipo: Customer Profile (Team B) | test_runner: smoke (contract test)
-# Ambientes: develop->env-e | qa->env-a | uat->env-u | main->prod
-# DEMO BREAK 1: rotura de contrato se detecta en pipeline-integration.yml
-name: "[microservice-b] CI . Build . Calidad . Seguridad . Deploy"
+# Ambientes: E->dev | A->qa | F->preprod | PRODUCCION->prod
+name: "[microservice-b] CI · Build · Test · Quality Gates · Publish · Deliver"
 
 on:
   push:
-    branches: [develop, qa, uat, main]
+    # Post-merge: pipeline completo (Build+Test+QG+Publish+Deploy)
+    branches: [E, A, F, PRODUCCION]
+    paths:
+      - 'microservice-b/**'
+      - '.github/workflows/pipeline-microservice-b.yml'
+      - '.github/workflows/reusable-microservice-pipeline.yml'
+      - '.gitleaks.toml'
+      - '.trivyignore'
+  pull_request:
+    # Pre-merge: Build+Test+QG+Publish (sin Deploy — el if en reusable lo omite)
+    branches: [E, A, F, PRODUCCION]
     paths:
       - 'microservice-b/**'
       - '.github/workflows/pipeline-microservice-b.yml'
@@ -21,6 +30,7 @@ concurrency:
 
 jobs:
   pipeline:
+    name: "Build → Test → Quality Gates → Publish → Deliver"
     uses: ./.github/workflows/reusable-microservice-pipeline.yml
     with:
       microservice_name: microservice-b

@@ -1,4 +1,4 @@
-name: "🚀 [Performance] k6 Smoke — PaymentBox"
+name: "[Performance] Test · Quality Gates · k6 Smoke — PaymentBox"
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Workflow: k6 Smoke Performance con comparación histórica de resultados
@@ -78,38 +78,38 @@ jobs:
   # JOB 1 — Preparar entorno: levantar servicios mock
   # ──────────────────────────────────────────────────────────────────────────
   setup-environment:
-    name: "1 — Levantar Entorno Mock"
+    name: "1 · Build · Levantar Entorno Mock"
     runs-on: ubuntu-latest
     outputs:
       base_url: ${{ steps.resolve-url.outputs.base_url }}
 
     steps:
-      - name: Checkout
+      - name: "Build · Checkout"
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
 
-      - name: Resolver BASE_URL
+      - name: "Build · Resolver BASE_URL"
         id: resolve-url
         run: |
           BASE_URL="${{ inputs.base_url || 'http://localhost:8080' }}"
           echo "base_url=${BASE_URL}" >> "$GITHUB_OUTPUT"
           echo "🎯 BASE_URL: ${BASE_URL}"
 
-      - name: Configurar JDK 17
+      - name: "Build · Configurar JDK 17"
         uses: actions/setup-java@c5195efecf7bdfc987ee8bae7a71cb8b11521c00  # v4.7.1
         with:
           java-version: "17"
           distribution: temurin
 
-      - name: Configurar Gradle
+      - name: "Build · Configurar Gradle"
         uses: gradle/actions/setup-gradle@06832c7b30a0129d7fb559bcc6e43d26f6374244  # v4.3.1
         with:
           gradle-version: "8.7"
 
-      - name: Build microservice-a
+      - name: "Build · Build microservice-a"
         working-directory: microservice-a
         run: gradle bootJar --no-daemon -q
 
-      - name: Levantar microservice-a (background)
+      - name: "Build · Levantar microservice-a (background)"
         working-directory: microservice-a
         run: |
           java -jar build/libs/*.jar --server.port=8080 &
@@ -130,17 +130,17 @@ jobs:
   # JOB 2 — Ejecutar k6 + comparar con baseline
   # ──────────────────────────────────────────────────────────────────────────
   k6-performance:
-    name: "2 — k6 Smoke Performance"
+    name: "2 · Test · k6 Smoke Performance"
     runs-on: ubuntu-latest
     needs: setup-environment
     outputs:
       passed: ${{ steps.evaluate.outputs.passed }}
 
     steps:
-      - name: Checkout
+      - name: "Test · Checkout"
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
 
-      - name: Instalar k6
+      - name: "Test · Instalar k6"
         run: |
           # Install k6 via direct binary download (avoids GPG/APT issues on Ubuntu 24.04)
           K6_VERSION="v0.55.0"
@@ -149,7 +149,7 @@ jobs:
           k6 version
 
       # Descargar baseline de la última ejecución exitosa (si existe)
-      - name: Descargar baseline histórico
+      - name: "Test · Descargar baseline histórico"
         id: download-baseline
         uses: actions/download-artifact@95815c38cf2ff2164869cbab79da8d1f422bc89  # v4.2.1
         with:
@@ -157,7 +157,7 @@ jobs:
           path: tests/k6/results/
         continue-on-error: true
 
-      - name: Verificar baseline disponible
+      - name: "Test · Verificar baseline disponible"
         id: check-baseline
         run: |
           if [ -f "tests/k6/results/baseline.json" ]; then
@@ -177,7 +177,7 @@ jobs:
             echo "ℹ️  Sin baseline previo — primera ejecución de referencia"
           fi
 
-      - name: Ejecutar k6 Smoke Performance
+      - name: "Test · Ejecutar k6 Smoke Performance"
         id: k6-run
         env:
           BASE_URL: ${{ needs.setup-environment.outputs.base_url }}
@@ -204,12 +204,12 @@ jobs:
           fi
           echo "✅ Resultados generados"
 
-      - name: Instalar Node.js para comparación
+      - name: "Quality Gates · Instalar Node.js para comparación"
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020  # v4.4.0
         with:
           node-version: '20'
 
-      - name: Comparar con baseline histórico
+      - name: "Quality Gates · Comparar con baseline histórico"
         id: compare
         run: |
           if [ "${{ steps.check-baseline.outputs.baseline_exists }}" = "true" ]; then
@@ -225,7 +225,7 @@ jobs:
             echo "compare_exit=0" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Evaluar resultado final
+      - name: "Quality Gates · Evaluar resultado final"
         id: evaluate
         run: |
           # Verificar thresholds desde el JSON de resultados
@@ -266,7 +266,7 @@ jobs:
               f.write('passed=true\n')
           EOF
 
-      - name: Publicar resumen en Job Summary
+      - name: "Quality Gates · Publicar resumen en Job Summary"
         if: always()
         run: |
           echo "## 🚀 k6 Smoke Performance — PaymentBox" >> "$GITHUB_STEP_SUMMARY"
@@ -306,7 +306,7 @@ jobs:
           EOF
           fi
 
-      - name: Subir resultados como artefacto
+      - name: "Quality Gates · Subir resultados como artefacto"
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4.6.2
         with:
@@ -315,7 +315,7 @@ jobs:
           retention-days: 90
 
       # Actualizar baseline solo si se solicitó y los tests pasaron
-      - name: Actualizar baseline histórico
+      - name: "Quality Gates · Actualizar baseline histórico"
         if: |
           (github.event.inputs.update_baseline == 'true' ||
            github.event_name == 'schedule') &&
@@ -325,7 +325,7 @@ jobs:
              tests/k6/results/baseline.json
           echo "✅ Baseline actualizado con los resultados de esta ejecución"
 
-      - name: Subir baseline actualizado
+      - name: "Quality Gates · Subir baseline actualizado"
         if: |
           (github.event.inputs.update_baseline == 'true' ||
            github.event_name == 'schedule') &&
@@ -338,7 +338,7 @@ jobs:
           overwrite: true
 
       # Fallar el job si los thresholds no pasan
-      - name: Verificar resultado final
+      - name: "Quality Gates · Verificar resultado final"
         if: steps.evaluate.outputs.passed == 'false'
         run: |
           echo "❌ Los tests de performance no pasaron los thresholds configurados."
@@ -349,13 +349,13 @@ jobs:
   # JOB 3 — Notificación de resultados (solo en schedule o regresión)
   # ──────────────────────────────────────────────────────────────────────────
   notify:
-    name: "3 — Notificación de Resultados"
+    name: "5 · Deliver · Notificación de Resultados"
     runs-on: ubuntu-latest
     needs: k6-performance
     if: always() && (github.event_name == 'schedule' || needs.k6-performance.outputs.passed == 'false')
 
     steps:
-      - name: Notificación de resultado
+      - name: "Deliver · Notificación de resultado"
         run: |
           PASSED="${{ needs.k6-performance.outputs.passed }}"
           if [ "$PASSED" = "true" ]; then
