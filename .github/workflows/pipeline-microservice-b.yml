@@ -1,7 +1,7 @@
 # [microservice-b] CI - Caller para reusable-microservice-pipeline.yml
 # Equipo: Customer Profile (Team B) | test_runner: smoke (contract test)
 # Ambientes: E->dev | A->qa | F->preprod | PRODUCCION->prod
-name: "[microservice-b] CI · Build · Test · Quality Gates · Publish · Deliver"
+name: "[microservice-b] CI/CD"
 
 on:
   push:
