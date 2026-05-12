@@ -21,12 +21,12 @@ on:
         description: "Ambiente de ORIGEN (rama)"
         required: true
         type: choice
-        options: [develop, qa, uat]
+        options: [E, A, F]
       promote_to:
         description: "Ambiente de DESTINO (rama)"
         required: true
         type: choice
-        options: [qa, uat, main]
+        options: [A, F, PRODUCCION]
 
 env:
   REGISTRY: ghcr.io
