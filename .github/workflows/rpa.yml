@@ -40,6 +40,10 @@ jobs:
       RPA_PRODUCT_NAME: ${{ github.event.inputs.product_name || 'Paquete Básico' }}
       RPA_PRODUCT_PRICE: ${{ github.event.inputs.product_price || '1500' }}
       RPA_TIMEOUT_MS:   '60000'
+      # Salesforce JWT Auth
+      SALESFORCE_CLIENT_ID:     ${{ secrets.SALESFORCE_CLIENT_ID }}
+      SALESFORCE_USERNAME:      ${{ secrets.SALESFORCE_USERNAME }}
+      SALESFORCE_INSTANCE_URL:  ${{ secrets.SALESFORCE_INSTANCE_URL }}
 
     steps:
       - name: Checkout repository
@@ -59,6 +63,31 @@ jobs:
       - name: Install Playwright browsers (Chromium only)
         working-directory: doc/02_CI_CD/rpa
         run: npx playwright install chromium --with-deps
+      
+      - name: Install Salesforce CLI
+        run: npm install --global @salesforce/cli
+
+      - name: Create Salesforce JWT key file
+        run: |
+          echo "${{ secrets.SALESFORCE_JWT_KEY }}" > server.key
+          chmod 600 server.key
+
+      - name: Authenticate to Salesforce (JWT)
+        run: |
+          sf org login jwt \
+            --client-id "$SALESFORCE_CLIENT_ID" \
+            --jwt-key-file server.key \
+            --username "$SALESFORCE_USERNAME" \
+            --instance-url "$SALESFORCE_INSTANCE_URL" \
+            --alias rpa-org
+
+      - name: Export Salesforce session info
+        run: |
+          sf org display --target-org rpa-org --json > sf-auth.json
+
+      - name: Validate Salesforce connection
+        run: |
+          cat sf-auth.json
 
       - name: Run RPA flow
         working-directory: doc/02_CI_CD/rpa
