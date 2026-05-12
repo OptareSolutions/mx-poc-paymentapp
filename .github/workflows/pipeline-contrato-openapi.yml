@@ -21,14 +21,16 @@ name: "API Contract — Quality Gates · Breaking Changes OpenAPI"
 
 on:
   pull_request:
-    branches: [main, uat, qa, develop]
+    # Detecta breaking changes en contratos OpenAPI antes de cualquier merge
+    branches: [E, A, F, PRODUCCION]
     paths:
       - "microservice-a/docs/openapi*.yaml"
       - "microservice-b/docs/openapi*.yaml"
       - "microservice-a/src/main/java/**"
       - "microservice-b/src/main/java/**"
   push:
-    branches: [develop, qa, uat]
+    # Post-merge en QA y Preprod: re-valida contratos tras integración
+    branches: [A, F]
     paths:
       - "microservice-a/docs/openapi*.yaml"
       - "microservice-b/docs/openapi*.yaml"

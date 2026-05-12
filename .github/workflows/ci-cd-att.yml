@@ -14,8 +14,8 @@ name: "AT&T PoC QA — Test · Quality Gates"
 #   5. quality-gate  → Gate consolidado (depende de 1-4)
 #
 # ACTIVACIÓN:
-#   - Push en cualquier rama excepto main
-#   - Pull Request hacia cualquier rama excepto main
+#   - Push en ramas feature/* (feedback rápido en desarrollo)
+#   - Pull Request hacia E (dev), A (qa) — validación antes del merge
 #
 # VARIABLES DE REPOSITORIO REQUERIDAS:
 #   RPA_ENABLED      = true  (para activar el job RPA)
@@ -27,9 +27,12 @@ name: "AT&T PoC QA — Test · Quality Gates"
 
 on:
   push:
-    branches-ignore: [main]
+    branches:
+      - 'feature/**'   # CI en ramas de desarrollo (usa simulación Docker Compose)
   pull_request:
-    branches-ignore: [main]
+    branches:
+      - E              # Valida el PR antes de integrar a dev
+      - A              # Valida el PR antes de promover a QA
 
 # ── Permisos mínimos necesarios (least privilege) ─────────────────────────────
 permissions:

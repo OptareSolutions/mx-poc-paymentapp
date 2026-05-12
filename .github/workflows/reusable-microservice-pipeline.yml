@@ -1,12 +1,21 @@
 # ==============================================================================
 # Reusable Microservice Pipeline
 # Eliminates duplication between pipeline-microservice-a.yml and
-# pipeline-microservice-b.yml by centralising the 4 shared jobs.
+# pipeline-microservice-b.yml by centralising the 5 shared jobs.
 #
 # Inputs:
 #   microservice_name  – microservice-a | microservice-b
 #   image_name         – GHCR image path (without registry prefix)
 #   test_runner        – karate (E2E full suite) | smoke (contract smoke test)
+#
+# Branch → Environment mapping:
+#   E          → env-e  (Desarrollo / Dev)
+#   A          → env-a  (QA)
+#   F          → env-f  (Preprod)
+#   PRODUCCION → prod   (Producción)
+#
+# Deliver job (step 5) only runs on push events (post-merge deploys).
+# On pull_request events it is skipped — validation only, no deploy.
 # ==============================================================================
 name: "Reusable Microservice Pipeline"
 
@@ -234,11 +243,11 @@ jobs:
         id: env-info
         run: |
           case "${{ github.ref_name }}" in
-            develop) echo "overlay=env-e" >> $GITHUB_OUTPUT ; echo "name=E (Desarrollo)" >> $GITHUB_OUTPUT ; echo "prefix=env-e" >> $GITHUB_OUTPUT ;;
-            qa)      echo "overlay=env-a" >> $GITHUB_OUTPUT ; echo "name=A (QA)"         >> $GITHUB_OUTPUT ; echo "prefix=env-a" >> $GITHUB_OUTPUT ;;
-            uat)     echo "overlay=env-u" >> $GITHUB_OUTPUT ; echo "name=U (UAT)"        >> $GITHUB_OUTPUT ; echo "prefix=env-u" >> $GITHUB_OUTPUT ;;
-            main)    echo "overlay=prod"  >> $GITHUB_OUTPUT ; echo "name=Produccion"     >> $GITHUB_OUTPUT ; echo "prefix=prod"  >> $GITHUB_OUTPUT ;;
-            *)       echo "overlay=env-e" >> $GITHUB_OUTPUT ; echo "name=E (manual)"     >> $GITHUB_OUTPUT ; echo "prefix=env-e" >> $GITHUB_OUTPUT ;;
+            E)          echo "overlay=env-e" >> $GITHUB_OUTPUT ; echo "name=E (Desarrollo)" >> $GITHUB_OUTPUT ; echo "prefix=env-e" >> $GITHUB_OUTPUT ;;
+            A)          echo "overlay=env-a" >> $GITHUB_OUTPUT ; echo "name=A (QA)"         >> $GITHUB_OUTPUT ; echo "prefix=env-a" >> $GITHUB_OUTPUT ;;
+            F)          echo "overlay=env-f" >> $GITHUB_OUTPUT ; echo "name=F (Preprod)"    >> $GITHUB_OUTPUT ; echo "prefix=env-f" >> $GITHUB_OUTPUT ;;
+            PRODUCCION) echo "overlay=prod"  >> $GITHUB_OUTPUT ; echo "name=Produccion"     >> $GITHUB_OUTPUT ; echo "prefix=prod"  >> $GITHUB_OUTPUT ;;
+            *)          echo "overlay=env-e" >> $GITHUB_OUTPUT ; echo "name=E (manual)"     >> $GITHUB_OUTPUT ; echo "prefix=env-e" >> $GITHUB_OUTPUT ;;
           esac
 
       - name: "Publish · Calcular tag de imagen (${{ steps.env-info.outputs.prefix }}-{sha})"
@@ -311,7 +320,7 @@ jobs:
 # ------------------------------------------------------------------------------
   e2e-gitops:
     name: "5 · Deliver · E2E + GitOps [${{ needs.publish.outputs.env-name }}]"
-    if: inputs.test_runner == 'karate'
+    if: inputs.test_runner == 'karate' && github.event_name == 'push'
     runs-on: ubuntu-latest
     needs: publish
     permissions:
@@ -469,7 +478,7 @@ jobs:
 # ------------------------------------------------------------------------------
   smoke-gitops:
     name: "5 · Deliver · Smoke + GitOps [${{ needs.publish.outputs.env-name }}]"
-    if: inputs.test_runner == 'smoke'
+    if: inputs.test_runner == 'smoke' && github.event_name == 'push'
     runs-on: ubuntu-latest
     needs: publish
     permissions:

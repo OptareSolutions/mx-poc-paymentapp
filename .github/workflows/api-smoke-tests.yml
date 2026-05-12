@@ -20,7 +20,8 @@ name: "[API] Test · Smoke Tests Funcionales — AT&T PoC"
 
 on:
   push:
-    branches: [develop, qa, uat]
+    # Post-merge en QA y Preprod: valida que el ambiente esté operativo
+    branches: [A, F]
     paths:
       - 'microservice-a/**'
       - 'microservice-b/**'
@@ -28,7 +29,8 @@ on:
       - 'simulation/**'
       - '.github/workflows/api-smoke-tests.yml'
   pull_request:
-    branches: [develop, qa, uat]
+    # Pre-merge hacia QA y Preprod: smoke tests sobre simulación
+    branches: [A, F]
     paths:
       - 'microservice-a/**'
       - 'microservice-b/**'
