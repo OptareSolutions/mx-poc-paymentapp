@@ -267,3 +267,94 @@ Según las mejores prácticas de GitHub Actions aplicadas en este pipeline:
 - **Secrets vía variables de entorno** — nunca expuestos en logs
 - **Concurrencia controlada** — cancela builds obsoletos en PRs
 - **Timeout por job** — evita runners bloqueados indefinidamente
+
+---
+
+## Quality Gates — Configuración Detallada
+
+### Gate API Testing (Karate)
+
+```yaml
+# Gate Funcional: todos los @smoke deben pasar
+api-functional → RecargaFlowRunner#testSmoke
+  criterio:
+    - GET  /api/clientes/buscar          → 200 + status ACTIVO
+    - GET  /api/recargas/montos          → 200 + lista no vacía
+    - POST /api/recargas/validar-operador → 200 + valido=true
+    - GET  /api/pagos/metodos            → 200 + EFECTIVO/TARJETA/OODI
+    - POST /api/pagos/registrar          → 201 + status APLICADO + folio B-*
+    - POST /api/recibos/emitir           → 200 + status EMITIDO
+  bloqueante: true
+  exit_code_esperado: 0
+
+# Gate Integración: flujo E2E completo
+api-integration → RecargaFlowRunner#testRecargaFlow
+  criterio:
+    - Pasos 2→3→4→5→6+7→8 encadenados con IDs correlacionados
+    - Sin errores en ningún paso del flujo
+  bloqueante: true
+
+# Gate Contrato: 0 breaking changes
+api-contract → oasdiff + RecargaFlowRunner#testContratoMicroservicios
+  criterio:
+    - oasdiff exit 0 (sin breaking changes en openapi.yaml)
+    - Campos: phone, fullName, status en /api/customers/{telefono}
+    - Tipos y requerimientos sin cambios incompatibles
+  bloqueante: true
+```
+
+### Gate Performance (k6 Thresholds)
+
+```javascript
+// tests/k6/smoke_performance.js
+export const options = {
+  scenarios: {
+    smoke_performance: {
+      executor: 'constant-vus',
+      vus: 20,        // usuarios virtuales
+      duration: '7m', // duración del test
+    }
+  },
+  thresholds: {
+    'http_req_duration{name:"flujo_completo"}': ['p(95)<3000'],  // flujo completo < 3s
+    'http_req_duration{name:"login"}':          ['p(95)<700'],   // autenticación < 700ms
+    'http_req_duration{name:"consulta"}':       ['p(95)<900'],   // montos + operador < 900ms
+    'http_req_duration{name:"registrar_pago"}': ['p(95)<1200'],  // pago < 1200ms
+    'http_req_failed':                          ['rate<0.01'],   // error rate < 1%
+    'http_req_duration':                        ['p(95)<3000'],
+  }
+  // Datos parametrizados: tests/k6/data/users.json (5 perfiles Billy)
+  // Think time entre pasos: 1-3s aleatorio
+};
+```
+
+### Gate RPA (no bloqueante)
+
+```yaml
+# doc/02_CI_CD/rpa/scripts/rpa-flow.js — Node.js + Playwright (JWT auth)
+flujo:
+  - Paso 1: Login Salesforce (JWT → access token)
+  - Paso 2: Crear/buscar Account
+  - Paso 3: Crear Contact asociado
+  - Paso 4: Crear Opportunity
+  - Paso 5: Agregar Product Line Item
+  - Paso 6: Verificar Biometrics / datos cliente
+  - Paso 7: Credit check
+  - Paso 8: Registrar Payment
+  - Paso 9: Marcar Opportunity como Closed Won
+  - Paso 10: Validar estado final + screenshot
+criterio: node scripts/rpa-flow.js → exit code 0
+bloqueante: false  # continue-on-error: true
+artifacts: doc/02_CI_CD/rpa/results/ (screenshots PNG + logs JSON)
+```
+
+### Resumen de Bloqueantes
+
+| Gate | Runner | Bloqueante | Condición de fallo |
+|------|--------|-----------|-------------------|
+| API Functional (@smoke) | `RecargaFlowRunner#testSmoke` | Sí | `failures >= 1` en JUnit XML |
+| API Integration (@e2e) | `RecargaFlowRunner#testRecargaFlow` | Sí | Cualquier escenario `failed` |
+| API Contract (oasdiff) | `oasdiff breaking` | Sí | exit code != 0 (breaking changes) |
+| API Contract (Karate) | `RecargaFlowRunner#testContratoMicroservicios` | Sí | `failures >= 1` |
+| Smoke Performance | k6 `smoke_performance.js` | Sí | k6 exit code `99` (threshold superado) |
+| RPA Salesforce | Node.js `rpa-flow.js` | No | exit code != 0 (solo advertencia) |
