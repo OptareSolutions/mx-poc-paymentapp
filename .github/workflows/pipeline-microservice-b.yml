@@ -7,7 +7,7 @@ run-name: "${{ github.event_name == 'pull_request' && format('[microservice-b] C
 on:
   push:
     # Post-merge: pipeline completo (Build+Test+QG+Publish+Deploy)
-    branches: [E, A, F, PRODUCCION]
+    branches: [feature/**, E, A, F, PRODUCCION]
     paths:
       - 'microservice-b/**'
       - '.github/workflows/pipeline-microservice-b.yml'
