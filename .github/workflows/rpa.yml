@@ -22,7 +22,7 @@ on:
         description: "Product name to add to the Opportunity"
         type: string
         required: false
-        default: "Paquete Basico"
+        default: "Paquete Básico"
       product_price:
         description: "Unit price for the product"
         type: string
@@ -51,7 +51,7 @@ on:
       product_name:
         description: "Product name to add to the Opportunity"
         required: false
-        default: "Paquete Basico"
+        default: "Paquete Básico"
       product_price:
         description: "Unit price for the product"
         required: false
@@ -74,7 +74,7 @@ jobs:
       policy: ${{ steps.preflight.outputs.policy }}
 
     env:
-      RPA_PRODUCT_NAME: ${{ inputs.product_name || github.event.inputs.product_name || 'Paquete Basico' }}
+      RPA_PRODUCT_NAME: ${{ inputs.product_name || github.event.inputs.product_name || 'Paquete Básico' }}
       RPA_PRODUCT_PRICE: ${{ inputs.product_price || github.event.inputs.product_price || '1500' }}
       SALESFORCE_CLIENT_ID: ${{ secrets.SALESFORCE_CLIENT_ID }}
       SALESFORCE_USERNAME: ${{ secrets.SALESFORCE_USERNAME }}
@@ -136,16 +136,6 @@ jobs:
           cache: "npm"
           cache-dependency-path: doc/02_CI_CD/rpa/package-lock.json
 
-      - name: Install RPA dependencies
-        if: steps.preflight.outputs.should_run == 'true'
-        working-directory: doc/02_CI_CD/rpa
-        run: npm ci
-
-      - name: Install Playwright Chromium
-        if: steps.preflight.outputs.should_run == 'true'
-        working-directory: doc/02_CI_CD/rpa
-        run: npx playwright install chromium --with-deps
-
       - name: Install Salesforce CLI
         if: steps.preflight.outputs.should_run == 'true'
         run: npm install --global @salesforce/cli
@@ -169,6 +159,11 @@ jobs:
       - name: Export Salesforce session
         if: steps.preflight.outputs.should_run == 'true'
         run: sf org display --target-org rpa-org --json > sf-auth.json
+
+      - name: Install RPA dependencies
+        if: steps.preflight.outputs.should_run == 'true'
+        working-directory: doc/02_CI_CD/rpa
+        run: npm ci
 
       - name: Run RPA flow
         id: rpa-flow

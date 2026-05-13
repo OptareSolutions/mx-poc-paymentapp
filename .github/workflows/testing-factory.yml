@@ -392,5 +392,5 @@ jobs:
       run_rpa: ${{ needs.rpa-decision.outputs.run_rpa == 'true' }}
       enforce_gate: false
       reason: ${{ needs.rpa-decision.outputs.reason }}
-      product_name: ${{ github.event.inputs.product_name || 'Paquete Basico' }}
+      product_name: ${{ github.event.inputs.product_name || 'Paquete Básico' }}
       product_price: ${{ github.event.inputs.product_price || '1500' }}
