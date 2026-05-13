@@ -434,6 +434,7 @@ jobs:
   salesforce-rpa:
     name: Salesforce RPA — Reusable Informative Gate
     needs: rpa-decision
+    if: always()
     uses: ./.github/workflows/rpa.yml
     secrets: inherit
     with:
