@@ -75,6 +75,73 @@ env:
 jobs:
 
 # ╔══════════════════════════════════════════════════════════════════════════╗
+# ║  JOB 0 · Change Scope                                                   ║
+# ║  Separa cambios de app/tests vs RPA para no ejecutar gates pesados       ║
+# ║  cuando solo se toca la orquestación RPA.                                ║
+# ╚══════════════════════════════════════════════════════════════════════════╝
+  change-scope:
+    name: Change Scope — Testing Factory
+    runs-on: ubuntu-latest
+    outputs:
+      app_changed: ${{ steps.scope.outputs.app_changed }}
+      rpa_changed: ${{ steps.scope.outputs.rpa_changed }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          fetch-depth: 0
+
+      - name: Detect changed areas
+        id: scope
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_SHA: ${{ github.event.before }}
+          HEAD_SHA: ${{ github.sha }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
+            APP_CHANGED="true"
+            RPA_CHANGED="true"
+          else
+            if [ "$EVENT_NAME" = "pull_request" ]; then
+              RANGE="$PR_BASE_SHA...$PR_HEAD_SHA"
+            elif git cat-file -e "$BASE_SHA^{commit}" 2>/dev/null; then
+              RANGE="$BASE_SHA...$HEAD_SHA"
+            else
+              RANGE="HEAD~1...HEAD"
+            fi
+
+            CHANGED_FILES="$(git diff --name-only "$RANGE" || true)"
+
+            APP_CHANGED="false"
+            RPA_CHANGED="false"
+
+            if printf '%s\n' "$CHANGED_FILES" | grep -Eq '^(microservice-a/|microservice-b/|tests/|simulation/)'; then
+              APP_CHANGED="true"
+            fi
+
+            if printf '%s\n' "$CHANGED_FILES" | grep -Eq '^(doc/02_CI_CD/rpa/|\.github/workflows/rpa\.yml|\.github/workflows/testing-factory\.yml)'; then
+              RPA_CHANGED="true"
+            fi
+          fi
+
+          {
+            echo "app_changed=$APP_CHANGED"
+            echo "rpa_changed=$RPA_CHANGED"
+          } >> "$GITHUB_OUTPUT"
+
+          {
+            echo "## Testing Factory Change Scope"
+            echo ""
+            echo "| Area | Changed |"
+            echo "|------|---------|"
+            echo "| App/API/Performance | $APP_CHANGED |"
+            echo "| RPA/orchestration | $RPA_CHANGED |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+# ╔══════════════════════════════════════════════════════════════════════════╗
 # ║  JOB 1 · API Tests — Karate (Functional + Integration + Contract)       ║
 # ║  Smoke tests @smoke, flujo E2E @e2e, contrato @contract + oasdiff       ║
 # ╚══════════════════════════════════════════════════════════════════════════╝
@@ -82,6 +149,8 @@ jobs:
     name: API Tests — Functional · Integration · Contract
     runs-on: ubuntu-latest
     timeout-minutes: 25
+    needs: change-scope
+    if: needs.change-scope.outputs.app_changed == 'true'
 
     steps:
       - name: Checkout
@@ -253,7 +322,8 @@ jobs:
     name: Smoke Performance — k6 (20 VUs / 7 min)
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    needs: api-tests
+    needs: [change-scope, api-tests]
+    if: needs.change-scope.outputs.app_changed == 'true' && needs.api-tests.result == 'success'
 
     steps:
       - name: Checkout
@@ -316,41 +386,19 @@ jobs:
   rpa-decision:
     name: RPA Decision — Feature Quality Gate
     runs-on: ubuntu-latest
-    needs: performance-smoke
+    needs: [change-scope, performance-smoke]
+    if: always()
     outputs:
       run_rpa: ${{ steps.decision.outputs.run_rpa }}
       reason: ${{ steps.decision.outputs.reason }}
 
     steps:
-      - name: Checkout
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-        with:
-          fetch-depth: 0
-
       - name: Decide RPA scope
         id: decision
         env:
           RPA_ENABLED: ${{ vars.RPA_ENABLED }}
-          EVENT_NAME: ${{ github.event_name }}
-          BASE_SHA: ${{ github.event.before }}
-          HEAD_SHA: ${{ github.sha }}
-          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
-          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          RPA_CHANGED: ${{ needs.change-scope.outputs.rpa_changed }}
         run: |
-          if [ "$EVENT_NAME" = "pull_request" ]; then
-            RANGE="$PR_BASE_SHA...$PR_HEAD_SHA"
-          elif git cat-file -e "$BASE_SHA^{commit}" 2>/dev/null; then
-            RANGE="$BASE_SHA...$HEAD_SHA"
-          else
-            RANGE="HEAD~1...HEAD"
-          fi
-
-          CHANGED_FILES="$(git diff --name-only "$RANGE" || true)"
-          RPA_CHANGED="false"
-          if printf '%s\n' "$CHANGED_FILES" | grep -Eq '^(doc/02_CI_CD/rpa/|\.github/workflows/rpa\.yml|\.github/workflows/testing-factory\.yml)'; then
-            RPA_CHANGED="true"
-          fi
-
           RUN_RPA="false"
           REASON="Informative RPA skipped: no RPA-critical path changed and RPA_ENABLED is not true"
 
