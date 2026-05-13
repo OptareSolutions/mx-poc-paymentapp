@@ -1,72 +1,163 @@
-name: RPA – Web Automation
+name: RPA - Reusable Quality Gate
 
 on:
+  workflow_call:
+    inputs:
+      run_rpa:
+        description: "Whether the caller wants to execute the RPA flow"
+        type: boolean
+        required: false
+        default: false
+      enforce_gate:
+        description: "Fail the caller if the RPA flow fails"
+        type: boolean
+        required: false
+        default: false
+      reason:
+        description: "Reason shown in the GitHub Actions summary"
+        type: string
+        required: false
+        default: "RPA not requested"
+      product_name:
+        description: "Product name to add to the Opportunity"
+        type: string
+        required: false
+        default: "Paquete Basico"
+      product_price:
+        description: "Unit price for the product"
+        type: string
+        required: false
+        default: "1500"
+    outputs:
+      status:
+        description: "RPA status: skipped, passed, failed or failed_non_blocking"
+        value: ${{ jobs.rpa.outputs.status }}
+      policy:
+        description: "RPA policy: blocking or informative"
+        value: ${{ jobs.rpa.outputs.policy }}
+
   workflow_dispatch:
     inputs:
+      run_rpa:
+        description: "Execute RPA"
+        type: boolean
+        required: false
+        default: true
+      enforce_gate:
+        description: "Fail this manual run if RPA fails"
+        type: boolean
+        required: false
+        default: false
       product_name:
-        description: 'Product name to add to the Opportunity'
+        description: "Product name to add to the Opportunity"
         required: false
-        default: 'Paquete Básico'
+        default: "Paquete Basico"
       product_price:
-        description: 'Unit price for the product'
+        description: "Unit price for the product"
         required: false
-        default: '1500'
+        default: "1500"
 
-# Least-privilege permissions
 permissions:
   contents: read
 
-# Cancel outdated runs on the same branch (keeps runners free)
 concurrency:
-  group: rpa-${{ github.ref }}
+  group: rpa-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
   rpa:
-    name: Run RPA Flow
+    name: RPA - Salesforce Flow
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    outputs:
+      status: ${{ steps.result.outputs.status }}
+      policy: ${{ steps.preflight.outputs.policy }}
 
     env:
-      RPA_BASE_URL:     ${{ secrets.RPA_BASE_URL }}
-      RPA_USERNAME:     ${{ secrets.RPA_USERNAME }}
-      RPA_PASSWORD:     ${{ secrets.RPA_PASSWORD }}
-      RPA_PRODUCT_NAME: ${{ github.event.inputs.product_name || 'Paquete Básico' }}
-      RPA_PRODUCT_PRICE: ${{ github.event.inputs.product_price || '1500' }}
-      RPA_TIMEOUT_MS:   '60000'
-      # Salesforce JWT Auth
-      SALESFORCE_CLIENT_ID:     ${{ secrets.SALESFORCE_CLIENT_ID }}
-      SALESFORCE_USERNAME:      ${{ secrets.SALESFORCE_USERNAME }}
-      SALESFORCE_INSTANCE_URL:  ${{ secrets.SALESFORCE_INSTANCE_URL }}
+      RPA_PRODUCT_NAME: ${{ inputs.product_name || github.event.inputs.product_name || 'Paquete Basico' }}
+      RPA_PRODUCT_PRICE: ${{ inputs.product_price || github.event.inputs.product_price || '1500' }}
+      SALESFORCE_CLIENT_ID: ${{ secrets.SALESFORCE_CLIENT_ID }}
+      SALESFORCE_USERNAME: ${{ secrets.SALESFORCE_USERNAME }}
+      SALESFORCE_INSTANCE_URL: ${{ secrets.SALESFORCE_INSTANCE_URL }}
+      SALESFORCE_JWT_KEY: ${{ secrets.SALESFORCE_JWT_KEY }}
 
     steps:
+      - name: Decide RPA execution
+        id: preflight
+        env:
+          REQUESTED: ${{ inputs.run_rpa || github.event.inputs.run_rpa == 'true' }}
+          ENFORCE_GATE: ${{ inputs.enforce_gate || github.event.inputs.enforce_gate == 'true' }}
+          REASON: ${{ inputs.reason || 'Manual RPA workflow' }}
+        run: |
+          SHOULD_RUN="$REQUESTED"
+          SKIP_REASON="$REASON"
+          POLICY="informative"
+
+          if [ "$ENFORCE_GATE" = "true" ]; then
+            POLICY="blocking"
+          fi
+
+          if [ "$SHOULD_RUN" != "true" ]; then
+            SHOULD_RUN="false"
+          elif [ -z "$SALESFORCE_CLIENT_ID" ] ||
+               [ -z "$SALESFORCE_USERNAME" ] ||
+               [ -z "$SALESFORCE_INSTANCE_URL" ] ||
+               [ -z "$SALESFORCE_JWT_KEY" ]; then
+            SHOULD_RUN="false"
+            SKIP_REASON="Salesforce secrets are not fully configured"
+          fi
+
+          {
+            echo "should_run=$SHOULD_RUN"
+            echo "policy=$POLICY"
+            echo "skip_reason=$SKIP_REASON"
+          } >> "$GITHUB_OUTPUT"
+
+          {
+            echo "## RPA Quality Gate"
+            echo ""
+            echo "| Field | Value |"
+            echo "|-------|-------|"
+            echo "| Requested | $REQUESTED |"
+            echo "| Policy | $POLICY |"
+            echo "| Decision | $SHOULD_RUN |"
+            echo "| Reason | $SKIP_REASON |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
       - name: Checkout repository
+        if: steps.preflight.outputs.should_run == 'true'
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
       - name: Set up Node.js 20
+        if: steps.preflight.outputs.should_run == 'true'
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
-          node-version: '20'
-          cache: 'npm'
+          node-version: "20"
+          cache: "npm"
           cache-dependency-path: doc/02_CI_CD/rpa/package-lock.json
 
-      - name: Install dependencies
+      - name: Install RPA dependencies
+        if: steps.preflight.outputs.should_run == 'true'
         working-directory: doc/02_CI_CD/rpa
         run: npm ci
 
-      - name: Install Playwright browsers (Chromium only)
+      - name: Install Playwright Chromium
+        if: steps.preflight.outputs.should_run == 'true'
         working-directory: doc/02_CI_CD/rpa
         run: npx playwright install chromium --with-deps
-      
+
       - name: Install Salesforce CLI
+        if: steps.preflight.outputs.should_run == 'true'
         run: npm install --global @salesforce/cli
 
       - name: Create Salesforce JWT key file
+        if: steps.preflight.outputs.should_run == 'true'
         run: |
-          echo "${{ secrets.SALESFORCE_JWT_KEY }}" > server.key
+          printf '%s' "$SALESFORCE_JWT_KEY" > server.key
           chmod 600 server.key
 
-      - name: Authenticate to Salesforce (JWT)
+      - name: Authenticate to Salesforce
+        if: steps.preflight.outputs.should_run == 'true'
         run: |
           sf org login jwt \
             --client-id "$SALESFORCE_CLIENT_ID" \
@@ -75,23 +166,66 @@ jobs:
             --instance-url "$SALESFORCE_INSTANCE_URL" \
             --alias rpa-org
 
-      - name: Export Salesforce session info
-        run: |
-          sf org display --target-org rpa-org --json > sf-auth.json
-
-      - name: Validate Salesforce connection
-        run: |
-          cat sf-auth.json
+      - name: Export Salesforce session
+        if: steps.preflight.outputs.should_run == 'true'
+        run: sf org display --target-org rpa-org --json > sf-auth.json
 
       - name: Run RPA flow
+        id: rpa-flow
+        if: steps.preflight.outputs.should_run == 'true'
+        continue-on-error: ${{ steps.preflight.outputs.policy != 'blocking' }}
         working-directory: doc/02_CI_CD/rpa
-        run: node scripts/rpa-flow.js
+        run: |
+          mkdir -p results
+          set -o pipefail
+          node scripts/rpa-flow.js 2>&1 | tee results/rpa-flow.log
 
-      - name: Upload results & screenshots
-        if: always()
+      - name: Upload RPA evidence
+        if: always() && steps.preflight.outputs.should_run == 'true'
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          name: rpa-results-${{ github.run_number }}
-          path: doc/02_CI_CD/rpa/results/
+          name: rpa-results-${{ github.run_id }}
+          path: |
+            doc/02_CI_CD/rpa/results/
+            sf-auth.json
           retention-days: 30
           if-no-files-found: warn
+
+      - name: Publish RPA result
+        id: result
+        if: always()
+        env:
+          SHOULD_RUN: ${{ steps.preflight.outputs.should_run }}
+          POLICY: ${{ steps.preflight.outputs.policy }}
+          OUTCOME: ${{ steps.rpa-flow.outcome }}
+          SKIP_REASON: ${{ steps.preflight.outputs.skip_reason }}
+        run: |
+          if [ "$SHOULD_RUN" != "true" ]; then
+            STATUS="skipped"
+            RESULT_TEXT="Skipped: $SKIP_REASON"
+          elif [ "$OUTCOME" = "success" ]; then
+            STATUS="passed"
+            RESULT_TEXT="Executed successfully"
+          elif [ "$POLICY" = "blocking" ]; then
+            STATUS="failed"
+            RESULT_TEXT="Failed and blocking"
+          else
+            STATUS="failed_non_blocking"
+            RESULT_TEXT="Failed but informative"
+          fi
+
+          echo "status=$STATUS" >> "$GITHUB_OUTPUT"
+
+          {
+            echo ""
+            echo "### RPA Result"
+            echo ""
+            echo "| Field | Value |"
+            echo "|-------|-------|"
+            echo "| Status | $STATUS |"
+            echo "| Result | $RESULT_TEXT |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          if [ "$STATUS" = "failed" ]; then
+            exit 1
+          fi

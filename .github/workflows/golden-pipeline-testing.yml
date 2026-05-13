@@ -41,6 +41,8 @@ on:
       - 'microservice-b/**'
       - 'tests/**'
       - 'simulation/**'
+      - 'doc/02_CI_CD/rpa/**'
+      - '.github/workflows/rpa.yml'
       - '.github/workflows/golden-pipeline-testing.yml'
   pull_request:
     branches: [A, F, PRODUCCION]
@@ -49,6 +51,9 @@ on:
       - 'microservice-b/**'
       - 'tests/**'
       - 'simulation/**'
+      - 'doc/02_CI_CD/rpa/**'
+      - '.github/workflows/rpa.yml'
+      - '.github/workflows/golden-pipeline-testing.yml'
   workflow_dispatch:
     inputs:
       run_rpa:
@@ -500,78 +505,112 @@ jobs:
 
 
 # ╔══════════════════════════════════════════════════════════════════════════╗
-# ║  JOB 3 · RPA (Playwright — Python)                                      ║
-# ║  Automatización web: login → consulta → descarga/validación → registro. ║
-# ║  Configurado para no bloquear el pipeline si los secrets no están        ║
-# ║  disponibles (modo simulado sin SF_URL configurado).                     ║
+# ║  JOB 3a · RPA Decision                                                  ║
+# ║  Gate visible en release flow, bloqueante solo con RPA_BLOCKING_GATE.   ║
 # ╚══════════════════════════════════════════════════════════════════════════╝
-  rpa:
-    name: "3 · RPA — Salesforce Automation (Node.js + Playwright)"
+  rpa-decision:
+    name: "3a · RPA Decision — Release Quality Gate"
     runs-on: ubuntu-latest
-    timeout-minutes: 30
-    if: |
-      github.event.inputs.run_rpa == 'true' ||
-      (github.event_name == 'push' && vars.RPA_ENABLED == 'true')
-
-    env:
-      RPA_PRODUCT_NAME:        ${{ github.event.inputs.product_name || 'Paquete Básico' }}
-      RPA_PRODUCT_PRICE:       ${{ github.event.inputs.product_price || '1500' }}
-      SALESFORCE_CLIENT_ID:    ${{ secrets.SALESFORCE_CLIENT_ID }}
-      SALESFORCE_USERNAME:     ${{ secrets.SALESFORCE_USERNAME }}
-      SALESFORCE_INSTANCE_URL: ${{ secrets.SALESFORCE_INSTANCE_URL }}
+    needs: [api-functional, api-integration, api-contract, smoke-performance]
+    if: always()
+    outputs:
+      run_rpa: ${{ steps.decision.outputs.run_rpa }}
+      enforce_gate: ${{ steps.decision.outputs.enforce_gate }}
+      reason: ${{ steps.decision.outputs.reason }}
 
     steps:
       - name: Checkout
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
-
-      - name: Configurar Node.js 20
-        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
-          node-version: '20'
-          cache: 'npm'
-          cache-dependency-path: doc/02_CI_CD/rpa/package-lock.json
+          fetch-depth: 0
 
-      - name: Instalar dependencias RPA
-        working-directory: doc/02_CI_CD/rpa
-        run: npm ci
-
-      - name: Instalar Playwright Chromium
-        working-directory: doc/02_CI_CD/rpa
-        run: npx playwright install chromium --with-deps
-
-      - name: Instalar Salesforce CLI
-        run: npm install --global @salesforce/cli
-
-      - name: Crear archivo JWT key de Salesforce
+      - name: Decide RPA policy
+        id: decision
+        env:
+          RPA_ENABLED: ${{ vars.RPA_ENABLED }}
+          RPA_BLOCKING_GATE: ${{ vars.RPA_BLOCKING_GATE }}
+          EVENT_NAME: ${{ github.event_name }}
+          REF_NAME: ${{ github.ref_name }}
+          BASE_REF: ${{ github.base_ref }}
+          BASE_SHA: ${{ github.event.before }}
+          HEAD_SHA: ${{ github.sha }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          MANUAL_RPA: ${{ github.event.inputs.run_rpa }}
         run: |
-          echo "${{ secrets.SALESFORCE_JWT_KEY }}" > server.key
-          chmod 600 server.key
+          if [ "$EVENT_NAME" = "pull_request" ]; then
+            RANGE="$PR_BASE_SHA...$PR_HEAD_SHA"
+          elif git cat-file -e "$BASE_SHA^{commit}" 2>/dev/null; then
+            RANGE="$BASE_SHA...$HEAD_SHA"
+          else
+            RANGE="HEAD~1...HEAD"
+          fi
 
-      - name: Autenticar en Salesforce (JWT)
-        run: |
-          sf org login jwt \
-            --client-id "$SALESFORCE_CLIENT_ID" \
-            --jwt-key-file server.key \
-            --username "$SALESFORCE_USERNAME" \
-            --instance-url "$SALESFORCE_INSTANCE_URL" \
-            --alias rpa-org
+          CHANGED_FILES="$(git diff --name-only "$RANGE" || true)"
+          RPA_CHANGED="false"
+          if printf '%s\n' "$CHANGED_FILES" | grep -Eq '^(doc/02_CI_CD/rpa/|\.github/workflows/rpa\.yml|\.github/workflows/golden-pipeline-testing\.yml)'; then
+            RPA_CHANGED="true"
+          fi
 
-      - name: Exportar sesión Salesforce
-        run: sf org display --target-org rpa-org --json > sf-auth.json
+          RUN_RPA="false"
+          ENFORCE_GATE="false"
+          REASON="RPA visible in quality gate and skipped: not requested"
 
-      - name: "RPA Flow — Flujo Salesforce completo (10 pasos)"
-        working-directory: doc/02_CI_CD/rpa
-        run: node scripts/rpa-flow.js
-        continue-on-error: true
+          if [ "$RPA_BLOCKING_GATE" = "true" ]; then
+            ENFORCE_GATE="true"
+          fi
 
-      - name: Publicar evidencias RPA (screenshots + logs)
-        if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
-        with:
-          name: rpa-results-${{ github.run_id }}
-          path: doc/02_CI_CD/rpa/results/
-          retention-days: 30
-          if-no-files-found: warn
+          if [ "$MANUAL_RPA" = "true" ]; then
+            RUN_RPA="true"
+            REASON="RPA requested manually"
+          elif [ "$RPA_ENABLED" = "true" ] && { [ "$REF_NAME" = "E" ] || [ "$REF_NAME" = "A" ]; }; then
+            RUN_RPA="true"
+            REASON="RPA requested automatically on $REF_NAME by RPA_ENABLED=true"
+          elif [ "$RPA_ENABLED" = "true" ] && { [ "$REF_NAME" = "F" ] || [ "$REF_NAME" = "PRODUCCION" ]; }; then
+            RUN_RPA="true"
+            REASON="RPA requested on release branch by RPA_ENABLED=true"
+          elif [ "$EVENT_NAME" = "pull_request" ] && [ "$RPA_CHANGED" = "true" ]; then
+            RUN_RPA="true"
+            REASON="RPA requested because RPA-critical files changed in PR to $BASE_REF"
+          fi
+
+          {
+            echo "run_rpa=$RUN_RPA"
+            echo "enforce_gate=$ENFORCE_GATE"
+            echo "reason=$REASON"
+          } >> "$GITHUB_OUTPUT"
+
+          {
+            echo "## RPA Decision"
+            echo ""
+            echo "| Field | Value |"
+            echo "|-------|-------|"
+            echo "| Event | $EVENT_NAME |"
+            echo "| Branch/Base | ${REF_NAME:-$BASE_REF} |"
+            echo "| RPA enabled variable | ${RPA_ENABLED:-false} |"
+            echo "| Blocking gate variable | ${RPA_BLOCKING_GATE:-false} |"
+            echo "| RPA-critical path changed | $RPA_CHANGED |"
+            echo "| Decision | $RUN_RPA |"
+            echo "| Policy | $([ "$ENFORCE_GATE" = "true" ] && echo blocking || echo informative) |"
+            echo "| Reason | $REASON |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+# ╔══════════════════════════════════════════════════════════════════════════╗
+# ║  JOB 3b · RPA (Reusable)                                                ║
+# ║  Única implementación operativa: .github/workflows/rpa.yml              ║
+# ╚══════════════════════════════════════════════════════════════════════════╝
+  rpa:
+    name: "3b · RPA — Reusable Quality Gate"
+    needs: rpa-decision
+    if: always()
+    uses: ./.github/workflows/rpa.yml
+    secrets: inherit
+    with:
+      run_rpa: ${{ needs.rpa-decision.outputs.run_rpa == 'true' }}
+      enforce_gate: ${{ needs.rpa-decision.outputs.enforce_gate == 'true' }}
+      reason: ${{ needs.rpa-decision.outputs.reason }}
+      product_name: "Paquete Basico"
+      product_price: "1500"
 
 
 # ╔══════════════════════════════════════════════════════════════════════════╗
@@ -597,6 +636,8 @@ jobs:
           CONTRACT="${{ needs.api-contract.result }}"
           PERFORMANCE="${{ needs.smoke-performance.result }}"
           RPA="${{ needs.rpa.result }}"
+          RPA_STATUS="${{ needs.rpa.outputs.status }}"
+          RPA_POLICY="${{ needs.rpa.outputs.policy }}"
 
           GATE_FAILED=false
 
@@ -625,7 +666,19 @@ jobs:
           check_gate "API Integration (Karate E2E 8 pasos)" "$INTEGRATION" "true"  "Obligatorio"
           check_gate "API Contract (oasdiff + @contract)"   "$CONTRACT"    "true"  "Obligatorio"
           check_gate "Smoke Performance (k6 Thresholds)"    "$PERFORMANCE" "true"  "Obligatorio"
-          check_gate "RPA (Node.js + Playwright/Salesforce)"   "$RPA"         "false" "Opcional"
+
+          case "${RPA_STATUS:-$RPA}" in
+            passed) icon="✅ PASS" ;;
+            skipped) icon="⏭️ SKIP" ;;
+            failed_non_blocking) icon="⚠️ FAIL informativo" ;;
+            success) icon="✅ PASS" ;;
+            *) icon="❌ FAIL" ;;
+          esac
+          echo "| RPA (Node.js + Playwright/Salesforce) | ${RPA_POLICY:-informative} | $icon |" >> "$GITHUB_STEP_SUMMARY"
+
+          if [ "${RPA_STATUS:-$RPA}" = "failed" ] && [ "$RPA_POLICY" = "blocking" ]; then
+            GATE_FAILED=true
+          fi
 
           echo "" >> "$GITHUB_STEP_SUMMARY"
           echo "### Thresholds de Performance (k6)" >> "$GITHUB_STEP_SUMMARY"

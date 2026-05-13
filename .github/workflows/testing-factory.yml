@@ -30,6 +30,7 @@ on:
       - 'tests/**'
       - 'simulation/**'
       - 'doc/02_CI_CD/rpa/**'
+      - '.github/workflows/rpa.yml'
       - '.github/workflows/testing-factory.yml'
 
   pull_request:
@@ -41,6 +42,8 @@ on:
       - 'tests/**'
       - 'simulation/**'
       - 'doc/02_CI_CD/rpa/**'
+      - '.github/workflows/rpa.yml'
+      - '.github/workflows/testing-factory.yml'
 
   workflow_dispatch:
     inputs:
@@ -307,72 +310,87 @@ jobs:
 
 
 # ╔══════════════════════════════════════════════════════════════════════════╗
-# ║  JOB 3 · Salesforce RPA (Node.js + Playwright — JWT Auth)               ║
-# ║  Flujo completo 10 pasos: Login → Oportunidad → Producto → Validación   ║
+# ║  JOB 3a · RPA Decision                                                  ║
+# ║  Evita duplicar RPA en cada push: solo corre por cambio RPA o variable. ║
 # ╚══════════════════════════════════════════════════════════════════════════╝
-  salesforce-rpa:
-    name: Salesforce RPA — Node.js + Playwright (JWT)
+  rpa-decision:
+    name: RPA Decision — Feature Quality Gate
     runs-on: ubuntu-latest
-    timeout-minutes: 30
     needs: performance-smoke
-
-    env:
-      RPA_PRODUCT_NAME:        ${{ github.event.inputs.product_name || 'Paquete Básico' }}
-      RPA_PRODUCT_PRICE:       ${{ github.event.inputs.product_price || '1500' }}
-      SALESFORCE_CLIENT_ID:    ${{ secrets.SALESFORCE_CLIENT_ID }}
-      SALESFORCE_USERNAME:     ${{ secrets.SALESFORCE_USERNAME }}
-      SALESFORCE_INSTANCE_URL: ${{ secrets.SALESFORCE_INSTANCE_URL }}
+    outputs:
+      run_rpa: ${{ steps.decision.outputs.run_rpa }}
+      reason: ${{ steps.decision.outputs.reason }}
 
     steps:
       - name: Checkout
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-
-      - name: Configurar Node.js 20
-        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
-          node-version: '20'
-          cache: 'npm'
-          cache-dependency-path: doc/02_CI_CD/rpa/package-lock.json
+          fetch-depth: 0
 
-      - name: Instalar dependencias RPA
-        working-directory: doc/02_CI_CD/rpa
-        run: npm ci
-
-      - name: Instalar Playwright Chromium
-        working-directory: doc/02_CI_CD/rpa
-        run: npx playwright install chromium --with-deps
-
-      - name: Instalar Salesforce CLI
-        run: npm install --global @salesforce/cli
-
-      - name: Crear archivo JWT key de Salesforce
+      - name: Decide RPA scope
+        id: decision
+        env:
+          RPA_ENABLED: ${{ vars.RPA_ENABLED }}
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_SHA: ${{ github.event.before }}
+          HEAD_SHA: ${{ github.sha }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
-          echo "${{ secrets.SALESFORCE_JWT_KEY }}" > server.key
-          chmod 600 server.key
+          if [ "$EVENT_NAME" = "pull_request" ]; then
+            RANGE="$PR_BASE_SHA...$PR_HEAD_SHA"
+          elif git cat-file -e "$BASE_SHA^{commit}" 2>/dev/null; then
+            RANGE="$BASE_SHA...$HEAD_SHA"
+          else
+            RANGE="HEAD~1...HEAD"
+          fi
 
-      - name: Autenticar en Salesforce (JWT)
-        run: |
-          sf org login jwt \
-            --client-id "$SALESFORCE_CLIENT_ID" \
-            --jwt-key-file server.key \
-            --username "$SALESFORCE_USERNAME" \
-            --instance-url "$SALESFORCE_INSTANCE_URL" \
-            --alias rpa-org
+          CHANGED_FILES="$(git diff --name-only "$RANGE" || true)"
+          RPA_CHANGED="false"
+          if printf '%s\n' "$CHANGED_FILES" | grep -Eq '^(doc/02_CI_CD/rpa/|\.github/workflows/rpa\.yml|\.github/workflows/testing-factory\.yml)'; then
+            RPA_CHANGED="true"
+          fi
 
-      - name: Exportar sesión Salesforce
-        run: sf org display --target-org rpa-org --json > sf-auth.json
+          RUN_RPA="false"
+          REASON="Informative RPA skipped: no RPA-critical path changed and RPA_ENABLED is not true"
 
-      - name: Ejecutar flujo RPA Salesforce
-        working-directory: doc/02_CI_CD/rpa
-        run: node scripts/rpa-flow.js
+          if [ "$RPA_ENABLED" = "true" ]; then
+            RUN_RPA="true"
+            REASON="Informative RPA requested by repository variable RPA_ENABLED=true"
+          elif [ "$RPA_CHANGED" = "true" ]; then
+            RUN_RPA="true"
+            REASON="Informative RPA requested because RPA-critical files changed"
+          fi
 
-      - name: Publicar evidencias RPA
-        if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
-        with:
-          name: salesforce-rpa-evidences-${{ github.run_number }}
-          path: |
-            doc/02_CI_CD/rpa/results/
-            sf-auth.json
-          retention-days: 30
-          if-no-files-found: warn
+          {
+            echo "run_rpa=$RUN_RPA"
+            echo "reason=$REASON"
+          } >> "$GITHUB_OUTPUT"
+
+          {
+            echo "## RPA Decision"
+            echo ""
+            echo "| Field | Value |"
+            echo "|-------|-------|"
+            echo "| RPA enabled variable | ${RPA_ENABLED:-false} |"
+            echo "| RPA-critical path changed | $RPA_CHANGED |"
+            echo "| Decision | $RUN_RPA |"
+            echo "| Policy | informative |"
+            echo "| Reason | $REASON |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+# ╔══════════════════════════════════════════════════════════════════════════╗
+# ║  JOB 3b · Salesforce RPA (Reusable)                                     ║
+# ║  Única implementación: .github/workflows/rpa.yml                        ║
+# ╚══════════════════════════════════════════════════════════════════════════╝
+  salesforce-rpa:
+    name: Salesforce RPA — Reusable Informative Gate
+    needs: rpa-decision
+    uses: ./.github/workflows/rpa.yml
+    secrets: inherit
+    with:
+      run_rpa: ${{ needs.rpa-decision.outputs.run_rpa == 'true' }}
+      enforce_gate: false
+      reason: ${{ needs.rpa-decision.outputs.reason }}
+      product_name: ${{ github.event.inputs.product_name || 'Paquete Basico' }}
+      product_price: ${{ github.event.inputs.product_price || '1500' }}
