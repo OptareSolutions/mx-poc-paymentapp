@@ -237,17 +237,21 @@ El pipeline se puede disparar manualmente desde **GitHub Actions > Workflows > A
 
 ---
 
-## Branching Strategy
+## Branching Strategy (GitFlow)
 
-| Rama | Trigger | Descripción |
-|------|---------|-------------|
-| `feature/*` | push / PR | Desarrollo de funcionalidades |
-| `develop` | push / PR | Integración continua |
-| `qa` | push / PR | Ambiente QA |
-| `uat` | push / PR | Ambiente UAT |
-| `main` | ❌ Nunca | Producción — protegido |
+El modelo de ramas sigue el flujo `feature/* → E → A → F → PRODUCCION`, donde cada transición tiene controles de calidad específicos.
+
+| Rama | Ambiente | Trigger automático | Descripción |
+|------|----------|--------------------|-------------|
+| `feature/*` | Local / CI | push / PR → E | Desarrollo de funcionalidades |
+| `E` | Desarrollo (`env-e`) | push / PR → A | Integración continua del equipo |
+| `A` | QA (`env-a`) | push / PR → F | Validación por el equipo de calidad |
+| `F` | UAT (`env-f`) | push / PR → PRODUCCION | Aceptación por el negocio |
+| `PRODUCCION` | Producción (`prod`) | push (post-aprobación) | Entorno productivo |
+
+> 📄 **Estrategia detallada:** Ver [`gitflow-pipeline-strategy.md`](./gitflow-pipeline-strategy.md) para la tabla completa de qué controles se ejecutan en cada contexto (push, PR, merge) y las acciones de consolidación de pipelines pendientes.
 
 ---
 
-*Documentado en: `C:\Users\jcunha\Documents\Optare\Clientes\AT_T\QA\02_CI_CD\README.md`*  
-*Generado por GitHub Actions Expert — AT&T PoC QA*
+*Documentado en: `doc/02_CI_CD/README.md`*  
+*AT&T PaymentBox PoC*
