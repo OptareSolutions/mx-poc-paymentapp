@@ -1,12 +1,6 @@
 name: RPA – Web Automation
 
 on:
-  push:
-    branches:
-      - 'feature/**'
-    paths:
-      - 'doc/02_CI_CD/rpa/**'
-      - '.github/workflows/rpa.yml'
   workflow_dispatch:
     inputs:
       product_name:
