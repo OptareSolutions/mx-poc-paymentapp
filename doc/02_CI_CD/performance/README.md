@@ -133,3 +133,39 @@ performance-check:
 - Permisos mínimos: `contents: read`, `actions: read`
 - Sin credenciales hardcodeadas
 - Concurrencia controlada (sin ejecuciones paralelas por entorno)
+
+---
+
+## Performance Comercial — Alternativas (1k–2k VUs / 3600s)
+
+El repositorio incluye `performance-load-2k.yml` con k6 (open source) para carga de 2000 VUs × 3600s. Si el proyecto requiere herramienta comercial, el mismo workflow puede adaptarse:
+
+### JMeter (self-hosted runner)
+
+```yaml
+- name: Run JMeter load test
+  run: |
+    jmeter -n \
+      -t tests/jmeter/att-paymentbox-e2e.jmx \
+      -l results/jmeter_results.jtl \
+      -e -o results/jmeter-html-report \
+      -Jbase_url=${{ env.BASE_URL }} \
+      -Jvus=2000 \
+      -Jduration=3600
+```
+
+### LoadView / BlazeMeter (cloud)
+
+Reemplazar el step de k6 con la CLI de BlazeMeter o su GitHub Action nativa, apuntando al script JMX. La configuración de umbrales se pasa como parámetros de la ejecución cloud.
+
+### Métricas requeridas en todos los casos
+
+| Métrica | Descripción |
+|---------|-------------|
+| Latencia promedio y p95 por endpoint | Base para comparación vs baseline |
+| Códigos de respuesta (2xx / 4xx / 5xx) | Tasa de éxito del flujo |
+| Mensajes de respuesta en errores | Diagnóstico de fallos |
+| Respuestas exitosas vs errores | Ratio global |
+| Comparación vs baseline anterior | Detección de regresiones |
+
+El workflow `performance-load-2k.yml` ya registra estas métricas en JSON estructurado listo para dashboard (Grafana, DataDog) o comparación manual. Los artifacts se retienen 90 días con el nombre `load-test-results-{run_id}`.

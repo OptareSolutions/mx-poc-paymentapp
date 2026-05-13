@@ -14,8 +14,8 @@ name: "AT&T PoC QA — Test · Quality Gates"
 #   5. quality-gate  → Gate consolidado (depende de 1-4)
 #
 # ACTIVACIÓN:
-#   - Push en ramas feature/* (feedback rápido en desarrollo)
-#   - Pull Request hacia E (dev), A (qa) — validación antes del merge
+#   - workflow_dispatch: ejecución manual (los triggers automáticos están en
+#     testing-factory.yml y golden-pipeline-testing.yml)
 #
 # VARIABLES DE REPOSITORIO REQUERIDAS:
 #   RPA_ENABLED      = true  (para activar el job RPA)
@@ -26,13 +26,7 @@ name: "AT&T PoC QA — Test · Quality Gates"
 # ──────────────────────────────────────────────────────────────────────────────
 
 on:
-  push:
-    branches:
-      - 'feature/**'   # CI en ramas de desarrollo (usa simulación Docker Compose)
-  pull_request:
-    branches:
-      - E              # Valida el PR antes de integrar a dev
-      - A              # Valida el PR antes de promover a QA
+  workflow_dispatch:
 
 # ── Permisos mínimos necesarios (least privilege) ─────────────────────────────
 permissions:

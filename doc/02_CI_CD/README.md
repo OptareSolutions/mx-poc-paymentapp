@@ -237,17 +237,208 @@ El pipeline se puede disparar manualmente desde **GitHub Actions > Workflows > A
 
 ---
 
-## Branching Strategy
+## Branching Strategy (GitFlow)
 
-| Rama | Trigger | Descripción |
-|------|---------|-------------|
-| `feature/*` | push / PR | Desarrollo de funcionalidades |
-| `develop` | push / PR | Integración continua |
-| `qa` | push / PR | Ambiente QA |
-| `uat` | push / PR | Ambiente UAT |
-| `main` | ❌ Nunca | Producción — protegido |
+El modelo de ramas sigue el flujo `feature/* → E → A → F → PRODUCCION`, donde cada transición tiene controles de calidad específicos.
+
+| Rama | Ambiente | Trigger automático | Descripción |
+|------|----------|--------------------|-------------|
+| `feature/*` | Local / CI | push / PR → E | Desarrollo de funcionalidades |
+| `E` | Desarrollo (`env-e`) | push / PR → A | Integración continua del equipo |
+| `A` | QA (`env-a`) | push / PR → F | Validación por el equipo de calidad |
+| `F` | UAT (`env-f`) | push / PR → PRODUCCION | Aceptación por el negocio |
+| `PRODUCCION` | Producción (`prod`) | push (post-aprobación) | Entorno productivo |
+
+> 📄 **Estrategia detallada:** Ver [`gitflow-pipeline-strategy.md`](./gitflow-pipeline-strategy.md) para la tabla completa de qué controles se ejecutan en cada contexto (push, PR, merge) y las acciones de consolidación de pipelines pendientes.
 
 ---
 
-*Documentado en: `C:\Users\jcunha\Documents\Optare\Clientes\AT_T\QA\02_CI_CD\README.md`*  
-*Generado por GitHub Actions Expert — AT&T PoC QA*
+---
+
+## Tech Stack
+
+| Categoría | Herramienta | Uso en este PoC |
+|-----------|-------------|-----------------|
+| API Functional | **Karate DSL** (Java/Maven) | Smoke tests con tag `@smoke`, validación HTTP + body |
+| API Integration | **Karate DSL** | Flujo E2E 8 pasos con correlación de IDs entre servicios |
+| API Contract | **oasdiff** + **Karate @contract** | Breaking changes OpenAPI/Swagger + contrato microservice-a→b |
+| Smoke Perf. | **k6** (Grafana) | 20 VUs, 7 min, thresholds p95, comparación vs baseline |
+| RPA | **Node.js + Playwright** | Flujo Salesforce completo 10 pasos con JWT auth headless |
+| Mock externo | **Prism** (Stoplight) | Mock del operador y recibo vía especificación OpenAPI |
+| Infraestructura | **Docker Compose** | Entorno completo simulado (ms-a, ms-b, BD, mocks) |
+| Imágenes | **GHCR** (GitHub Container Registry) | Versionado por ambiente: `env-e-{sha}`, `env-a-{sha}` |
+| Seguridad | **Gitleaks** + **Trivy** | Secrets en código + CVEs CRITICAL/HIGH en dependencias |
+| Calidad código | **SonarCloud** + **JaCoCo** | Análisis estático + cobertura ≥ 80% |
+| CD | **Kustomize** + **ArgoCD** | GitOps por overlay por ambiente |
+
+---
+
+## Arquitectura — Visión de 5 Etapas
+
+```
+┌──────────────────────────────────────────────────────────────────────────┐
+│              PIPELINE COMPLETO — AT&T PaymentBox PoC                     │
+├──────────────────────────────────────────────────────────────────────────┤
+│  feature/**  →  testing-factory.yml (smoke + integración + contrato)     │
+│  E/A push    →  golden-pipeline-testing.yml (suite completa)             │
+│  A/F PR      →  golden-pipeline-testing.yml (suite completa)             │
+└──────────────────────────────────────────────────────────────────────────┘
+
+  ┌─────────────────────────────────────────────────────────────────────┐
+  │  STAGE 1 · BUILD  (reusable-microservice-pipeline.yml)              │
+  │  • Gitleaks (secret scan)                                           │
+  │  • Unit Tests + JaCoCo (coverage gate ≥ 80%)                       │
+  │  • SonarCloud (code quality)                                        │
+  │  • Build JAR → artifact                                             │
+  └─────────────────────────────────────────────────────────────────────┘
+                                  │
+                                  ▼
+  ┌─────────────────────────────────────────────────────────────────────┐
+  │  STAGE 2 · TEST  (golden-pipeline-testing.yml / testing-factory)    │
+  │                        [paralelo]                                    │
+  │  ┌──────────────┐  ┌──────────────────┐  ┌──────────────────────┐  │
+  │  │ 1a FUNCTIONAL│  │ 1b INTEGRATION   │  │ 1c CONTRACT          │  │
+  │  │ Karate @smoke│  │ Karate @e2e      │  │ oasdiff OpenAPI      │  │
+  │  │              │  │                  │  │ + Karate @contract   │  │
+  │  │ • HTTP codes │  │ • Flujo 8 pasos  │  │ • 0 breaking changes │  │
+  │  │ • Body valid.│  │ • Auth flow      │  │ • Campos/tipos       │  │
+  │  └──────────────┘  └──────────────────┘  └──────────────────────┘  │
+  │                                                                     │
+  │  ┌───────────────────────────────┐  ┌──────────────────────────┐   │
+  │  │ 2. SMOKE PERFORMANCE (k6)     │  │ 3. RPA (Node.js+Playwright│   │
+  │  │ 20 VUs / 7 min                │  │    Salesforce — 10 pasos)│   │
+  │  │ • flujo p95 < 3000ms          │  │ • Login · Oportunidad    │   │
+  │  │ • login p95 < 700ms           │  │ • Producto · Crédito     │   │
+  │  │ • consulta p95 < 900ms        │  │ • Pago · Closed Won      │   │
+  │  │ • pago p95 < 1200ms           │  │ • Screenshots evidencia  │   │
+  │  │ • error rate < 1%             │  │                          │   │
+  │  └───────────────────────────────┘  └──────────────────────────┘   │
+  └─────────────────────────────────────────────────────────────────────┘
+                                  │
+                                  ▼
+  ┌─────────────────────────────────────────────────────────────────────┐
+  │  STAGE 3 · QUALITY GATES  (job consolidado)                         │
+  │                                                                     │
+  │  BLOQUEANTE   ┬─ API Functional   → 100% scenarios @smoke           │
+  │  (exit 1 si   ├─ API Integration  → E2E 8 pasos sin error           │
+  │   falla)      ├─ API Contract     → 0 breaking changes              │
+  │               └─ Smoke Perf.      → todos los thresholds k6         │
+  │                                                                     │
+  │  OPCIONAL     └─ RPA              → ejecución completada            │
+  │  (no bloquea)                                                        │
+  └─────────────────────────────────────────────────────────────────────┘
+                                  │
+                                  ▼
+  ┌─────────────────────────────────────────────────────────────────────┐
+  │  STAGE 4 · PUBLISH  (reusable-microservice-pipeline.yml)            │
+  │  • Trivy scan (CRITICAL/HIGH CVEs)                                   │
+  │  • Docker build → tag env-e|env-a|env-f|prod                        │
+  │  • Push GHCR                                                         │
+  │  • Update kustomization.yaml                                         │
+  └─────────────────────────────────────────────────────────────────────┘
+                                  │
+                                  ▼
+  ┌─────────────────────────────────────────────────────────────────────┐
+  │  STAGE 5 · DELIVER  (pipeline-integration.yml)                      │
+  │  • Contract tests de promoción + E2E (gate de entrada al ambiente)  │
+  │  • GitOps: Kustomize overlay actualizado                             │
+  │  • ArgoCD sync: E (env-e) → A (env-a) → F (env-f) → PRODUCCION    │
+  └─────────────────────────────────────────────────────────────────────┘
+```
+
+**Flujo de promoción entre ambientes:**
+
+```
+E (env-e) → [contrato+E2E gate] → A (env-a) → [contrato+E2E gate] → F (env-f) → [gate] → PRODUCCION
+```
+
+---
+
+## Proceso por Audiencia
+
+### Desarrolladores
+
+**¿Qué pasa en cada push o pull request?**
+
+1. El push a `feature/**` dispara `testing-factory.yml` automáticamente (smoke + integración + contrato + performance).
+2. Si algún test falla, el job **Quality Gate** muestra qué suite falló con resumen visual en la tab "Summary" de GitHub Actions.
+3. Los **breaking changes en OpenAPI** se comentan automáticamente en el PR con el diff de campos afectados.
+4. El pipeline NO hace deploy hasta que todos los gates obligatorios pasan.
+5. Los reportes Karate (HTML interactivo) y resultados k6 (JSON) quedan como **artifacts** descargables 30-90 días.
+
+**Flujo típico de desarrollo:**
+
+```
+git push origin feature/mi-fix
+  → testing-factory dispara
+  → smoke: ¿el endpoint responde correctamente?
+  → integration: ¿el flujo de 8 pasos sigue funcionando?
+  → contract: ¿no rompiste el contrato con microservice-b?
+  → performance: ¿el fix no introdujo regresión de latencia?
+  → ✅ gate verde → PR hacia E → golden-pipeline en E/A/F
+```
+
+**Para agregar casos de prueba:**
+- Funcional/integración: `tests/functional-karate/src/test/resources/features/recarga_flow.feature` con tag `@smoke` o `@e2e`.
+- Contrato: `contract_microservices.feature` con `@contract`.
+- Performance: ajustar thresholds en `tests/k6/smoke_performance.js` → sección `options.thresholds`.
+
+---
+
+### QAs
+
+**Suites ejecutadas y cómo ver resultados:**
+
+| Suite | Herramienta | Tag/Runner | Artifact |
+|-------|-------------|------------|---------|
+| Smoke Functional | Karate | `@smoke` | `api-functional-report-*` (HTML) |
+| Integration E2E | Karate | `@e2e` / `testRecargaFlow` | `api-integration-report-*` (HTML) |
+| Contract micro-a→b | Karate | `@contract` / `testContratoMicroservicios` | `api-contract-report-*` (JUnit XML) |
+| Breaking changes | oasdiff | automático en PR | Comentario en PR + logs de Actions |
+| Smoke Performance | k6 | `smoke_performance.js` | `smoke-performance-*` (JSON p95) |
+| RPA Salesforce | Node.js + Playwright | `rpa-flow.js` | `rpa-results-*` (screenshots + logs) |
+
+**Ver quality gates en GitHub UI:** Actions → run → tab "Summary" → tabla ✅/❌ con thresholds.
+
+---
+
+### Operaciones
+
+- Solo si Build + Test + Quality Gates pasan, la imagen Docker se construye, escanea con Trivy y se sube a GHCR con tag `env-e-{sha}`.
+- La promoción entre ambientes es **manual**: `pipeline-integration.yml` (workflow_dispatch) eligiendo `E→A`, `A→F` o `F→PRODUCCION`.
+- Cada promoción requiere Contract Tests + E2E Full antes de actualizar el overlay de Kustomize.
+- ArgoCD detecta el cambio en `kustomization.yaml` y hace sync automático al cluster destino.
+- **Performance load 2k VUs:** ejecutar manualmente desde `performance-load-2k.yml` (60+ min, solo QA/UAT).
+
+---
+
+### Seguridad
+
+| Control | Herramienta | Cuándo | Qué detecta |
+|---------|-------------|--------|-------------|
+| Secret scanning | Gitleaks | Cada push | Tokens, API keys, contraseñas en código |
+| Vulnerabilidades deps | Trivy (FS) | Después del build | CVEs CRITICAL/HIGH en JARs |
+| Vulnerabilidades imagen | Trivy (image) | Después del build Docker | CVEs en imagen final |
+| Breaking changes API | oasdiff | Cada PR | Contratos rotos entre microservicios |
+| Permisos mínimos | `permissions:` por job | Siempre | Least privilege por workflow |
+| Pinning de actions | SHA completo | Siempre | Supply chain: versiones inmutables |
+| Secrets | GitHub Secrets | RPA, GHCR | SF tokens → nunca en código |
+
+---
+
+## Evidencias y Reportes por Suite
+
+| Suite | Formato | Artifact GitHub Actions | Retención |
+|-------|---------|------------------------|-----------|
+| Karate funcional | HTML interactivo + JUnit XML | `api-functional-report-*` | 30 días |
+| Karate integración | HTML interactivo + JUnit XML | `api-integration-report-*` | 30 días |
+| Karate contrato | JUnit XML + logs oasdiff | `api-contract-report-*` | 30 días |
+| k6 smoke perf. | JSON con métricas p95 | `smoke-performance-*` | 90 días |
+| k6 load 2k | JSON raw + comparación baseline | `load-test-results-*` | 90 días |
+| RPA Salesforce | Screenshots PNG + logs JSON | `rpa-results-*` | 30 días |
+| Trivy CVEs | SARIF | GitHub Security → Code Scanning | indefinido |
+
+---
+
+*Documentado en: `doc/02_CI_CD/README.md`*  
+*AT&T PaymentBox PoC*
