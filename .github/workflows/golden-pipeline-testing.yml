@@ -1,0 +1,663 @@
+name: "🏆 Golden Pipeline — API Testing · Performance · RPA · Quality Gates"
+
+# ──────────────────────────────────────────────────────────────────────────────
+# PIPELINE: Golden Pipeline de Calidad — AT&T PaymentBox PoC
+#
+# PROPÓSITO:
+#   Pipeline unificado que ejecuta todas las suites de prueba en cada push/PR
+#   y aplica Quality Gates consolidados. Bloquea la entrega si cualquier gate
+#   obligatorio falla.
+#
+# SUITES INCLUIDAS:
+#   1a. API Functional   — Karate smoke tests (@smoke): endpoints críticos,
+#                          validación de códigos HTTP, body response.
+#   1b. API Integration  — Karate E2E (@e2e): flujo completo 8 pasos,
+#                          autenticación, dependencias entre servicios.
+#   1c. API Contract     — oasdiff (breaking changes OpenAPI/Swagger) +
+#                          Karate @contract (contrato entre microservicios).
+#   2.  Smoke Perf.      — k6 20 VUs / 7 min: thresholds p95, error rate.
+#   3.  RPA              — Playwright: login, consulta, descarga, registro.
+#   4.  Quality Gate     — Gate consolidado; falla si cualquier suite falla.
+#
+# ACTIVACIÓN:
+#   push → E | A | F | PRODUCCION (rutas relevantes de código/tests)
+#   pull_request → A | F | PRODUCCION (incl. gate F→PRODUCCION)
+#   workflow_dispatch            (ejecución manual con opciones)
+#
+# THRESHOLDS (Quality Gates):
+#   API Functional   → 100% smoke scenarios pass
+#   API Integration  → flujo E2E 8 pasos completo sin fallos
+#   API Contract     → 0 breaking changes detectados (oasdiff exit 0)
+#   Smoke Perf. k6   → p95 flujo < 3000ms | error rate < 1%
+#                       login p95 < 700ms | consulta p95 < 900ms | pago p95 < 1200ms
+#   RPA              → ejecución completada (no bloqueante si SF_URL no configurado)
+# ──────────────────────────────────────────────────────────────────────────────
+
+on:
+  push:
+    branches: [E, A, F, PRODUCCION]
+    paths:
+      - 'microservice-a/**'
+      - 'microservice-b/**'
+      - 'tests/**'
+      - 'simulation/**'
+      - '.github/workflows/golden-pipeline-testing.yml'
+  pull_request:
+    branches: [A, F, PRODUCCION]
+    paths:
+      - 'microservice-a/**'
+      - 'microservice-b/**'
+      - 'tests/**'
+      - 'simulation/**'
+  workflow_dispatch:
+    inputs:
+      run_rpa:
+        description: "Ejecutar RPA (requiere secrets SF_URL / SF_USERNAME / SF_PASSWORD)"
+        type: boolean
+        default: false
+        required: false
+      environment:
+        description: "Entorno objetivo"
+        type: choice
+        options: [ci, develop, qa]
+        default: ci
+        required: false
+
+# ── Permisos mínimos (least privilege) ───────────────────────────────────────
+permissions:
+  contents: read
+  checks: write          # publicar resultados en UI de GitHub
+  pull-requests: write   # comentar breaking changes en PRs
+
+# ── Control de concurrencia ───────────────────────────────────────────────────
+concurrency:
+  group: golden-pipeline-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+# ── Variables globales ────────────────────────────────────────────────────────
+env:
+  JAVA_VERSION: "17"
+  JAVA_DIST:    "temurin"
+  BASE_URL:     "http://localhost:8080"
+  MSVC_B_URL:   "http://localhost:18081"
+  KARATE_ENV:   ${{ github.event.inputs.environment || 'ci' }}
+
+# ══════════════════════════════════════════════════════════════════════════════
+jobs:
+
+# ╔══════════════════════════════════════════════════════════════════════════╗
+# ║  JOB 1a · API Testing — FUNCTIONAL (Karate @smoke)                     ║
+# ║  Valida endpoints críticos con smoke tests: códigos HTTP esperados,     ║
+# ║  validación de body, datos activos. Ejecuta en paralelo con 1b y 1c.   ║
+# ╚══════════════════════════════════════════════════════════════════════════╝
+  api-functional:
+    name: "1a · API Functional — Smoke Tests (Karate)"
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    outputs:
+      result: ${{ job.status }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - name: Login GHCR
+        run: |
+          echo "${{ secrets.GITHUB_TOKEN }}" \
+            | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+
+      - name: Iniciar entorno de simulación
+        working-directory: simulation
+        timeout-minutes: 8
+        run: |
+          docker compose up -d --build --wait
+          echo "✅ Entorno listo: microservice-a=${{ env.BASE_URL }} | microservice-b=${{ env.MSVC_B_URL }}"
+
+      - name: Configurar JDK ${{ env.JAVA_VERSION }}
+        uses: actions/setup-java@c1e323688fd81a25caa38c78aa6df2d33d3e20d9 # v4
+        with:
+          java-version: ${{ env.JAVA_VERSION }}
+          distribution: ${{ env.JAVA_DIST }}
+          cache: maven
+
+      # ── Smoke Tests: validar endpoints con códigos esperados ──────────────
+      - name: "Karate @smoke — Functional Smoke Tests"
+        working-directory: tests/functional-karate
+        run: |
+          echo "🧪 Ejecutando smoke tests funcionales..."
+          echo "   Cobertura: GET /api/clientes/buscar | GET /api/recargas/montos"
+          echo "              POST /api/recargas/validar-operador | GET /api/pagos/metodos"
+          echo "              POST /api/pagos/registrar | POST /api/recibos/emitir"
+          mvn test \
+            -Dkarate.env=${{ env.KARATE_ENV }} \
+            -Dtest=RecargaFlowRunner#testSmoke \
+            --no-transfer-progress
+
+      - name: Publicar reportes funcionales
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: api-functional-report-${{ github.run_id }}
+          path: |
+            tests/functional-karate/target/karate-reports/
+            tests/functional-karate/target/surefire-reports/
+          retention-days: 30
+          if-no-files-found: warn
+
+      - name: Detener entorno
+        if: always()
+        working-directory: simulation
+        run: docker compose down -v --remove-orphans
+
+
+# ╔══════════════════════════════════════════════════════════════════════════╗
+# ║  JOB 1b · API Testing — INTEGRATION (Karate @e2e)                      ║
+# ║  Registra la interacción entre servicios. Flujo E2E de 8 pasos con      ║
+# ║  correlación de IDs: auth → montos → operador → pago → recibo.          ║
+# ╚══════════════════════════════════════════════════════════════════════════╝
+  api-integration:
+    name: "1b · API Integration — E2E Flow (Karate)"
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - name: Login GHCR
+        run: |
+          echo "${{ secrets.GITHUB_TOKEN }}" \
+            | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+
+      - name: Iniciar entorno completo (docker-compose)
+        working-directory: simulation
+        timeout-minutes: 8
+        run: docker compose up -d --build --wait
+
+      - name: Configurar JDK ${{ env.JAVA_VERSION }}
+        uses: actions/setup-java@c1e323688fd81a25caa38c78aa6df2d33d3e20d9 # v4
+        with:
+          java-version: ${{ env.JAVA_VERSION }}
+          distribution: ${{ env.JAVA_DIST }}
+          cache: maven
+
+      # ── E2E Flow: autenticación, dependencias externas, flujo end-to-end ──
+      - name: "Karate @e2e — Integration E2E Flow (8 pasos)"
+        working-directory: tests/functional-karate
+        run: |
+          echo "🔗 Ejecutando pruebas de integración E2E..."
+          echo "   Flujo: Paso2(auth) → Paso3(montos DB) → Paso4(mock operador)"
+          echo "          → Paso5(métodos pago) → Paso6+7(registro pago) → Paso8(recibo)"
+          mvn test \
+            -Dkarate.env=${{ env.KARATE_ENV }} \
+            -Dtest=RecargaFlowRunner#testRecargaFlow \
+            --no-transfer-progress
+
+      - name: Publicar reportes de integración
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: api-integration-report-${{ github.run_id }}
+          path: |
+            tests/functional-karate/target/karate-reports/
+            tests/functional-karate/target/surefire-reports/
+          retention-days: 30
+          if-no-files-found: warn
+
+      - name: Detener entorno
+        if: always()
+        working-directory: simulation
+        run: docker compose down -v --remove-orphans
+
+
+# ╔══════════════════════════════════════════════════════════════════════════╗
+# ║  JOB 1c · API Testing — CONTRACT (oasdiff OpenAPI + Karate @contract)  ║
+# ║  Detecta breaking changes en OpenAPI/Swagger comparando rama actual vs  ║
+# ║  base. Valida contrato entre microservice-a y microservice-b.           ║
+# ╚══════════════════════════════════════════════════════════════════════════╝
+  api-contract:
+    name: "1c · API Contract — Breaking Changes (oasdiff + Karate)"
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      pull-requests: write
+
+    steps:
+      - name: Checkout (historial completo para diff)
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          fetch-depth: 0
+
+      # ── oasdiff: detectar breaking changes en OpenAPI spec ────────────────
+      - name: Instalar oasdiff
+        run: |
+          OASDIFF_VERSION="1.10.25"
+          curl -fsSL \
+            "https://github.com/tufin/oasdiff/releases/download/v${OASDIFF_VERSION}/oasdiff_${OASDIFF_VERSION}_linux_amd64.tar.gz" \
+            | sudo tar -xz -C /usr/local/bin oasdiff
+          oasdiff --version
+
+      - name: Detectar breaking changes OpenAPI (microservice-a)
+        id: oasdiff-a
+        continue-on-error: true
+        run: |
+          BASE_REF="${{ github.base_ref || github.event.repository.default_branch || 'E' }}"
+          SPEC="microservice-a/docs/openapi.yaml"
+          git fetch origin "${BASE_REF}" --depth=1 2>/dev/null || true
+
+          if ! git show "origin/${BASE_REF}:${SPEC}" > /tmp/openapi-base.yaml 2>/dev/null; then
+            echo "ℹ️ Sin especificación base → omitiendo comparación"
+            echo "has_breaking=false" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          if [ ! -f "$SPEC" ]; then
+            echo "ℹ️ Sin especificación actual → omitiendo comparación"
+            echo "has_breaking=false" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          echo "🔍 Comparando OpenAPI: origin/${BASE_REF} vs HEAD"
+          RESULT=$(oasdiff breaking /tmp/openapi-base.yaml "$SPEC" 2>&1 || true)
+
+          if [ -n "$RESULT" ]; then
+            echo "❌ Breaking changes detectados en microservice-a:"
+            echo "$RESULT"
+            echo "has_breaking=true" >> $GITHUB_OUTPUT
+            {
+              echo "breaking_changes<<OASDIFF_EOF"
+              echo "$RESULT"
+              echo "OASDIFF_EOF"
+            } >> $GITHUB_OUTPUT
+          else
+            echo "✅ Sin breaking changes en microservice-a"
+            echo "has_breaking=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Detectar breaking changes OpenAPI (microservice-b)
+        id: oasdiff-b
+        continue-on-error: true
+        run: |
+          BASE_REF="${{ github.base_ref || github.event.repository.default_branch || 'E' }}"
+          SPEC="microservice-b/docs/openapi.yaml"
+          git fetch origin "${BASE_REF}" --depth=1 2>/dev/null || true
+
+          if ! git show "origin/${BASE_REF}:${SPEC}" > /tmp/openapi-base-b.yaml 2>/dev/null; then
+            echo "ℹ️ Sin especificación base para microservice-b → omitiendo"
+            echo "has_breaking=false" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          if [ ! -f "$SPEC" ]; then
+            echo "ℹ️ Sin especificación actual para microservice-b → omitiendo"
+            echo "has_breaking=false" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          RESULT=$(oasdiff breaking /tmp/openapi-base-b.yaml "$SPEC" 2>&1 || true)
+          if [ -n "$RESULT" ]; then
+            echo "❌ Breaking changes detectados en microservice-b:"
+            echo "$RESULT"
+            echo "has_breaking=true" >> $GITHUB_OUTPUT
+          else
+            echo "✅ Sin breaking changes en microservice-b"
+            echo "has_breaking=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Comentar breaking changes en PR
+        if: |
+          github.event_name == 'pull_request' &&
+          (steps.oasdiff-a.outputs.has_breaking == 'true' ||
+           steps.oasdiff-b.outputs.has_breaking == 'true')
+        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7
+        with:
+          script: |
+            const body = [
+              '## ⚠️ Breaking Changes Detectados en OpenAPI',
+              '',
+              'El pipeline ha detectado cambios incompatibles con versiones anteriores.',
+              '',
+              '**microservice-a:**',
+              '```',
+              `${{ steps.oasdiff-a.outputs.breaking_changes || 'Sin breaking changes' }}`,
+              '```',
+              '',
+              '> Revisar estos cambios antes de hacer merge. Si el breaking change es intencional,',
+              '> actualizar la versión de la API (major version bump) e informar a los consumidores.',
+            ].join('\n');
+            await github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body,
+            });
+
+      # ── Karate: contrato entre microservicios ─────────────────────────────
+      - name: Login GHCR
+        run: |
+          echo "${{ secrets.GITHUB_TOKEN }}" \
+            | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+
+      - name: Iniciar entorno (para contract tests Karate)
+        working-directory: simulation
+        timeout-minutes: 8
+        run: docker compose up -d --build --wait
+
+      - name: Configurar JDK ${{ env.JAVA_VERSION }}
+        uses: actions/setup-java@c1e323688fd81a25caa38c78aa6df2d33d3e20d9 # v4
+        with:
+          java-version: ${{ env.JAVA_VERSION }}
+          distribution: ${{ env.JAVA_DIST }}
+          cache: maven
+
+      - name: "Karate @contract — Contract Tests (microservice-a → microservice-b)"
+        working-directory: tests/functional-karate
+        run: |
+          echo "📋 Ejecutando tests de contrato entre microservicios..."
+          echo "   Valida: campos phone/fullName/status en microservice-b"
+          mvn test \
+            -Dkarate.env=${{ env.KARATE_ENV }} \
+            -Dtest=RecargaFlowRunner#testContratoMicroservicios \
+            --no-transfer-progress
+
+      - name: Publicar reportes de contrato
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: api-contract-report-${{ github.run_id }}
+          path: tests/functional-karate/target/surefire-reports/
+          retention-days: 30
+          if-no-files-found: warn
+
+      - name: Detener entorno
+        if: always()
+        working-directory: simulation
+        run: docker compose down -v --remove-orphans
+
+      # ── Gate: fallar si hay breaking changes ──────────────────────────────
+      - name: "Quality Gate: Fallar si hay breaking changes"
+        if: |
+          steps.oasdiff-a.outputs.has_breaking == 'true' ||
+          steps.oasdiff-b.outputs.has_breaking == 'true'
+        run: |
+          echo "❌ Pipeline bloqueado: se detectaron breaking changes incompatibles."
+          echo "   Revisar el comentario en el PR o los logs de oasdiff."
+          exit 1
+
+
+# ╔══════════════════════════════════════════════════════════════════════════╗
+# ║  JOB 2 · SMOKE PERFORMANCE (k6 — 20 VUs / 5-10 min)                    ║
+# ║  Mide tiempos de respuesta bajo carga moderada. Compara contra          ║
+# ║  ejecución anterior para detectar regresiones de performance.            ║
+# ║                                                                          ║
+# ║  Thresholds:                                                             ║
+# ║    flujo_completo p95 < 3000ms   |  error rate < 1%                     ║
+# ║    login p95 < 700ms             |  consulta p95 < 900ms                ║
+# ║    pago/actualización p95 < 1200ms                                       ║
+# ╚══════════════════════════════════════════════════════════════════════════╝
+  smoke-performance:
+    name: "2 · Smoke Performance (k6 — 20 VUs / 7 min)"
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: [api-functional]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - name: Login GHCR
+        run: |
+          echo "${{ secrets.GITHUB_TOKEN }}" \
+            | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+
+      - name: Iniciar entorno de simulación
+        working-directory: simulation
+        timeout-minutes: 8
+        run: docker compose up -d --build --wait
+
+      - name: Verificar health de microservice-a
+        run: |
+          curl --retry 10 --retry-delay 5 --retry-connrefused -sf \
+            "${{ env.BASE_URL }}/actuator/health" | grep -q '"status":"UP"' \
+            && echo "✅ microservice-a healthy" \
+            || (echo "❌ microservice-a no responde"; exit 1)
+
+      - name: Instalar k6
+        run: |
+          K6_VERSION="v0.55.0"
+          curl -fsSL \
+            "https://github.com/grafana/k6/releases/download/${K6_VERSION}/k6-${K6_VERSION}-linux-amd64.tar.gz" \
+            | sudo tar -xz --strip-components=1 -C /usr/local/bin \
+              "k6-${K6_VERSION}-linux-amd64/k6"
+          k6 version
+
+      - name: Descargar baseline anterior (para comparación)
+        uses: actions/download-artifact@95815c38cf2ff2164869cbab79da8d1f422bc89e # v4
+        with:
+          name: smoke-performance-baseline
+          path: tests/k6/results
+        continue-on-error: true
+
+      - name: "k6 Smoke Performance — 20 VUs / 7 min"
+        id: k6-run
+        env:
+          BASE_URL:      ${{ env.BASE_URL }}
+          ENVIRONMENT:   ${{ github.event.inputs.environment || 'ci' }}
+          GITHUB_RUN_ID: ${{ github.run_id }}
+        run: |
+          mkdir -p tests/k6/results
+          echo "🚀 Iniciando smoke performance test (20 VUs / 7 min)..."
+          echo ""
+          echo "  Thresholds configurados:"
+          echo "    flujo_completo p95 < 3000ms   error rate < 1%"
+          echo "    login p95 < 700ms             consulta p95 < 900ms"
+          echo "    pago p95 < 1200ms"
+          echo ""
+          k6 run \
+            --env BASE_URL="${BASE_URL}" \
+            --env ENVIRONMENT="${ENVIRONMENT}" \
+            --env GITHUB_RUN_ID="${GITHUB_RUN_ID}" \
+            --out json=tests/k6/results/smoke_raw_${{ github.run_id }}.json \
+            tests/k6/smoke_performance.js
+
+      - name: Comparar con baseline anterior
+        if: always()
+        run: |
+          LATEST="tests/k6/results/smoke_performance_latest.json"
+          BASELINE="tests/k6/results/load_test_baseline.json"
+          if [ -f "$LATEST" ] && [ -f "$BASELINE" ]; then
+            echo "📊 Comparando con baseline anterior..."
+            node tests/k6/scripts/compare-results.js "$LATEST" "$BASELINE" || true
+          else
+            echo "ℹ️ Sin baseline previo para comparar (primera ejecución)"
+          fi
+
+      - name: Publicar resultados de performance
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: smoke-performance-${{ github.run_id }}
+          path: tests/k6/results/
+          retention-days: 90
+          if-no-files-found: warn
+
+      - name: Actualizar baseline (solo en push a E/A)
+        if: |
+          success() &&
+          github.event_name == 'push' &&
+          (github.ref_name == 'E' || github.ref_name == 'A')
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: smoke-performance-baseline
+          path: tests/k6/results/smoke_performance_latest.json
+          retention-days: 365
+
+      - name: Detener entorno
+        if: always()
+        working-directory: simulation
+        run: docker compose down -v --remove-orphans
+
+
+# ╔══════════════════════════════════════════════════════════════════════════╗
+# ║  JOB 3 · RPA (Playwright — Python)                                      ║
+# ║  Automatización web: login → consulta → descarga/validación → registro. ║
+# ║  Configurado para no bloquear el pipeline si los secrets no están        ║
+# ║  disponibles (modo simulado sin SF_URL configurado).                     ║
+# ╚══════════════════════════════════════════════════════════════════════════╝
+  rpa:
+    name: "3 · RPA — Salesforce Automation (Node.js + Playwright)"
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    if: |
+      github.event.inputs.run_rpa == 'true' ||
+      (github.event_name == 'push' && vars.RPA_ENABLED == 'true')
+
+    env:
+      RPA_PRODUCT_NAME:        ${{ github.event.inputs.product_name || 'Paquete Básico' }}
+      RPA_PRODUCT_PRICE:       ${{ github.event.inputs.product_price || '1500' }}
+      SALESFORCE_CLIENT_ID:    ${{ secrets.SALESFORCE_CLIENT_ID }}
+      SALESFORCE_USERNAME:     ${{ secrets.SALESFORCE_USERNAME }}
+      SALESFORCE_INSTANCE_URL: ${{ secrets.SALESFORCE_INSTANCE_URL }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - name: Configurar Node.js 20
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: doc/02_CI_CD/rpa/package-lock.json
+
+      - name: Instalar dependencias RPA
+        working-directory: doc/02_CI_CD/rpa
+        run: npm ci
+
+      - name: Instalar Playwright Chromium
+        working-directory: doc/02_CI_CD/rpa
+        run: npx playwright install chromium --with-deps
+
+      - name: Instalar Salesforce CLI
+        run: npm install --global @salesforce/cli
+
+      - name: Crear archivo JWT key de Salesforce
+        run: |
+          echo "${{ secrets.SALESFORCE_JWT_KEY }}" > server.key
+          chmod 600 server.key
+
+      - name: Autenticar en Salesforce (JWT)
+        run: |
+          sf org login jwt \
+            --client-id "$SALESFORCE_CLIENT_ID" \
+            --jwt-key-file server.key \
+            --username "$SALESFORCE_USERNAME" \
+            --instance-url "$SALESFORCE_INSTANCE_URL" \
+            --alias rpa-org
+
+      - name: Exportar sesión Salesforce
+        run: sf org display --target-org rpa-org --json > sf-auth.json
+
+      - name: "RPA Flow — Flujo Salesforce completo (10 pasos)"
+        working-directory: doc/02_CI_CD/rpa
+        run: node scripts/rpa-flow.js
+        continue-on-error: true
+
+      - name: Publicar evidencias RPA (screenshots + logs)
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: rpa-results-${{ github.run_id }}
+          path: doc/02_CI_CD/rpa/results/
+          retention-days: 30
+          if-no-files-found: warn
+
+
+# ╔══════════════════════════════════════════════════════════════════════════╗
+# ║  JOB 4 · QUALITY GATE — Consolidado                                     ║
+# ║  Evalúa el resultado de todas las suites. Falla el pipeline si          ║
+# ║  cualquier gate obligatorio no pasa.                                    ║
+# ║                                                                          ║
+# ║  Gates obligatorios: api-functional | api-integration | api-contract    ║
+# ║                      smoke-performance                                   ║
+# ║  Gates opcionales:   rpa (no bloquea)                                   ║
+# ╚══════════════════════════════════════════════════════════════════════════╝
+  quality-gate:
+    name: "4 · Quality Gate — Consolidado"
+    runs-on: ubuntu-latest
+    needs: [api-functional, api-integration, api-contract, smoke-performance, rpa]
+    if: always()
+
+    steps:
+      - name: Evaluar Quality Gates
+        run: |
+          FUNCTIONAL="${{ needs.api-functional.result }}"
+          INTEGRATION="${{ needs.api-integration.result }}"
+          CONTRACT="${{ needs.api-contract.result }}"
+          PERFORMANCE="${{ needs.smoke-performance.result }}"
+          RPA="${{ needs.rpa.result }}"
+
+          GATE_FAILED=false
+
+          {
+            echo "## 🏁 Quality Gate — Resultados Consolidados"
+            echo ""
+            echo "| Suite | Tipo | Resultado |"
+            echo "|-------|------|-----------|"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          check_gate() {
+            local name="$1" result="$2" required="$3" detail="$4"
+            local icon
+            case "$result" in
+              success)  icon="✅ PASS" ;;
+              skipped)  icon="⏭️ SKIP" ;;
+              *)        icon="❌ FAIL" ;;
+            esac
+            echo "| $name | $detail | $icon |" >> "$GITHUB_STEP_SUMMARY"
+            if [ "$result" != "success" ] && [ "$result" != "skipped" ] && [ "$required" = "true" ]; then
+              GATE_FAILED=true
+            fi
+          }
+
+          check_gate "API Functional (Karate @smoke)"      "$FUNCTIONAL"  "true"  "Obligatorio"
+          check_gate "API Integration (Karate E2E 8 pasos)" "$INTEGRATION" "true"  "Obligatorio"
+          check_gate "API Contract (oasdiff + @contract)"   "$CONTRACT"    "true"  "Obligatorio"
+          check_gate "Smoke Performance (k6 Thresholds)"    "$PERFORMANCE" "true"  "Obligatorio"
+          check_gate "RPA (Node.js + Playwright/Salesforce)"   "$RPA"         "false" "Opcional"
+
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "### Thresholds de Performance (k6)" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Métrica | Límite |" >> "$GITHUB_STEP_SUMMARY"
+          echo "|---------|--------|" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Flujo completo p95 | < 3000ms |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Login p95 | < 700ms |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Consulta p95 | < 900ms |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Pago/actualización p95 | < 1200ms |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Error rate | < 1% |" >> "$GITHUB_STEP_SUMMARY"
+
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+
+          if [ "$GATE_FAILED" = "true" ]; then
+            echo "## ❌ Quality Gate: FAILED" >> "$GITHUB_STEP_SUMMARY"
+            echo "Una o más suites obligatorias fallaron. Revisar reportes de cada job."
+            exit 1
+          else
+            echo "## ✅ Quality Gate: PASSED" >> "$GITHUB_STEP_SUMMARY"
+            echo "✅ Todos los gates obligatorios aprobados."
+          fi
+
+      - name: Resumen de rama y commit
+        if: always()
+        run: |
+          {
+            echo ""
+            echo "---"
+            echo "| Campo | Valor |"
+            echo "|-------|-------|"
+            echo "| Rama | \`${{ github.ref_name }}\` |"
+            echo "| Commit | \`${{ github.sha }}\` |"
+            echo "| Run | [${{ github.run_id }}](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}) |"
+            echo "| Trigger | ${{ github.event_name }} |"
+          } >> "$GITHUB_STEP_SUMMARY"
