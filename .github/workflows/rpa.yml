@@ -2,8 +2,8 @@ name: RPA – Web Automation
 
 on:
   push:
-    branches-ignore:
-      - main
+    branches:
+      - 'feature/**'
     paths:
       - 'doc/02_CI_CD/rpa/**'
       - '.github/workflows/rpa.yml'
