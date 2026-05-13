@@ -20,8 +20,8 @@ name: "🏆 Golden Pipeline — API Testing · Performance · RPA · Quality Gat
 #   4.  Quality Gate     — Gate consolidado; falla si cualquier suite falla.
 #
 # ACTIVACIÓN:
-#   push → develop | qa | uat   (rutas relevantes de código/tests)
-#   pull_request → develop | qa | uat | main
+#   push → E | A | F | PRODUCCION   (rutas relevantes de código/tests)
+#   pull_request → A | F | PRODUCCION
 #   workflow_dispatch            (ejecución manual con opciones)
 #
 # THRESHOLDS (Quality Gates):
@@ -35,7 +35,7 @@ name: "🏆 Golden Pipeline — API Testing · Performance · RPA · Quality Gat
 
 on:
   push:
-    branches: [E, A]
+    branches: [E, A, F, PRODUCCION]
     paths:
       - 'microservice-a/**'
       - 'microservice-b/**'
@@ -43,7 +43,7 @@ on:
       - 'simulation/**'
       - '.github/workflows/golden-pipeline-testing.yml'
   pull_request:
-    branches: [A, F]
+    branches: [A, F, PRODUCCION]
     paths:
       - 'microservice-a/**'
       - 'microservice-b/**'
