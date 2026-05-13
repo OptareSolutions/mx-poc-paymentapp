@@ -70,31 +70,43 @@ export const options = {
 const BASE_URL = __ENV.BASE_URL || 'http://localhost:8080';
 const headers  = { 'Content-Type': 'application/json' };
 
+function parseJson(body) {
+  try { return JSON.parse(body); } catch { return {}; }
+}
+
+function addLatency(trend, startedAt) {
+  const elapsed = Date.now() - startedAt;
+  trend.add(elapsed);
+  return elapsed;
+}
+
 // ── Función principal ─────────────────────────────────────────────────────────
 export default function () {
   // Seleccionar usuario parametrizado (round-robin por VU)
   const user        = users[__VU % users.length];
   const numeroOrden = `ORD-${Date.now()}-${__VU}`;
 
-  const inicioFlujo = Date.now();
   let flujoOk       = true;
+  let flujoApiMs    = 0;
 
   // ── Paso 2: Focalizar Cliente (Login) ──────────────────────────────────────
   group('Paso 2 - Focalizar Cliente', () => {
     const t0  = Date.now();
     const res = http.get(`${BASE_URL}/api/clientes/buscar?telefono=${user.telefono}`);
-    loginLatencia.add(Date.now() - t0);
+    flujoApiMs += addLatency(loginLatencia, t0);
 
     const ok = check(res, {
       'P2 status 200':      (r) => r.status === 200,
       'P2 cliente ACTIVO':  (r) => {
-        try { return JSON.parse(r.body).status === 'ACTIVO'; } catch { return false; }
+        return parseJson(r.body).status === 'ACTIVO';
       },
       'P2 nombre correcto': (r) => {
-        try { return JSON.parse(r.body).nombre.includes('Billy'); } catch { return false; }
+        const body = parseJson(r.body);
+        const name = body.fullName || body.nombre || '';
+        return name.includes('Billy');
       },
     });
-    if (!ok) { errorRate.add(1); flujoOk = false; }
+    if (!ok) flujoOk = false;
   });
 
   sleep(randomIntBetween(1, 3));
@@ -103,15 +115,16 @@ export default function () {
   group('Paso 3 - Consultar Montos DB', () => {
     const t0  = Date.now();
     const res = http.get(`${BASE_URL}/api/recargas/montos?operador=${user.operador}`);
-    consultaLatencia.add(Date.now() - t0);
+    flujoApiMs += addLatency(consultaLatencia, t0);
 
     const ok = check(res, {
       'P3 status 200':    (r) => r.status === 200,
       'P3 tiene montos':  (r) => {
-        try { return JSON.parse(r.body).length > 0; } catch { return false; }
+        const body = parseJson(r.body);
+        return Array.isArray(body) && body.length > 0;
       },
     });
-    if (!ok) { errorRate.add(1); flujoOk = false; }
+    if (!ok) flujoOk = false;
   });
 
   sleep(randomIntBetween(1, 3));
@@ -124,28 +137,30 @@ export default function () {
       null,
       { headers }
     );
-    consultaLatencia.add(Date.now() - t0);
+    flujoApiMs += addLatency(consultaLatencia, t0);
 
     const ok = check(res, {
       'P4 status 200':  (r) => r.status === 200,
       'P4 valido true': (r) => {
-        try { return JSON.parse(r.body).valido === true; } catch { return false; }
+        return parseJson(r.body).valido === true;
       },
     });
-    if (!ok) { errorRate.add(1); flujoOk = false; }
+    if (!ok) flujoOk = false;
   });
 
   sleep(randomIntBetween(1, 3));
 
   // ── Paso 5: Métodos de Pago ─────────────────────────────────────────────────
   group('Paso 5 - Métodos de Pago PaymentBox', () => {
+    const t0  = Date.now();
     const res = http.get(`${BASE_URL}/api/pagos/metodos`);
+    flujoApiMs += Date.now() - t0;
 
     const ok = check(res, {
       'P5 status 200':    (r) => r.status === 200,
       'P5 tiene EFECTIVO': (r) => r.body.includes('EFECTIVO'),
     });
-    if (!ok) { errorRate.add(1); flujoOk = false; }
+    if (!ok) flujoOk = false;
   });
 
   sleep(randomIntBetween(1, 3));
@@ -162,20 +177,21 @@ export default function () {
 
     const t0  = Date.now();
     const res = http.post(`${BASE_URL}/api/pagos/registrar`, payload, { headers });
-    pagoLatencia.add(Date.now() - t0);
+    flujoApiMs += addLatency(pagoLatencia, t0);
 
     const ok = check(res, {
       'P6 status 201':      (r) => r.status === 201,
       'P6 status APLICADO': (r) => {
-        try { return JSON.parse(r.body).status === 'APLICADO'; } catch { return false; }
+        return parseJson(r.body).status === 'APLICADO';
       },
       'P6 folio generado':  (r) => {
-        try { return JSON.parse(r.body).folio.startsWith('B-'); } catch { return false; }
+        const folio = parseJson(r.body).folio || '';
+        return folio.startsWith('B-');
       },
     });
-    if (!ok) { errorRate.add(1); flujoOk = false; }
+    if (!ok) flujoOk = false;
     else {
-      try { folioGenerado = JSON.parse(res.body).folio; } catch { /* no-op */ }
+      folioGenerado = parseJson(res.body).folio || '';
     }
   });
 
@@ -184,28 +200,33 @@ export default function () {
   // ── Paso 8: Emitir Recibo ───────────────────────────────────────────────────
   if (folioGenerado) {
     group('Paso 8 - Emitir Recibo', () => {
+      const t0 = Date.now();
       const res = http.post(
         `${BASE_URL}/api/recibos/emitir?folio=${folioGenerado}&numeroOrden=${numeroOrden}`,
         null,
         { headers }
       );
+      flujoApiMs += Date.now() - t0;
 
       const ok = check(res, {
         'P8 status 200':       (r) => r.status === 200,
         'P8 status EMITIDO':   (r) => {
-          try { return JSON.parse(r.body).status === 'EMITIDO'; } catch { return false; }
+          return parseJson(r.body).status === 'EMITIDO';
         },
         'P8 tiene url_pdf':    (r) => {
-          try { return JSON.parse(r.body).url_pdf !== undefined; } catch { return false; }
+          return parseJson(r.body).url_pdf !== undefined;
         },
       });
-      if (!ok) { errorRate.add(1); flujoOk = false; }
+      if (!ok) flujoOk = false;
     });
+  } else {
+    flujoOk = false;
   }
 
-  // Registrar duración total del flujo
-  flujoCompleto.add(Date.now() - inicioFlujo);
-  if (!flujoOk) errorRate.add(0); // No doble conteo, solo registro
+  // El SLA del flujo completo mide tiempo de APIs. El think time se conserva
+  // como comportamiento de usuario, pero no forma parte del tiempo de respuesta.
+  flujoCompleto.add(flujoApiMs);
+  errorRate.add(flujoOk ? 0 : 1);
 
   sleep(randomIntBetween(1, 3));
 }
