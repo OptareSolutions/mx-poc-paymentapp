@@ -21,3 +21,5 @@
 2. CI/CD - Pipeline con API Testing, Performance y RPA
 3. Performance Testing - 2k VUs, 3600s, E2E APIs
 4. Framework - Orquestación, reporteo, IA
+
+<!-- TRA-17: comentario vacío (sin contenido visible) solo para disparar CI de prueba -->

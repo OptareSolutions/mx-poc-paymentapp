@@ -1,4 +1,4 @@
-﻿name: "Telco Operator PaymentBox - Pipeline Declarativo PoC [LEGACY - DEPRECADO]"
+﻿name: "LEGACY · Build · Test · Quality Gates · Publish · Deliver"
 
 # ==============================================================================
 # ADVERTENCIA: ARCHIVO LEGACY - DEPRECADO - NO USAR EN PRODUCCION
@@ -36,79 +36,79 @@ env:
 # ------------------------------------------------------------------------------
 jobs:
   build-and-quality:
-    name: "1 � Build & Quality (Shift-Left)"
+    name: "1 · Build + Test + Quality Gates (LEGACY)"
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout
+      - name: "Build · Checkout"
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
-      - name: Configurar JDK 17
+      - name: "Build · Configurar JDK 17"
         uses: actions/setup-java@c1e323688fd81a25caa38c78aa6df2d33d3e20d9 # v4
         with:
           java-version: "17"
           distribution: "temurin"
 
-      - name: Configurar Gradle (sin wrapper local)
+      - name: "Build · Configurar Gradle (sin wrapper local)"
         uses: gradle/actions/setup-gradle@d9c87d481d55275bb5441eef3fe0e46805f9ef70 # v3
         with:
           gradle-version: "8.7"
 
-      - name: Build y Tests Unitarios (JUnit + JaCoCo)
+      - name: "Test · microservice-a Unitarios (JUnit + JaCoCo)"
         working-directory: microservice-a
         run: gradle test jacocoTestReport --no-daemon
 
-      - name: Verificar Cobertura (= 80%)
+      - name: "Quality Gates · microservice-a Cobertura (= 80%)"
         working-directory: microservice-a
         run: gradle jacocoTestCoverageVerification --no-daemon
 
-      - name: Subir resultados de tests
+      - name: "Test · Subir resultados microservice-a"
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: unit-test-results
           path: microservice-a/build/reports/
 
-      - name: "[microservice-b] Build y Tests Unitarios"
+      - name: "Test · microservice-b Unitarios (JUnit + JaCoCo)"
         working-directory: microservice-b
         run: gradle test jacocoTestReport --no-daemon
 
-      - name: "[microservice-b] Verificar Cobertura (= 80%)"
+      - name: "Quality Gates · microservice-b Cobertura (= 80%)"
         working-directory: microservice-b
         run: gradle jacocoTestCoverageVerification --no-daemon
 
-      - name: Subir resultados de tests microservice-b
+      - name: "Test · Subir resultados microservice-b"
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: unit-test-results-b
           path: microservice-b/build/reports/
 
-      - name: "Seguridad: Veracode Pipeline Scan (simulado)"
+      - name: "Quality Gates · Seguridad Veracode Pipeline Scan (simulado)"
         run: |
           echo "? [Shift-Left] Veracode SAST scan simulado para PoC."
           echo "En producci�n: integrar con veracode/veracode-github-action."
 
-      - name: "Seguridad: SonarQube Analysis (simulado)"
+      - name: "Quality Gates · Seguridad SonarQube Analysis (simulado)"
         run: |
           echo "? [Shift-Left] SonarQube scan simulado para PoC."
           echo "En producci�n: usar SonarSource/sonarcloud-github-action."
 
-      - name: Build JAR microservice-a (sin tests - ya ejecutados)
+      - name: "Build · JAR microservice-a (sin tests - ya ejecutados)"
         working-directory: microservice-a
         run: gradle bootJar --no-daemon -x test
 
-      - name: Subir artefacto JAR microservice-a
+      - name: "Build · Subir artefacto JAR microservice-a"
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: app-jar
           path: microservice-a/build/libs/*.jar
 
-      - name: "[microservice-b] Build JAR"
+      - name: "Build · JAR microservice-b"
         working-directory: microservice-b
         run: gradle bootJar --no-daemon -x test
 
-      - name: Subir artefacto JAR microservice-b
+      - name: "Build · Subir artefacto JAR microservice-b"
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: app-jar-b
@@ -118,7 +118,7 @@ jobs:
 # JOB 2 � Integration & Contract (Ambiente A Simulado)
 # ------------------------------------------------------------------------------
   integration-and-contract:
-    name: "2 � Integration & Contract (Ambiente A)"
+    name: "2 · Test + Quality Gates · Integration & Contract (LEGACY)"
     runs-on: ubuntu-latest
     needs: build-and-quality
 
@@ -137,19 +137,19 @@ jobs:
           --health-retries 5
 
     steps:
-      - name: Checkout
+      - name: "Test · Checkout"
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
-      - name: Configurar JDK 17
+      - name: "Test · Configurar JDK 17"
         uses: actions/setup-java@c1e323688fd81a25caa38c78aa6df2d33d3e20d9 # v4
         with:
           java-version: "17"
           distribution: "temurin"
 
-      - name: Instalar psql client
+      - name: "Test · Instalar psql client"
         run: sudo apt-get install -y postgresql-client
 
-      - name: Aplicar Schema TDM y Perfiles Billy
+      - name: "Test · Aplicar Schema TDM y Perfiles Billy"
         env:
           PGPASSWORD: att_pass
         run: |
@@ -158,7 +158,7 @@ jobs:
           psql -h localhost -U att_user -d att_paymentbox -f simulation/tdm-seeders/02_billy_profiles.sql
           echo "? Perfiles Billy 1-5 creados correctamente."
 
-      - name: Verificar Billy 1 en DB (contrato TDM)
+      - name: "Quality Gates · Verificar Billy 1 en DB (contrato TDM)"
         env:
           PGPASSWORD: att_pass
         run: |
@@ -167,7 +167,7 @@ jobs:
           echo "Billy 1 count: $COUNT"
           [ "$COUNT" -eq "1" ] || (echo "? FALLO: Billy 1 no encontrado en DB" && exit 1)
 
-      - name: Verificar Montos en DB (Paso 3)
+      - name: "Quality Gates · Verificar Montos en DB (Paso 3)"
         env:
           PGPASSWORD: att_pass
         run: |
@@ -176,7 +176,7 @@ jobs:
           echo "Montos BLUE count: $COUNT"
           [ "$COUNT" -ge "5" ] || (echo "? FALLO: Montos insuficientes para BLUE" && exit 1)
 
-      - name: Iniciar Mocks Prism (Operador + Recibo)
+      - name: "Test · Iniciar Mocks Prism (Operador + Recibo)"
         run: |
           npm install -g @stoplight/prism-cli
           echo "?? Iniciando mock Operador (Paso 4) en puerto 4010..."
@@ -186,7 +186,7 @@ jobs:
           sleep 5
           echo "? Mocks Prism iniciados correctamente."
 
-      - name: Validaci�n de Contrato - Mock Operador (Paso 4)
+      - name: "Quality Gates · Validacion de Contrato - Mock Operador (Paso 4)"
         run: |
           echo "?? Validando contrato API Operador via Prism..."
           STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
@@ -198,7 +198,7 @@ jobs:
             (echo "? FALLO DE CONTRATO: API Operador no responde con 200" && exit 1)
           echo "? Contrato API Operador validado."
 
-      - name: Validaci�n de Contrato - Mock Recibo (Paso 8)
+      - name: "Quality Gates · Validacion de Contrato - Mock Recibo (Paso 8)"
         run: |
           echo "?? Validando contrato API Recibo via Prism..."
           STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
@@ -210,13 +210,13 @@ jobs:
             (echo "? FALLO DE CONTRATO: API Recibo no responde con 200" && exit 1)
           echo "? Contrato API Recibo validado."
 
-      - name: Download JAR microservice-b
+      - name: "Test · Download JAR microservice-b"
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           name: app-jar-b
           path: microservice-b/build/libs/
 
-      - name: Iniciar microservice-b para contrato inter-servicios
+      - name: "Test · Iniciar microservice-b para contrato inter-servicios"
         run: |
           java -jar microservice-b/build/libs/*.jar \
             --spring.datasource.url=jdbc:postgresql://localhost:5432/att_paymentbox \
@@ -234,7 +234,7 @@ jobs:
             echo "? microservice-b no arranc�" && exit 1
           fi
 
-      - name: "??  DEMO BREAK 1 ? Karate Contrato microservice-a?microservice-b"
+      - name: "Quality Gates · DEMO BREAK 1 · Karate Contrato microservice-a -> microservice-b"
         run: |
           cd tests/functional-karate
           echo "?? Validando contrato p�blico de microservice-b (campos 'telefono', 'nombre', 'status')..."
@@ -246,7 +246,7 @@ jobs:
 # JOB 3 � Image Ops (Build & Push Docker Images)
 # ------------------------------------------------------------------------------
   image-ops:
-    name: "3 � Image Ops (Docker Build)"
+    name: "4 · Publish · Image Ops (Docker Build)"
     runs-on: ubuntu-latest
     needs: integration-and-contract
     permissions:
@@ -254,32 +254,32 @@ jobs:
       packages: write
 
     steps:
-      - name: Checkout
+      - name: "Publish · Checkout"
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
-      - name: Download JAR artifact microservice-a
+      - name: "Publish · Download JAR artifact microservice-a"
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           name: app-jar
           path: microservice-a/build/libs/
 
-      - name: Download JAR artifact microservice-b
+      - name: "Publish · Download JAR artifact microservice-b"
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           name: app-jar-b
           path: microservice-b/build/libs/
 
-      - name: Set up Docker Buildx
+      - name: "Publish · Set up Docker Buildx"
         uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
 
-      - name: Log in to GitHub Container Registry
+      - name: "Publish · Log in to GitHub Container Registry"
         uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Extract Docker metadata (microservice-a)
+      - name: "Publish · Extract Docker metadata (microservice-a)"
         id: meta-a
         uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051 # v5
         with:
@@ -288,7 +288,7 @@ jobs:
             type=sha,prefix=poc-
             type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
 
-      - name: Build and Push microservice-a
+      - name: "Publish · Build and Push microservice-a"
         uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
         with:
           context: microservice-a
@@ -299,7 +299,7 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      - name: Extract Docker metadata (microservice-b)
+      - name: "Publish · Extract Docker metadata (microservice-b)"
         id: meta-b
         uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051 # v5
         with:
@@ -308,7 +308,7 @@ jobs:
             type=sha,prefix=poc-
             type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
 
-      - name: Build and Push microservice-b
+      - name: "Publish · Build and Push microservice-b"
         uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
         with:
           context: microservice-b
@@ -319,14 +319,14 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      - name: Set up Node.js (para build Angular UI)
+      - name: "Publish · Set up Node.js (para build Angular UI)"
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: "20"
           cache: "npm"
           cache-dependency-path: ui-paymentbox/package-lock.json
 
-      - name: Extract Docker metadata (ui-paymentbox)
+      - name: "Publish · Extract Docker metadata (ui-paymentbox)"
         id: meta-ui
         uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051 # v5
         with:
@@ -335,7 +335,7 @@ jobs:
             type=sha,prefix=poc-
             type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
 
-      - name: Build and Push ui-paymentbox
+      - name: "Publish · Build and Push ui-paymentbox"
         uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
         with:
           context: ui-paymentbox
@@ -350,28 +350,28 @@ jobs:
 # JOB 4 � Functional E2E & Deploy (Karate + Selenium + k6)
 # ------------------------------------------------------------------------------
   functional-e2e:
-    name: "4 � Functional E2E & Deploy (Karate + Selenium + k6)"
+    name: "5 · Deliver · Functional E2E & Deploy (Karate + Selenium + k6)"
     runs-on: ubuntu-latest
     needs: image-ops
 
     steps:
-      - name: Checkout
+      - name: "Deliver · Checkout"
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
-      - name: Set up JDK 17
+      - name: "Deliver · Set up JDK 17"
         uses: actions/setup-java@c1e323688fd81a25caa38c78aa6df2d33d3e20d9 # v4
         with:
           java-version: "17"
           distribution: "temurin"
 
-      - name: Login a GHCR (imagen pre-construida Ambiente A)
+      - name: "Deliver · Login a GHCR (imagen pre-construida Ambiente A)"
         uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Iniciar Ambiente A (docker-compose)
+      - name: "Deliver · Iniciar Ambiente A (docker-compose)"
         run: |
           cd simulation
           docker compose pull microservice-a microservice-b || true
@@ -386,7 +386,7 @@ jobs:
           echo "--- Logs db-simulado ---"
           docker compose logs --tail=20 db-simulado || true
 
-      - name: Verificar salud de microservice-b
+      - name: "Deliver · Verificar salud de microservice-b"
         run: |
           for i in {1..15}; do
             STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8081/actuator/health || echo "000")
@@ -400,7 +400,7 @@ jobs:
             exit 1
           fi
 
-      - name: Verificar salud del Microservicio A
+      - name: "Deliver · Verificar salud del Microservicio A"
         run: |
           for i in {1..15}; do
             STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8080/actuator/health || echo "000")
@@ -414,32 +414,32 @@ jobs:
             exit 1
           fi
 
-      - name: "??  DEMO BREAK 2 ? Karate DSL - Tests Funcionales (Pasos 2, 3, 4, 5, 7, 8)"
+      - name: "Deliver · DEMO BREAK 2 · Karate DSL - Tests Funcionales"
         run: |
           cd tests/functional-karate
           mvn test -Dkarate.env=ci --no-transfer-progress
         continue-on-error: false
 
-      - name: Subir Reporte Karate
+      - name: "Deliver · Subir Reporte Karate"
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: karate-report
           path: tests/functional-karate/target/surefire-reports/
 
-      - name: "Selenium Headless - Validaci�n UI (Pasos 1, 3, 5)"
+      - name: "Deliver · Selenium Headless - Validacion UI"
         run: |
           cd tests/ui-selenium
           mvn test -Dapp.url=http://localhost:8080 --no-transfer-progress
 
-      - name: Subir Reporte Selenium
+      - name: "Deliver · Subir Reporte Selenium"
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: selenium-report
           path: tests/ui-selenium/target/surefire-reports/
 
-      - name: "k6 Smoke Test - Ruta Cr�tica Performance (Paso 6)"
+      - name: "Deliver · k6 Smoke Test - Ruta Critica Performance"
         run: |
           curl -fsSL https://dl.k6.io/key.gpg | sudo gpg --dearmor -o /usr/share/keyrings/k6-archive-keyring.gpg
           echo "deb [signed-by=/usr/share/keyrings/k6-archive-keyring.gpg] https://dl.k6.io/deb stable main" \
@@ -449,13 +449,13 @@ jobs:
           mkdir -p tests/k6/results
           k6 run --env BASE_URL=http://localhost:8080 tests/k6/smoke_recarga.js
 
-      - name: Subir Resultados k6
+      - name: "Deliver · Subir Resultados k6"
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: k6-smoke-results
           path: tests/k6/results/
 
-      - name: Detener Ambiente A
+      - name: "Deliver · Detener Ambiente A"
         if: always()
         run: cd simulation && docker compose down -v

@@ -1,4 +1,4 @@
-name: "⚡ [Performance] k6 Load — 2k VUs / 3600s — PaymentBox"
+name: "[Performance] Test · Quality Gates · k6 Load — 2k VUs / 3600s"
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Workflow: Prueba de carga sostenida con 2000 VUs durante 3600 segundos (1h)
@@ -88,7 +88,7 @@ jobs:
   # JOB 1 — Levantar entorno mock + ejecutar k6 load test 2000 VUs / 3600s
   # ────────────────────────────────────────────────────────────────────────────
   k6-load:
-    name: "⚡ k6 Load — ${{ github.event.inputs.max_vus || inputs.max_vus || '2000' }} VUs / ${{ github.event.inputs.duration_s || inputs.duration_s || '3600' }}s"
+    name: "2 · Test · k6 Load — ${{ github.event.inputs.max_vus || inputs.max_vus || '2000' }} VUs / ${{ github.event.inputs.duration_s || inputs.duration_s || '3600' }}s"
     runs-on: ubuntu-latest
     timeout-minutes: 90   # 60 min test + 30 min margen
 
@@ -97,22 +97,22 @@ jobs:
       artifact_name: ${{ steps.set-artifact-name.outputs.name }}
 
     steps:
-      - name: Checkout repositorio
+      - name: "Test · Checkout repositorio"
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
-      - name: Login en GHCR (imágenes de simulación)
+      - name: "Test · Login en GHCR (imágenes de simulación)"
         run: |
           echo "${{ secrets.GITHUB_TOKEN }}" \
             | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
 
-      - name: Iniciar entorno de simulación (Docker Compose)
+      - name: "Test · Iniciar entorno de simulación (Docker Compose)"
         working-directory: simulation
         timeout-minutes: 10
         run: |
           docker compose up -d --build --wait
           echo "✅ Entorno de simulación listo para k6 load test"
 
-      - name: Verificar health de servicios
+      - name: "Test · Verificar health de servicios"
         run: |
           BASE="${{ github.event.inputs.base_url || inputs.base_url || 'http://localhost:8080' }}"
           curl --retry 10 --retry-delay 5 --retry-connrefused -sf \
@@ -120,7 +120,7 @@ jobs:
             && echo "✅ microservice-a healthy" \
             || (echo "❌ microservice-a no responde"; exit 1)
 
-      - name: Instalar k6
+      - name: "Test · Instalar k6"
         run: |
           # Install k6 via direct binary download (avoids GPG/APT issues on Ubuntu 24.04)
           K6_VERSION="v0.55.0"
@@ -128,14 +128,14 @@ jobs:
             | sudo tar -xz --strip-components=1 -C /usr/local/bin k6-${K6_VERSION}-linux-amd64/k6
           k6 version
 
-      - name: Descargar baseline anterior (si existe)
+      - name: "Test · Descargar baseline anterior (si existe)"
         uses: actions/download-artifact@95815c38cf2ff2164869cbab79da8d1f422bc89e # v4
         with:
           name: load-test-baseline
           path: tests/k6/results
         continue-on-error: true  # primer run no tiene baseline
 
-      - name: Ejecutar Load Test — ${{ github.event.inputs.max_vus || '2000' }} VUs
+      - name: "Test · Ejecutar Load Test — ${{ github.event.inputs.max_vus || '2000' }} VUs"
         id: run-k6
         env:
           BASE_URL:      ${{ github.event.inputs.base_url    || inputs.base_url    || 'http://localhost:8080' }}
@@ -155,7 +155,7 @@ jobs:
             --out json=tests/k6/results/k6_load_raw.json \
             tests/k6/load_2k_vus.js
 
-      - name: Evaluar thresholds
+      - name: "Quality Gates · Evaluar thresholds"
         id: load-results
         if: always()
         run: |
@@ -175,13 +175,13 @@ jobs:
             echo "⚠️  No se encontraron resultados del load test"
           fi
 
-      - name: Actualizar baseline (si se solicitó)
+      - name: "Quality Gates · Actualizar baseline (si se solicitó)"
         if: ${{ (github.event.inputs.update_baseline == 'true') && steps.load-results.outputs.passed == 'true' }}
         run: |
           cp tests/k6/results/k6_load_raw.json tests/k6/results/load_test_baseline.json
           echo "✅ Baseline actualizado con resultados de esta ejecución"
 
-      - name: Definir nombre de artefacto
+      - name: "Publish · Definir nombre de artefacto"
         id: set-artifact-name
         if: always()
         run: |
@@ -189,7 +189,7 @@ jobs:
           ENV="${{ github.event.inputs.environment || inputs.environment || 'qa' }}"
           echo "name=load-test-results-${ENV}-${TS}" >> "$GITHUB_OUTPUT"
 
-      - name: Subir resultados
+      - name: "Publish · Subir resultados"
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
@@ -198,7 +198,7 @@ jobs:
           retention-days: 90
           if-no-files-found: warn
 
-      - name: Subir baseline actualizado
+      - name: "Publish · Subir baseline actualizado"
         if: ${{ github.event.inputs.update_baseline == 'true' }}
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
@@ -206,7 +206,7 @@ jobs:
           path: tests/k6/results/load_test_baseline.json
           retention-days: 365
 
-      - name: Job Summary
+      - name: "Quality Gates · Job Summary"
         if: always()
         run: |
           echo "## ⚡ Load Test — ${{ github.event.inputs.max_vus || '2000' }} VUs / ${{ github.event.inputs.duration_s || '3600' }}s" >> "$GITHUB_STEP_SUMMARY"
@@ -219,13 +219,13 @@ jobs:
           echo "| Rama | ${{ github.ref_name }} |" >> "$GITHUB_STEP_SUMMARY"
           echo "| Commit | ${{ github.sha }} |" >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Fallar si thresholds no pasaron
+      - name: "Quality Gates · Fallar si thresholds no pasaron"
         if: steps.load-results.outputs.passed == 'false'
         run: |
           echo "❌ El load test no cumplió los thresholds definidos."
           exit 1
 
-      - name: Detener entorno de simulación
+      - name: "Deliver · Detener entorno de simulación"
         if: always()
         working-directory: simulation
         run: docker compose down -v --remove-orphans

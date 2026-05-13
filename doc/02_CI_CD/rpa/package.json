@@ -1,15 +1,11 @@
 {
-  "name": "att-rpa-automation",
+  "name": "salesforce-rpa-demo",
   "version": "1.0.0",
-  "description": "Lightweight RPA automation using Playwright for CI/CD pipeline",
+  "private": true,
   "scripts": {
-    "rpa": "node scripts/rpa-flow.js",
-    "test": "node scripts/rpa-flow.js"
-  },
-  "dependencies": {
-    "playwright": "^1.44.0"
+    "rpa": "node scripts/rpa-flow.js"
   },
   "engines": {
-    "node": ">=18"
+    "node": ">=20"
   }
 }

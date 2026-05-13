@@ -1,4 +1,4 @@
-name: "AT&T PoC QA — Pipeline CI/CD Orquestador"
+name: "AT&T PoC QA — Test · Quality Gates"
 
 # ──────────────────────────────────────────────────────────────────────────────
 # DESCRIPCIÓN
@@ -14,8 +14,8 @@ name: "AT&T PoC QA — Pipeline CI/CD Orquestador"
 #   5. quality-gate  → Gate consolidado (depende de 1-4)
 #
 # ACTIVACIÓN:
-#   - Push en cualquier rama excepto main
-#   - Pull Request hacia cualquier rama excepto main
+#   - workflow_dispatch: ejecución manual (los triggers automáticos están en
+#     testing-factory.yml y golden-pipeline-testing.yml)
 #
 # VARIABLES DE REPOSITORIO REQUERIDAS:
 #   RPA_ENABLED      = true  (para activar el job RPA)
@@ -26,10 +26,7 @@ name: "AT&T PoC QA — Pipeline CI/CD Orquestador"
 # ──────────────────────────────────────────────────────────────────────────────
 
 on:
-  push:
-    branches-ignore: [main]
-  pull_request:
-    branches-ignore: [main]
+  workflow_dispatch:
 
 # ── Permisos mínimos necesarios (least privilege) ─────────────────────────────
 permissions:
@@ -56,19 +53,19 @@ jobs:
   # JOB 1 · API TESTING (Karate – funcional + contrato + integración)
   # ════════════════════════════════════════════════════════════════════════════
   api-testing:
-    name: "1 · API Testing (Karate)"
+    name: "2 · Test · API Testing (Karate)"
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout código
+      - name: "Test · Checkout código"
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
-      - name: Login en GHCR (imágenes de simulación)
+      - name: "Test · Login en GHCR (imágenes de simulación)"
         run: |
           echo "${{ secrets.GITHUB_TOKEN }}" \
             | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
 
-      - name: Iniciar entorno de simulación (Docker Compose)
+      - name: "Test · Iniciar entorno de simulación (Docker Compose)"
         working-directory: simulation
         timeout-minutes: 8
         run: |
@@ -79,21 +76,21 @@ jobs:
           echo "   Mock Operador  : http://localhost:4010"
           echo "   Mock Recibo    : http://localhost:4011"
 
-      - name: Verificar health de servicios
+      - name: "Test · Verificar health de servicios"
         run: |
           curl --retry 10 --retry-delay 5 --retry-connrefused -sf \
             http://localhost:8080/actuator/health | grep -q '"status":"UP"' \
             && echo "✅ microservice-a healthy" \
             || (echo "❌ microservice-a no responde"; exit 1)
 
-      - name: Configurar JDK ${{ env.JAVA_VERSION }}
+      - name: "Test · Configurar JDK ${{ env.JAVA_VERSION }}"
         uses: actions/setup-java@c1e323688fd81a25caa38c78aa6df2d33d3e20d9 # v4
         with:
           java-version: ${{ env.JAVA_VERSION }}
           distribution: ${{ env.JAVA_DIST }}
           cache: maven
 
-      - name: Ejecutar tests Karate (funcional + contrato + integración)
+      - name: "Test · Ejecutar tests Karate (funcional + contrato + integración)"
         working-directory: tests/functional-karate
         env:
           BASE_URL: ${{ env.BASE_URL }}
@@ -104,7 +101,7 @@ jobs:
             -DbaseUrl=${{ env.BASE_URL }} \
             -q --no-transfer-progress
 
-      - name: Publicar resultados Karate
+      - name: "Test · Publicar resultados Karate"
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
@@ -115,7 +112,7 @@ jobs:
           retention-days: 30
           if-no-files-found: warn
 
-      - name: Detener entorno de simulación
+      - name: "Test · Detener entorno de simulación"
         if: always()
         working-directory: simulation
         run: docker compose down -v --remove-orphans
@@ -125,33 +122,33 @@ jobs:
   # JOB 2 · PERFORMANCE TESTING (k6 – smoke test de ruta crítica)
   # ════════════════════════════════════════════════════════════════════════════
   performance:
-    name: "2 · Performance Testing (k6)"
+    name: "2 · Test · Performance Testing (k6)"
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout código
+      - name: "Test · Checkout código"
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
-      - name: Login en GHCR (imágenes de simulación)
+      - name: "Test · Login en GHCR (imágenes de simulación)"
         run: |
           echo "${{ secrets.GITHUB_TOKEN }}" \
             | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
 
-      - name: Iniciar entorno de simulación (Docker Compose)
+      - name: "Test · Iniciar entorno de simulación (Docker Compose)"
         working-directory: simulation
         timeout-minutes: 8
         run: |
           docker compose up -d --build --wait
           echo "✅ Entorno de simulación listo para k6"
 
-      - name: Verificar health de servicios
+      - name: "Test · Verificar health de servicios"
         run: |
           curl --retry 10 --retry-delay 5 --retry-connrefused -sf \
             http://localhost:8080/actuator/health | grep -q '"status":"UP"' \
             && echo "✅ microservice-a healthy" \
             || (echo "❌ microservice-a no responde"; exit 1)
 
-      - name: Instalar k6
+      - name: "Test · Instalar k6"
         run: |
           # Install k6 via direct binary download (avoids GPG/APT issues on Ubuntu 24.04)
           K6_VERSION="v0.55.0"
@@ -159,7 +156,7 @@ jobs:
             | sudo tar -xz --strip-components=1 -C /usr/local/bin k6-${K6_VERSION}-linux-amd64/k6
           k6 version
 
-      - name: Ejecutar smoke test k6 (ruta crítica)
+      - name: "Test · Ejecutar smoke test k6 (ruta crítica)"
         run: |
           mkdir -p tests/k6/results
           k6 run \
@@ -167,7 +164,7 @@ jobs:
             --out json=tests/k6/results/smoke_summary.json \
             tests/k6/smoke_recarga.js
 
-      - name: Publicar resultados k6
+      - name: "Test · Publicar resultados k6"
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
@@ -176,7 +173,7 @@ jobs:
           retention-days: 30
           if-no-files-found: warn
 
-      - name: Detener entorno de simulación
+      - name: "Test · Detener entorno de simulación"
         if: always()
         working-directory: simulation
         run: docker compose down -v --remove-orphans
@@ -187,34 +184,34 @@ jobs:
   # Activar mediante variable de repositorio: UI_TESTS_ENABLED = true
   # ════════════════════════════════════════════════════════════════════════════
   ui-testing:
-    name: "3 · UI Testing (Selenium)"
+    name: "2 · Test · UI Testing (Selenium)"
     runs-on: ubuntu-latest
     if: vars.UI_TESTS_ENABLED == 'true'
 
     steps:
-      - name: Checkout código
+      - name: "Test · Checkout código"
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
-      - name: Login en GHCR (imágenes de simulación)
+      - name: "Test · Login en GHCR (imágenes de simulación)"
         run: |
           echo "${{ secrets.GITHUB_TOKEN }}" \
             | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
 
-      - name: Iniciar entorno de simulación completo (incluye UI Angular)
+      - name: "Test · Iniciar entorno de simulación completo (incluye UI Angular)"
         working-directory: simulation
         timeout-minutes: 10
         run: |
           docker compose up -d --build --wait
           echo "✅ UI disponible en http://localhost:4200"
 
-      - name: Configurar JDK ${{ env.JAVA_VERSION }}
+      - name: "Test · Configurar JDK ${{ env.JAVA_VERSION }}"
         uses: actions/setup-java@c1e323688fd81a25caa38c78aa6df2d33d3e20d9 # v4
         with:
           java-version: ${{ env.JAVA_VERSION }}
           distribution: ${{ env.JAVA_DIST }}
           cache: maven
 
-      - name: Instalar Chrome (para Selenium WebDriverManager)
+      - name: "Test · Instalar Chrome (para Selenium WebDriverManager)"
         run: |
           wget -q -O - https://dl-ssl.google.com/linux/linux_signing_key.pub \
             | sudo apt-key add -
@@ -223,7 +220,7 @@ jobs:
           sudo apt-get update -q
           sudo apt-get install -yq google-chrome-stable
 
-      - name: Ejecutar tests Selenium
+      - name: "Test · Ejecutar tests Selenium"
         working-directory: tests/ui-selenium
         env:
           APP_URL: "http://localhost:4200"
@@ -232,7 +229,7 @@ jobs:
             -Dapp.url=http://localhost:4200 \
             -q --no-transfer-progress
 
-      - name: Publicar resultados Selenium
+      - name: "Test · Publicar resultados Selenium"
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
@@ -243,7 +240,7 @@ jobs:
           retention-days: 30
           if-no-files-found: warn
 
-      - name: Detener entorno de simulación
+      - name: "Test · Detener entorno de simulación"
         if: always()
         working-directory: simulation
         run: docker compose down -v --remove-orphans
@@ -255,28 +252,28 @@ jobs:
   # Secrets requeridos: SF_URL, SF_USERNAME, SF_PASSWORD, SF_SECURITY_TOKEN
   # ════════════════════════════════════════════════════════════════════════════
   rpa:
-    name: "4 · RPA Salesforce (Playwright)"
+    name: "2 · Test · RPA Salesforce (Playwright)"
     runs-on: ubuntu-latest
     if: vars.RPA_ENABLED == 'true'
 
     steps:
-      - name: Checkout código
+      - name: "Test · Checkout código"
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
-      - name: Configurar Python 3.11
+      - name: "Test · Configurar Python 3.11"
         uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with:
           python-version: "3.11"
           cache: pip
 
-      - name: Instalar dependencias RPA
+      - name: "Test · Instalar dependencias RPA"
         working-directory: tests/rpa
         run: |
           pip install --upgrade pip --quiet
           pip install -r requirements.txt --quiet
           playwright install chromium --with-deps
 
-      - name: Ejecutar automatización RPA Salesforce
+      - name: "Test · Ejecutar automatización RPA Salesforce"
         working-directory: tests/rpa
         env:
           SF_URL: ${{ secrets.SF_URL }}
@@ -288,7 +285,7 @@ jobs:
           SCREENSHOT_DIR: "screenshots"
         run: python main.py
 
-      - name: Publicar evidencias RPA (screenshots)
+      - name: "Test · Publicar evidencias RPA (screenshots)"
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
@@ -304,13 +301,13 @@ jobs:
   # UI Testing y RPA son informativos (no bloquean) en esta PoC.
   # ════════════════════════════════════════════════════════════════════════════
   quality-gate:
-    name: "5 · Quality Gate"
+    name: "3 · Quality Gates · Evaluación consolidada"
     runs-on: ubuntu-latest
     needs: [api-testing, performance, ui-testing, rpa]
     if: always()
 
     steps:
-      - name: Evaluar resultado — API Testing (BLOQUEANTE)
+      - name: "Quality Gates · Evaluar resultado API Testing (BLOQUEANTE)"
         env:
           RESULT: ${{ needs.api-testing.result }}
         run: |
@@ -320,7 +317,7 @@ jobs:
             exit 1
           fi
 
-      - name: Evaluar resultado — Performance Testing (BLOQUEANTE)
+      - name: "Quality Gates · Evaluar resultado Performance Testing (BLOQUEANTE)"
         env:
           RESULT: ${{ needs.performance.result }}
         run: |
@@ -330,7 +327,7 @@ jobs:
             exit 1
           fi
 
-      - name: Evaluar resultado — UI Testing (INFORMATIVO)
+      - name: "Quality Gates · Evaluar resultado UI Testing (INFORMATIVO)"
         env:
           RESULT: ${{ needs.ui-testing.result }}
         run: |
@@ -341,7 +338,7 @@ jobs:
             *)       echo "ℹ️  UI Testing: ${RESULT}" ;;
           esac
 
-      - name: Evaluar resultado — RPA (INFORMATIVO)
+      - name: "Quality Gates · Evaluar resultado RPA (INFORMATIVO)"
         env:
           RESULT: ${{ needs.rpa.result }}
         run: |
@@ -352,7 +349,7 @@ jobs:
             *)       echo "ℹ️  RPA: ${RESULT}" ;;
           esac
 
-      - name: Resumen Quality Gate
+      - name: "Quality Gates · Resumen"
         run: |
           echo ""
           echo "═══════════════════════════════════════════"

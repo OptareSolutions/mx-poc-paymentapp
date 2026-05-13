@@ -1,0 +1,378 @@
+name: Testing Factory — CI Quality Gates (feature/* · PR→E)
+
+# ──────────────────────────────────────────────────────────────────────────────
+# PIPELINE: Testing Factory — AT&T PaymentBox PoC
+#
+# PROPÓSITO:
+#   Suite ligera de CI para ramas feature/* y Pull Requests hacia E (Desarrollo).
+#   Valida calidad antes de integrar al entorno compartido.
+#
+# SUITES INCLUIDAS:
+#   1. API Tests      — Karate: @smoke, @e2e, @contract + oasdiff (OpenAPI)
+#   2. Performance    — k6: 20 VUs / 7 min contra entorno de simulación
+#   3. Salesforce RPA — Node.js + Playwright: flujo completo JWT (10 pasos)
+#
+# ACTIVACIÓN:
+#   push → feature/**          (CI en ramas de desarrollo)
+#   pull_request → E           (validación antes de integrar a Desarrollo)
+#   workflow_dispatch          (ejecución manual)
+#
+# NOTA: Para PRs hacia A y F, usar golden-pipeline-testing.yml (suite completa).
+# ──────────────────────────────────────────────────────────────────────────────
+
+on:
+  push:
+    branches:
+      - 'feature/**'
+    paths:
+      - 'microservice-a/**'
+      - 'microservice-b/**'
+      - 'tests/**'
+      - 'simulation/**'
+      - 'doc/02_CI_CD/rpa/**'
+      - '.github/workflows/testing-factory.yml'
+
+  pull_request:
+    branches:
+      - E
+    paths:
+      - 'microservice-a/**'
+      - 'microservice-b/**'
+      - 'tests/**'
+      - 'simulation/**'
+      - 'doc/02_CI_CD/rpa/**'
+
+  workflow_dispatch:
+    inputs:
+      product_name:
+        description: 'Nombre del producto para la Oportunidad Salesforce'
+        required: false
+        default: 'Paquete Básico'
+      product_price:
+        description: 'Precio unitario del producto'
+        required: false
+        default: '1500'
+
+permissions:
+  contents: read
+  checks: write
+  pull-requests: write
+
+concurrency:
+  group: testing-factory-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  JAVA_VERSION: "17"
+  JAVA_DIST:    "temurin"
+  BASE_URL:     "http://localhost:8080"
+  MSVC_B_URL:   "http://localhost:18081"
+
+# ══════════════════════════════════════════════════════════════════════════════
+jobs:
+
+# ╔══════════════════════════════════════════════════════════════════════════╗
+# ║  JOB 1 · API Tests — Karate (Functional + Integration + Contract)       ║
+# ║  Smoke tests @smoke, flujo E2E @e2e, contrato @contract + oasdiff       ║
+# ╚══════════════════════════════════════════════════════════════════════════╝
+  api-tests:
+    name: API Tests — Functional · Integration · Contract
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          fetch-depth: 0
+
+      - name: Login GHCR
+        run: |
+          echo "${{ secrets.GITHUB_TOKEN }}" \
+            | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+
+      - name: Iniciar entorno de simulación
+        working-directory: simulation
+        timeout-minutes: 8
+        run: |
+          docker compose up -d --build --wait
+          echo "Entorno listo: microservice-a=${{ env.BASE_URL }} | microservice-b=${{ env.MSVC_B_URL }}"
+
+      - name: Verificar health de servicios
+        run: |
+          curl --retry 12 --retry-delay 5 --retry-connrefused -sf \
+            "${{ env.BASE_URL }}/actuator/health" | grep -q '"status":"UP"' \
+            && echo "microservice-a healthy" \
+            || (echo "microservice-a no responde"; exit 1)
+
+          curl --retry 12 --retry-delay 5 --retry-connrefused -sf \
+            "${{ env.MSVC_B_URL }}/actuator/health" | grep -q '"status":"UP"' \
+            && echo "microservice-b healthy" \
+            || (echo "microservice-b no responde"; exit 1)
+
+      - name: Configurar JDK ${{ env.JAVA_VERSION }}
+        uses: actions/setup-java@c1e323688fd81a25caa38c78aa6df2d33d3e20d9 # v4
+        with:
+          java-version: ${{ env.JAVA_VERSION }}
+          distribution: ${{ env.JAVA_DIST }}
+          cache: maven
+
+      - name: Karate @smoke — Smoke Tests Funcionales
+        working-directory: tests/functional-karate
+        run: |
+          mvn test \
+            -Dkarate.env=ci \
+            -DbaseUrl=${{ env.BASE_URL }} \
+            -Dtest=RecargaFlowRunner#testSmoke \
+            --no-transfer-progress
+
+      - name: Karate @e2e — Flujo E2E Integración (8 pasos)
+        working-directory: tests/functional-karate
+        run: |
+          mvn test \
+            -Dkarate.env=ci \
+            -DbaseUrl=${{ env.BASE_URL }} \
+            -Dtest=RecargaFlowRunner#testRecargaFlow \
+            --no-transfer-progress
+
+      - name: Karate @contract — Contrato entre Microservicios
+        working-directory: tests/functional-karate
+        run: |
+          mvn test \
+            -Dkarate.env=ci \
+            -DbaseUrl=${{ env.BASE_URL }} \
+            -Dtest=RecargaFlowRunner#testContratoMicroservicios \
+            --no-transfer-progress
+
+      - name: Instalar oasdiff
+        run: |
+          OASDIFF_VERSION="1.10.25"
+          curl -fsSL \
+            "https://github.com/tufin/oasdiff/releases/download/v${OASDIFF_VERSION}/oasdiff_${OASDIFF_VERSION}_linux_amd64.tar.gz" \
+            | sudo tar -xz -C /usr/local/bin oasdiff
+          oasdiff --version
+
+      - name: oasdiff — Breaking Changes microservice-a
+        id: oasdiff-a
+        continue-on-error: true
+        run: |
+          BASE_REF="${{ github.base_ref || 'E' }}"
+          SPEC="microservice-a/docs/openapi.yaml"
+          git fetch origin "${BASE_REF}" --depth=1 2>/dev/null || true
+
+          if ! git show "origin/${BASE_REF}:${SPEC}" > /tmp/openapi-base-a.yaml 2>/dev/null; then
+            echo "Sin especificacion base — omitiendo comparacion"
+            echo "has_breaking=false" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+          [ ! -f "$SPEC" ] && echo "has_breaking=false" >> $GITHUB_OUTPUT && exit 0
+
+          RESULT=$(oasdiff breaking /tmp/openapi-base-a.yaml "$SPEC" 2>&1 || true)
+          if [ -n "$RESULT" ]; then
+            echo "Breaking changes en microservice-a:"
+            echo "$RESULT"
+            echo "has_breaking=true" >> $GITHUB_OUTPUT
+          else
+            echo "Sin breaking changes en microservice-a"
+            echo "has_breaking=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: oasdiff — Breaking Changes microservice-b
+        id: oasdiff-b
+        continue-on-error: true
+        run: |
+          BASE_REF="${{ github.base_ref || 'E' }}"
+          SPEC="microservice-b/docs/openapi.yaml"
+          git fetch origin "${BASE_REF}" --depth=1 2>/dev/null || true
+
+          if ! git show "origin/${BASE_REF}:${SPEC}" > /tmp/openapi-base-b.yaml 2>/dev/null; then
+            echo "Sin especificacion base — omitiendo comparacion"
+            echo "has_breaking=false" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+          [ ! -f "$SPEC" ] && echo "has_breaking=false" >> $GITHUB_OUTPUT && exit 0
+
+          RESULT=$(oasdiff breaking /tmp/openapi-base-b.yaml "$SPEC" 2>&1 || true)
+          if [ -n "$RESULT" ]; then
+            echo "Breaking changes en microservice-b:"
+            echo "$RESULT"
+            echo "has_breaking=true" >> $GITHUB_OUTPUT
+          else
+            echo "Sin breaking changes en microservice-b"
+            echo "has_breaking=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Comentar breaking changes en PR
+        if: |
+          github.event_name == 'pull_request' &&
+          (steps.oasdiff-a.outputs.has_breaking == 'true' ||
+           steps.oasdiff-b.outputs.has_breaking == 'true')
+        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7
+        with:
+          script: |
+            await github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: '## ⚠️ Breaking Changes Detectados en OpenAPI\n\nSe detectaron cambios incompatibles con versiones anteriores. Revisar antes de hacer merge.',
+            });
+
+      - name: Quality Gate — Fallar si hay breaking changes
+        if: |
+          steps.oasdiff-a.outputs.has_breaking == 'true' ||
+          steps.oasdiff-b.outputs.has_breaking == 'true'
+        run: |
+          echo "Pipeline bloqueado: breaking changes detectados en OpenAPI."
+          exit 1
+
+      - name: Publicar reportes API
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: api-test-reports-${{ github.run_number }}
+          path: |
+            tests/functional-karate/target/karate-reports/
+            tests/functional-karate/target/surefire-reports/
+          retention-days: 30
+          if-no-files-found: warn
+
+      - name: Detener entorno
+        if: always()
+        working-directory: simulation
+        run: docker compose down -v --remove-orphans
+
+
+# ╔══════════════════════════════════════════════════════════════════════════╗
+# ║  JOB 2 · Smoke Performance (k6 — 20 VUs / 7 min)                       ║
+# ║  Validación de thresholds de latencia contra entorno de simulación      ║
+# ╚══════════════════════════════════════════════════════════════════════════╝
+  performance-smoke:
+    name: Smoke Performance — k6 (20 VUs / 7 min)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: api-tests
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Login GHCR
+        run: |
+          echo "${{ secrets.GITHUB_TOKEN }}" \
+            | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+
+      - name: Iniciar entorno de simulación
+        working-directory: simulation
+        timeout-minutes: 8
+        run: docker compose up -d --build --wait
+
+      - name: Verificar health de microservice-a
+        run: |
+          curl --retry 12 --retry-delay 5 --retry-connrefused -sf \
+            "${{ env.BASE_URL }}/actuator/health" | grep -q '"status":"UP"' \
+            && echo "microservice-a healthy" \
+            || (echo "microservice-a no responde"; exit 1)
+
+      - name: Instalar k6
+        run: |
+          K6_VERSION="v0.55.0"
+          curl -fsSL \
+            "https://github.com/grafana/k6/releases/download/${K6_VERSION}/k6-${K6_VERSION}-linux-amd64.tar.gz" \
+            | sudo tar -xz --strip-components=1 -C /usr/local/bin \
+              "k6-${K6_VERSION}-linux-amd64/k6"
+          k6 version
+
+      - name: k6 Smoke Performance
+        run: |
+          mkdir -p tests/k6/results
+          k6 run \
+            --env BASE_URL="${{ env.BASE_URL }}" \
+            --env ENVIRONMENT="ci" \
+            --out json=tests/k6/results/smoke_raw_${{ github.run_number }}.json \
+            tests/k6/smoke_performance.js
+
+      - name: Publicar resultados de performance
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: performance-smoke-reports-${{ github.run_number }}
+          path: tests/k6/results/
+          retention-days: 30
+          if-no-files-found: warn
+
+      - name: Detener entorno
+        if: always()
+        working-directory: simulation
+        run: docker compose down -v --remove-orphans
+
+
+# ╔══════════════════════════════════════════════════════════════════════════╗
+# ║  JOB 3 · Salesforce RPA (Node.js + Playwright — JWT Auth)               ║
+# ║  Flujo completo 10 pasos: Login → Oportunidad → Producto → Validación   ║
+# ╚══════════════════════════════════════════════════════════════════════════╝
+  salesforce-rpa:
+    name: Salesforce RPA — Node.js + Playwright (JWT)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    needs: performance-smoke
+
+    env:
+      RPA_PRODUCT_NAME:        ${{ github.event.inputs.product_name || 'Paquete Básico' }}
+      RPA_PRODUCT_PRICE:       ${{ github.event.inputs.product_price || '1500' }}
+      SALESFORCE_CLIENT_ID:    ${{ secrets.SALESFORCE_CLIENT_ID }}
+      SALESFORCE_USERNAME:     ${{ secrets.SALESFORCE_USERNAME }}
+      SALESFORCE_INSTANCE_URL: ${{ secrets.SALESFORCE_INSTANCE_URL }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Configurar Node.js 20
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: doc/02_CI_CD/rpa/package-lock.json
+
+      - name: Instalar dependencias RPA
+        working-directory: doc/02_CI_CD/rpa
+        run: npm ci
+
+      - name: Instalar Playwright Chromium
+        working-directory: doc/02_CI_CD/rpa
+        run: npx playwright install chromium --with-deps
+
+      - name: Instalar Salesforce CLI
+        run: npm install --global @salesforce/cli
+
+      - name: Crear archivo JWT key de Salesforce
+        run: |
+          echo "${{ secrets.SALESFORCE_JWT_KEY }}" > server.key
+          chmod 600 server.key
+
+      - name: Autenticar en Salesforce (JWT)
+        run: |
+          sf org login jwt \
+            --client-id "$SALESFORCE_CLIENT_ID" \
+            --jwt-key-file server.key \
+            --username "$SALESFORCE_USERNAME" \
+            --instance-url "$SALESFORCE_INSTANCE_URL" \
+            --alias rpa-org
+
+      - name: Exportar sesión Salesforce
+        run: sf org display --target-org rpa-org --json > sf-auth.json
+
+      - name: Ejecutar flujo RPA Salesforce
+        working-directory: doc/02_CI_CD/rpa
+        run: node scripts/rpa-flow.js
+
+      - name: Publicar evidencias RPA
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: salesforce-rpa-evidences-${{ github.run_number }}
+          path: |
+            doc/02_CI_CD/rpa/results/
+            sf-auth.json
+          retention-days: 30
+          if-no-files-found: warn
