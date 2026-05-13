@@ -31,6 +31,7 @@ on:
       - 'simulation/**'
       - 'doc/02_CI_CD/rpa/**'
       - '.github/workflows/testing-factory.yml'
+      - '.github/workflows/performance-smoke.yml'
 
   pull_request:
     branches:
@@ -41,6 +42,7 @@ on:
       - 'tests/**'
       - 'simulation/**'
       - 'doc/02_CI_CD/rpa/**'
+      - '.github/workflows/performance-smoke.yml'
 
   workflow_dispatch:
     inputs:
@@ -57,6 +59,8 @@ permissions:
   contents: read
   checks: write
   pull-requests: write
+  actions: read
+  packages: read
 
 concurrency:
   group: testing-factory-${{ github.ref }}
@@ -248,62 +252,15 @@ jobs:
 # ╚══════════════════════════════════════════════════════════════════════════╝
   performance-smoke:
     name: Smoke Performance — k6 (20 VUs / 7 min)
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
     needs: api-tests
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-
-      - name: Login GHCR
-        run: |
-          echo "${{ secrets.GITHUB_TOKEN }}" \
-            | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
-
-      - name: Iniciar entorno de simulación
-        working-directory: simulation
-        timeout-minutes: 8
-        run: docker compose up -d --build --wait
-
-      - name: Verificar health de microservice-a
-        run: |
-          curl --retry 12 --retry-delay 5 --retry-connrefused -sf \
-            "${{ env.BASE_URL }}/actuator/health" | grep -q '"status":"UP"' \
-            && echo "microservice-a healthy" \
-            || (echo "microservice-a no responde"; exit 1)
-
-      - name: Instalar k6
-        run: |
-          K6_VERSION="v0.55.0"
-          curl -fsSL \
-            "https://github.com/grafana/k6/releases/download/${K6_VERSION}/k6-${K6_VERSION}-linux-amd64.tar.gz" \
-            | sudo tar -xz --strip-components=1 -C /usr/local/bin \
-              "k6-${K6_VERSION}-linux-amd64/k6"
-          k6 version
-
-      - name: k6 Smoke Performance
-        run: |
-          mkdir -p tests/k6/results
-          k6 run \
-            --env BASE_URL="${{ env.BASE_URL }}" \
-            --env ENVIRONMENT="ci" \
-            --out json=tests/k6/results/smoke_raw_${{ github.run_number }}.json \
-            tests/k6/smoke_performance.js
-
-      - name: Publicar resultados de performance
-        if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
-        with:
-          name: performance-smoke-reports-${{ github.run_number }}
-          path: tests/k6/results/
-          retention-days: 30
-          if-no-files-found: warn
-
-      - name: Detener entorno
-        if: always()
-        working-directory: simulation
-        run: docker compose down -v --remove-orphans
+    uses: ./.github/workflows/performance-smoke.yml
+    with:
+      base_url: http://localhost:8080
+      environment: ci
+      vus: "20"
+      duration: "7m"
+      update_baseline: false
+    secrets: inherit
 
 
 # ╔══════════════════════════════════════════════════════════════════════════╗

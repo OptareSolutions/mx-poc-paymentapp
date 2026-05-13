@@ -78,6 +78,7 @@ function getDeltaSymbol(delta, lowerIsBetter) {
 }
 
 function getStatus(currentVal, baselineVal, limit, lowerIsBetter) {
+  if (currentVal === null || currentVal === undefined) return '❌ SIN_DATOS';
   const thresholdOk = lowerIsBetter ? currentVal <= limit : currentVal >= limit;
 
   if (!thresholdOk) return '❌ FALLA_THRESHOLD';

@@ -35,14 +35,16 @@ const loginLatencia    = new Trend('login_latencia_ms',        true);
 const consultaLatencia = new Trend('consulta_latencia_ms',     true);
 const pagoLatencia     = new Trend('pago_latencia_ms',         true);
 const flujoCompleto    = new Trend('flujo_completo_ms',        true);
+const K6_VUS           = Number.parseInt(__ENV.K6_VUS || '20', 10);
+const K6_DURATION      = __ENV.K6_DURATION || '7m';
 
 // ── Configuración del test ────────────────────────────────────────────────────
 export const options = {
   scenarios: {
     smoke_performance: {
       executor: 'constant-vus',
-      vus: 20,
-      duration: '7m',
+      vus: K6_VUS,
+      duration: K6_DURATION,
     },
   },
   thresholds: {
