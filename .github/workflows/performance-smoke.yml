@@ -30,8 +30,8 @@ on:
         description: "Entorno a testear"
         required: true
         type: choice
-        options: [develop, qa, uat]
-        default: develop
+        options: [E, A, F]
+        default: E
       vus:
         description: "Número de usuarios virtuales"
         required: false

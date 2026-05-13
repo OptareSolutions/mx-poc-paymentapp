@@ -19,23 +19,6 @@ name: "[API] Test · Smoke Tests Funcionales — AT&T PoC"
 # ──────────────────────────────────────────────────────────────────────────────
 
 on:
-  push:
-    # Post-merge en QA y Preprod: valida que el ambiente esté operativo
-    branches: [A, F]
-    paths:
-      - 'microservice-a/**'
-      - 'microservice-b/**'
-      - 'tests/functional-karate/**'
-      - 'simulation/**'
-      - '.github/workflows/api-smoke-tests.yml'
-  pull_request:
-    # Pre-merge hacia QA y Preprod: smoke tests sobre simulación
-    branches: [A, F]
-    paths:
-      - 'microservice-a/**'
-      - 'microservice-b/**'
-      - 'tests/functional-karate/**'
-      - 'simulation/**'
   workflow_dispatch:
     inputs:
       environment:

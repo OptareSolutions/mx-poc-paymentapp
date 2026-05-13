@@ -35,7 +35,7 @@ name: "🏆 Golden Pipeline — API Testing · Performance · RPA · Quality Gat
 
 on:
   push:
-    branches: [develop, qa, uat]
+    branches: [E, A]
     paths:
       - 'microservice-a/**'
       - 'microservice-b/**'
@@ -43,7 +43,7 @@ on:
       - 'simulation/**'
       - '.github/workflows/golden-pipeline-testing.yml'
   pull_request:
-    branches: [develop, qa, uat, main]
+    branches: [A, F]
     paths:
       - 'microservice-a/**'
       - 'microservice-b/**'
@@ -242,7 +242,7 @@ jobs:
         id: oasdiff-a
         continue-on-error: true
         run: |
-          BASE_REF="${{ github.base_ref || github.event.repository.default_branch || 'develop' }}"
+          BASE_REF="${{ github.base_ref || github.event.repository.default_branch || 'E' }}"
           SPEC="microservice-a/docs/openapi.yaml"
           git fetch origin "${BASE_REF}" --depth=1 2>/dev/null || true
 
@@ -279,7 +279,7 @@ jobs:
         id: oasdiff-b
         continue-on-error: true
         run: |
-          BASE_REF="${{ github.base_ref || github.event.repository.default_branch || 'develop' }}"
+          BASE_REF="${{ github.base_ref || github.event.repository.default_branch || 'E' }}"
           SPEC="microservice-b/docs/openapi.yaml"
           git fetch origin "${BASE_REF}" --depth=1 2>/dev/null || true
 
@@ -482,11 +482,11 @@ jobs:
           retention-days: 90
           if-no-files-found: warn
 
-      - name: Actualizar baseline (solo en push a develop/qa)
+      - name: Actualizar baseline (solo en push a E/A)
         if: |
           success() &&
           github.event_name == 'push' &&
-          (github.ref_name == 'develop' || github.ref_name == 'qa')
+          (github.ref_name == 'E' || github.ref_name == 'A')
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: smoke-performance-baseline
@@ -506,59 +506,70 @@ jobs:
 # ║  disponibles (modo simulado sin SF_URL configurado).                     ║
 # ╚══════════════════════════════════════════════════════════════════════════╝
   rpa:
-    name: "3 · RPA — Web Automation (Playwright)"
+    name: "3 · RPA — Salesforce Automation (Node.js + Playwright)"
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    # RPA corre si: se activa manualmente con run_rpa=true, o en push con secrets configurados
     if: |
       github.event.inputs.run_rpa == 'true' ||
       (github.event_name == 'push' && vars.RPA_ENABLED == 'true')
 
     env:
-      SF_URL:            ${{ secrets.SF_URL || '' }}
-      SF_USERNAME:       ${{ secrets.SF_USERNAME || '' }}
-      SF_PASSWORD:       ${{ secrets.SF_PASSWORD || '' }}
-      SF_SECURITY_TOKEN: ${{ secrets.SF_SECURITY_TOKEN || '' }}
-      RPA_HEADLESS:      "true"
-      RPA_SLOW_MO:       "0"
-      SCREENSHOT_DIR:    "tests/rpa/results/screenshots"
+      RPA_PRODUCT_NAME:        ${{ github.event.inputs.product_name || 'Paquete Básico' }}
+      RPA_PRODUCT_PRICE:       ${{ github.event.inputs.product_price || '1500' }}
+      SALESFORCE_CLIENT_ID:    ${{ secrets.SALESFORCE_CLIENT_ID }}
+      SALESFORCE_USERNAME:     ${{ secrets.SALESFORCE_USERNAME }}
+      SALESFORCE_INSTANCE_URL: ${{ secrets.SALESFORCE_INSTANCE_URL }}
 
     steps:
       - name: Checkout
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
-      - name: Configurar Python 3.11
-        uses: actions/setup-python@8d9ed9ac5c53483de2c9f20afc07e0d5f4c8a4f # v5
+      - name: Configurar Node.js 20
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
-          python-version: "3.11"
-          cache: pip
-          cache-dependency-path: tests/rpa/requirements.txt
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: doc/02_CI_CD/rpa/package-lock.json
 
-      - name: Instalar dependencias Python
-        working-directory: tests/rpa
-        run: pip install -r requirements.txt
+      - name: Instalar dependencias RPA
+        working-directory: doc/02_CI_CD/rpa
+        run: npm ci
 
-      - name: Instalar navegadores Playwright (Chromium)
-        run: python -m playwright install chromium --with-deps
+      - name: Instalar Playwright Chromium
+        working-directory: doc/02_CI_CD/rpa
+        run: npx playwright install chromium --with-deps
 
-      # ── Pasos RPA: ingresar → consultar → descargar/validar → registrar ──
-      - name: "RPA Flow — Login · Consulta · Validación · Registro"
-        working-directory: tests/rpa
+      - name: Instalar Salesforce CLI
+        run: npm install --global @salesforce/cli
+
+      - name: Crear archivo JWT key de Salesforce
         run: |
-          echo "🤖 Iniciando flujo RPA..."
-          echo "   Paso 1: Login en aplicación web"
-          echo "   Paso 2: Consultar registro de cliente"
-          echo "   Paso 3: Descargar/validar dato"
-          echo "   Paso 4: Registrar resultado con screenshot"
-          python main.py
-        continue-on-error: true  # no bloquea el gate si SF no está configurado
+          echo "${{ secrets.SALESFORCE_JWT_KEY }}" > server.key
+          chmod 600 server.key
+
+      - name: Autenticar en Salesforce (JWT)
+        run: |
+          sf org login jwt \
+            --client-id "$SALESFORCE_CLIENT_ID" \
+            --jwt-key-file server.key \
+            --username "$SALESFORCE_USERNAME" \
+            --instance-url "$SALESFORCE_INSTANCE_URL" \
+            --alias rpa-org
+
+      - name: Exportar sesión Salesforce
+        run: sf org display --target-org rpa-org --json > sf-auth.json
+
+      - name: "RPA Flow — Flujo Salesforce completo (10 pasos)"
+        working-directory: doc/02_CI_CD/rpa
+        run: node scripts/rpa-flow.js
+        continue-on-error: true
 
       - name: Publicar evidencias RPA (screenshots + logs)
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: rpa-results-${{ github.run_id }}
-          path: tests/rpa/results/
+          path: doc/02_CI_CD/rpa/results/
           retention-days: 30
           if-no-files-found: warn
 
@@ -614,7 +625,7 @@ jobs:
           check_gate "API Integration (Karate E2E 8 pasos)" "$INTEGRATION" "true"  "Obligatorio"
           check_gate "API Contract (oasdiff + @contract)"   "$CONTRACT"    "true"  "Obligatorio"
           check_gate "Smoke Performance (k6 Thresholds)"    "$PERFORMANCE" "true"  "Obligatorio"
-          check_gate "RPA (Playwright/Python)"              "$RPA"         "false" "Opcional"
+          check_gate "RPA (Node.js + Playwright/Salesforce)"   "$RPA"         "false" "Opcional"
 
           echo "" >> "$GITHUB_STEP_SUMMARY"
           echo "### Thresholds de Performance (k6)" >> "$GITHUB_STEP_SUMMARY"
