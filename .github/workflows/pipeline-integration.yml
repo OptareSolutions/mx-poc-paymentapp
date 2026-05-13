@@ -27,6 +27,21 @@ on:
         required: true
         type: choice
         options: [A, F, PRODUCCION]
+      run_load_performance_2k:
+        description: >-
+          Ejecutar prueba opcional reusable performance-load-2k (manual; default 2000 VUs / 3600s).
+          Recomendación: activar sólo después de tener contratos + E2E en verde, como evidencia previa opcional antes de mover a ambientes tardíos — no bloquea la promoción GitOps paralela por diseño deliberado.
+        type: boolean
+        required: false
+        default: false
+      load_max_vus:
+        description: 'VUs para el gate opcional (use "10"-"50" como dry-run corto antes de ejecutar valores completos)'
+        required: false
+        default: "2000"
+      load_duration_s:
+        description: 'Duración en segundos del gate opcional (use valores bajos, p. ej. "120", para dry-run)'
+        required: false
+        default: "3600"
 
 env:
   REGISTRY: ghcr.io
@@ -53,28 +68,30 @@ jobs:
           FROM="${{ inputs.promote_from }}"
           TO="${{ inputs.promote_to }}"
           VALID=false
-          [ "$FROM" = "develop" ] && [ "$TO" = "qa"   ] && VALID=true
-          [ "$FROM" = "qa"      ] && [ "$TO" = "uat"  ] && VALID=true
-          [ "$FROM" = "uat"     ] && [ "$TO" = "main" ] && VALID=true
+          [ "$FROM" = "E" ] && [ "$TO" = "A" ] && VALID=true
+          [ "$FROM" = "A" ] && [ "$TO" = "F" ] && VALID=true
+          [ "$FROM" = "F" ] && [ "$TO" = "PRODUCCION" ] && VALID=true
           if [ "$VALID" = "false" ]; then
-            echo "? Combinaci�n inv�lida: ${FROM} ? ${TO}"
-            echo "   Combinaciones v�lidas: develop?qa | qa?uat | uat?main"
+            echo "Combinacion invalida: ${FROM} -> ${TO}"
+            echo "  Permitidas: E->A | A->F | F->PRODUCCION"
             exit 1
           fi
-          echo "? Promoci�n v�lida: ${FROM} ? ${TO}"
+          echo "Promocion valida: ${FROM} -> ${TO}"
 
       - name: "Build · Mapear ambientes y overlays"
         id: mapping
         run: |
           case "${{ inputs.promote_from }}" in
-            develop) echo "from_overlay=env-e" >> $GITHUB_OUTPUT ; echo "from_name=E (Desarrollo)" >> $GITHUB_OUTPUT ;;
-            qa)      echo "from_overlay=env-a" >> $GITHUB_OUTPUT ; echo "from_name=A (QA)"              >> $GITHUB_OUTPUT ;;
-            uat)     echo "from_overlay=env-u" >> $GITHUB_OUTPUT ; echo "from_name=U (UAT)"             >> $GITHUB_OUTPUT ;;
+            E) echo "from_overlay=env-e" >> "$GITHUB_OUTPUT" ; echo "from_name=E (Desarrollo)" >> "$GITHUB_OUTPUT" ;;
+            A) echo "from_overlay=env-a" >> "$GITHUB_OUTPUT" ; echo "from_name=A (QA)" >> "$GITHUB_OUTPUT" ;;
+            F) echo "from_overlay=env-u" >> "$GITHUB_OUTPUT" ; echo "from_name=F (UAT/preprod)" >> "$GITHUB_OUTPUT" ;;
+            *) echo "Rama origen invalida: ${{ inputs.promote_from }}" >&2 ; exit 1 ;;
           esac
           case "${{ inputs.promote_to }}" in
-            qa)   echo "to_overlay=env-a" >> $GITHUB_OUTPUT ; echo "to_name=A (QA)"    >> $GITHUB_OUTPUT ;;
-            uat)  echo "to_overlay=env-u" >> $GITHUB_OUTPUT ; echo "to_name=U (UAT)"   >> $GITHUB_OUTPUT ;;
-            main) echo "to_overlay=prod"  >> $GITHUB_OUTPUT ; echo "to_name=Producci�n"  >> $GITHUB_OUTPUT ;;
+            A)          echo "to_overlay=env-a" >> "$GITHUB_OUTPUT" ; echo "to_name=A (QA)" >> "$GITHUB_OUTPUT" ;;
+            F)          echo "to_overlay=env-u" >> "$GITHUB_OUTPUT" ; echo "to_name=F (UAT/preprod)" >> "$GITHUB_OUTPUT" ;;
+            PRODUCCION) echo "to_overlay=prod"  >> "$GITHUB_OUTPUT" ; echo "to_name=PRODUCCION" >> "$GITHUB_OUTPUT" ;;
+            *) echo "Rama destino invalida: ${{ inputs.promote_to }}" >&2 ; exit 1 ;;
           esac
 
 # ------------------------------------------------------------------------------
@@ -282,6 +299,28 @@ jobs:
       - name: "Test · Parar Ambiente"
         if: always()
         run: cd simulation && docker compose down -v
+
+# ------------------------------------------------------------------------------
+# JOB opcional · Carga alta (reusable workflow_call a performance-load-2k.yml)
+# No registra necesidades en promote: ejecuta sólo cuando el usuario marca el checkbox
+# después de tener contratos + E2E en verde para generar evidencia JSON/HTML/Markdown.
+# ------------------------------------------------------------------------------
+  load-performance-2k-gate:
+    name: "6 · Test · Opcional · Load reusable (manual)"
+    needs: [validate, contract-tests, e2e-full]
+    if: ${{ github.event.inputs.run_load_performance_2k == 'true' }}
+    permissions:
+      contents: read
+      actions: read
+      packages: read
+    uses: ./.github/workflows/performance-load-2k.yml
+    secrets: inherit
+    with:
+      base_url: http://localhost:8080
+      environment: qa
+      max_vus: ${{ github.event.inputs.load_max_vus }}
+      duration_s: ${{ github.event.inputs.load_duration_s }}
+      update_baseline: false
 
 # ------------------------------------------------------------------------------
 # JOB 4 � Promoci�n GitOps

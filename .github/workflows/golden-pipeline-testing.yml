@@ -24,6 +24,11 @@ name: "🏆 Golden Pipeline — API Testing · Performance · RPA · Quality Gat
 #   pull_request → A | F | PRODUCCION
 #   workflow_dispatch            (ejecución manual con opciones)
 #
+# IMPORTANTE · performance-load-2k (2000 VUs / 3600 s): NO forma parte del golden pipeline.
+#   Permanece en `workflow_dispatch` + llamadas explícitas vía reusable (`performance-load-2k.yml`) o
+#   pipeline de promoción `pipeline-integration.yml` usando el checkbox dedicado (`run_load_performance_2k`)
+#   para evitar corridas largas en cada push/PR.
+#
 # THRESHOLDS (Quality Gates):
 #   API Functional   → 100% smoke scenarios pass
 #   API Integration  → flujo E2E 8 pasos completo sin fallos

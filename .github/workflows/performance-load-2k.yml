@@ -18,8 +18,21 @@ name: "[Performance] Test · Quality Gates · k6 Load — 2k VUs / 3600s"
 #   - workflow_dispatch: ejecución manual con parámetros configurables
 #   - workflow_call: invocable desde pipeline CI/CD principal
 #
-# Nota: NO ejecutar en schedule por su duración (1h+). Solo manual o desde CI.
-# ──────────────────────────────────────────────────────────────────────────────
+# Cadena de ramas esperada por el PoC (NO dispara pipelines automáticamente desde aquí):
+#   • E (desarrollo) → A (QA/UAT inicial) → F (pre‑producción / UAT) → PRODUCCION
+#
+# Políticas de disparo recomendadas (este workflow sólo tiene `workflow_dispatch`
+# + `workflow_call`; no registra push/PR):
+#
+#   ‑ No ejecutar en push típico de `feature/**` ni en PR `feature/** → E` (no hay triggers).
+#   ‑ No ejecutar en push de `E` de forma silenciosa: usa promoción manual o dispatch.
+#   ‑ Permitir dispatch manual cuando la rama de trabajo sea `A` o `F` (URLs reales externas configuradas).
+#   ‑ Para PR A→F considerar esta prueba opcional antes de mover a entornos tardíos.
+#   ‑ Para PR F→PRODUCCION nunca lanzar una corrida automática de 3600 s sin aprobación manual:
+#     solo como evidencia bajo checkbox explícito en el workflow de integración (`run_load_performance_2k`).
+#
+# Artefactos: JSON resumido (`resultados/load_test_latest.json`), HTML (`reportes/dashboard_latest.html`),
+# NDJSON (`tests/k6/results/k6_load_raw.json`), `k6_summary.json` y Markdown `LOAD_REPORT.md`.
 
 on:
   workflow_dispatch:
@@ -66,6 +79,10 @@ on:
         type: string
         required: false
         default: "3600"
+      update_baseline:
+        type: boolean
+        required: false
+        default: false
     outputs:
       load_passed:
         description: "true si todos los thresholds pasaron"
@@ -81,7 +98,8 @@ concurrency:
 
 permissions:
   contents: read
-  actions:  read
+  actions: read
+  packages: read
 
 jobs:
   # ────────────────────────────────────────────────────────────────────────────
@@ -152,8 +170,38 @@ jobs:
             --env MAX_VUS="${MAX_VUS}" \
             --env DURATION_S="${DURATION_S}" \
             --env GITHUB_RUN_ID="${GITHUB_RUN_ID}" \
+            --summary-export=tests/k6/results/k6_summary.json \
             --out json=tests/k6/results/k6_load_raw.json \
             tests/k6/load_2k_vus.js
+
+      - name: "Report · Consolidar métricas y HTML/JSON del script"
+        if: always()
+        run: |
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          src = Path("resultados/load_test_latest.json")
+          dst = Path("tests/k6/results/load_test_latest_metrics.json")
+          dst.parent.mkdir(parents=True, exist_ok=True)
+          if src.is_file():
+              data = json.loads(src.read_text(encoding="utf-8"))
+              slim = {k: data[k] for k in ("thresholds_passed", "environment", "metrics", "timestamp", "run_id", "config") if k in data}
+              dst.write_text(json.dumps(slim, indent=2), encoding="utf-8")
+          else:
+              print("Sin resultados/load_test_latest.json; se omite slim metrics")
+          PY
+
+      - name: "Report · Generar LOAD_REPORT.md (latencias, códigos HTTP, baseline)"
+        if: always()
+        env:
+          GITHUB_RUN_ID: ${{ github.run_id }}
+          RESULTS_DIR: tests/k6/results
+          K6_SUMMARY_PATH: tests/k6/results/k6_summary.json
+          K6_NDJSON_PATH: tests/k6/results/k6_load_raw.json
+          LATEST_METRICS_PATH: tests/k6/results/load_test_latest_metrics.json
+          BASELINE_METRICS_PATH: tests/k6/results/baseline_metrics.json
+          REPORT_MD_PATH: tests/k6/results/LOAD_REPORT.md
+        run: python3 tests/k6/scripts/load_test_report_md.py
 
       - name: "Quality Gates · Evaluar thresholds"
         id: load-results
@@ -176,10 +224,12 @@ jobs:
           fi
 
       - name: "Quality Gates · Actualizar baseline (si se solicitó)"
-        if: ${{ (github.event.inputs.update_baseline == 'true') && steps.load-results.outputs.passed == 'true' }}
+        if: >-
+          ${{ steps.load-results.outputs.passed == 'true'
+          && (github.event.inputs.update_baseline == 'true' || inputs.update_baseline == true) }}
         run: |
-          cp tests/k6/results/k6_load_raw.json tests/k6/results/load_test_baseline.json
-          echo "✅ Baseline actualizado con resultados de esta ejecución"
+          cp tests/k6/results/load_test_latest_metrics.json tests/k6/results/baseline_metrics.json
+          echo "✅ Baseline de métricas actualizado (load_test_latest_metrics → baseline_metrics)"
 
       - name: "Publish · Definir nombre de artefacto"
         id: set-artifact-name
@@ -194,16 +244,21 @@ jobs:
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: ${{ steps.set-artifact-name.outputs.name }}
-          path: tests/k6/results/
+          path: |
+            tests/k6/results/
+            resultados/
+            reportes/
           retention-days: 90
           if-no-files-found: warn
 
       - name: "Publish · Subir baseline actualizado"
-        if: ${{ github.event.inputs.update_baseline == 'true' }}
+        if: >-
+          ${{ steps.load-results.outputs.passed == 'true'
+          && (github.event.inputs.update_baseline == 'true' || inputs.update_baseline == true) }}
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: load-test-baseline
-          path: tests/k6/results/load_test_baseline.json
+          path: tests/k6/results/baseline_metrics.json
           retention-days: 365
 
       - name: "Quality Gates · Job Summary"
@@ -218,6 +273,10 @@ jobs:
           echo "| Config | ${{ github.event.inputs.max_vus || '2000' }} VUs × ${{ github.event.inputs.duration_s || '3600' }}s |" >> "$GITHUB_STEP_SUMMARY"
           echo "| Rama | ${{ github.ref_name }} |" >> "$GITHUB_STEP_SUMMARY"
           echo "| Commit | ${{ github.sha }} |" >> "$GITHUB_STEP_SUMMARY"
+          if [ -f tests/k6/results/LOAD_REPORT.md ]; then
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+            cat tests/k6/results/LOAD_REPORT.md >> "$GITHUB_STEP_SUMMARY"
+          fi
 
       - name: "Quality Gates · Fallar si thresholds no pasaron"
         if: steps.load-results.outputs.passed == 'false'
