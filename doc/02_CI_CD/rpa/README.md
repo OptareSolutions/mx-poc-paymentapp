@@ -1,4 +1,4 @@
-# AT&T QA – RPA Automation (Playwright + GitHub Actions)
+# AT&T QA – RPA Automation (Playwright + GitHub Actions) — PoC
 
 Automatización web liviana integrada en el pipeline CI/CD usando [Playwright](https://playwright.dev/) en modo headless.
 

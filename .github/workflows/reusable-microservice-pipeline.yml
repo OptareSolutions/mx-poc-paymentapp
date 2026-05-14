@@ -15,16 +15,23 @@
 #   PRODUCCION → prod   · Producción
 #   *          → env-e  · ramas tipo `feature/*`, etc.: overlay desarrollo
 #
-# Momentos (caller `pipeline-microservice-*.yml`):
-#   · push sobre feature/*, E, A, F, PRODUCCIÓN  → ejecuta reproducible hasta Publish (+ Deliver si `push|dispatch`)
-#   · pull_request ↔ base branch ∈ {E, A, F, PRODUCCIÓN} típico head feature/*
-#       ⇒ validación antes de fusionar; Deliver sigue sólo después del merge (`push`).
+# Política de Quality Gate (QG) — solo corre en 4 momentos:
+#
+#   PR  feature/* → E  (pull_request, base_ref=E)   → QG ESTRICTO     (bloquea merge)
+#   Push E        (post-merge feature→E)             → QG INFORMATIVO  (no bloquea Deliver)
+#   Push A        (post-merge E→A)                   → QG ESTRICTO     (bloquea Publish)
+#   Push F        (post-merge A→F)                   → QG ESTRICTO     (bloquea Publish)
+#
+#   QG no corre en: push feature/**, PR base A/F/PRODUCCION, push PRODUCCION.
+#
+#   PR feature→E valida nuevo código con Sonar PR Analysis + PR Decoration + Quality Gate.
+#   Push E conserva análisis completo de rama para visibilidad/baseline sin frenar DEV.
+#   Push A/F mantiene control restrictivo antes de promover a ambientes altos.
 #
 # Mapeo ante PR: usar **base_ref** como destino lógico (ambiente donde se fusionará),
 # no la rama sintética de merge.
 #
-# Jobs Deliver + gates Operaciones/Dev siguen sólo cuando `push` ó `workflow_dispatch`
-# (`github.event_name`) — sobre PR sólo compilás/calidades/publicás etiqueta provisional.
+# Jobs Deliver + gates Operaciones/Dev siguen sólo cuando `push` ó `workflow_dispatch`.
 #
 # ==============================================================================
 name: "Reusable: Microservice CI/CD pipeline"
@@ -153,11 +160,16 @@ jobs:
 
 # ------------------------------------------------------------------------------
 # JOB 3 – Quality Gates (Gitleaks + SonarCloud + Trivy Filesystem)
+# Corre solo en: PR feature→E (estricto) | push E (informativo) | push A/F (estricto).
+# Omitido en: push feature/**, PR base A/F/PRODUCCION, push PRODUCCION.
 # ------------------------------------------------------------------------------
   quality-gates:
     name: "3 · Quality Gates · Secrets + Sonar + Trivy FS [${{ inputs.microservice_name }}]"
     runs-on: ubuntu-latest
     needs: test
+    if: |
+      (github.event_name == 'pull_request' && github.base_ref == 'E') ||
+      (github.event_name == 'push' && (github.ref_name == 'E' || github.ref_name == 'A' || github.ref_name == 'F'))
     permissions:
       contents: read
       security-events: write
@@ -212,6 +224,8 @@ jobs:
           mkdir -p build/classes/java/main build/classes/java/test
 
       - name: "Quality Gates · SonarCloud analisis de codigo"
+        # Estricto: PR feature→E y push A/F. Informativo: push E (baseline de rama).
+        continue-on-error: ${{ github.event_name == 'push' && github.ref_name == 'E' }}
         uses: SonarSource/sonarcloud-github-action@e44258b109568baa0df60ed515909fc6c72cba92 # v3.0.0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -220,6 +234,8 @@ jobs:
           projectBaseDir: ${{ inputs.microservice_name }}
 
       - name: "Quality Gates · Trivy filesystem scan (JAR + dependencias)"
+        # Estricto: PR feature→E y push A/F. Informativo: push E (baseline de rama).
+        continue-on-error: ${{ github.event_name == 'push' && github.ref_name == 'E' }}
         uses: aquasecurity/trivy-action@76071ef0d7ec797419534a183b498b4d6366cf37 # 0.30.0
         with:
           scan-type: fs
@@ -241,11 +257,29 @@ jobs:
 
 # ------------------------------------------------------------------------------
 # JOB 4 – Publish (Docker build + image scan + push GHCR)
+# Solo corre tras el merge: push a E/A/F/PRODUCCION o workflow_dispatch.
+# En PR (cualquier base) y en push a feature/* → se omite.
+# Acepta quality-gates 'skipped' (push PRODUCCION no corre QG por diseño).
 # ------------------------------------------------------------------------------
   publish:
     name: "4 · Publish · Docker build + scan + GHCR [${{ inputs.microservice_name }}]"
     runs-on: ubuntu-latest
     needs: [build, quality-gates]
+    if: |
+      always() &&
+      (needs.quality-gates.result == 'success' || needs.quality-gates.result == 'skipped') &&
+      (
+        github.event_name == 'workflow_dispatch' ||
+        (
+          github.event_name == 'push' &&
+          (
+            github.ref_name == 'E' ||
+            github.ref_name == 'A' ||
+            github.ref_name == 'F' ||
+            github.ref_name == 'PRODUCCION'
+          )
+        )
+      )
     permissions:
       contents: read
       packages: write
