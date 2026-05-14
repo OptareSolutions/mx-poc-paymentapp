@@ -15,17 +15,23 @@
 #   PRODUCCION → prod   · Producción
 #   *          → env-e  · ramas tipo `feature/*`, etc.: overlay desarrollo
 #
-# Momentos (caller `pipeline-microservice-*.yml`):
-#   · push sobre feature/*   → Build + Test + Quality Gates (informativo) ÚNICAMENTE.
-#                               Publish (imagen) y Deliver (GitOps) se omiten.
-#   · push sobre E/A/F/PROD  → Flujo completo hasta Deliver + GitOps.
-#   · pull_request → base ∈ {E,A,F,PROD}  → validación; Deliver solo tras merge.
+# Momentos y política de Quality Gate (QG):
+#
+#   Dirección feature → E  (push feature/**, push E, PR base E):
+#     Build + Test + QG INFORMATIVO  → Publish y Deliver OMITIDOS en PR y feature push.
+#     Publish + Deliver solo en push E (post-merge).
+#
+#   Dirección E → A/F/PROD  (PR base A, F, PRODUCCION):
+#     Build + Test + QG ESTRICTO (bloqueante) → Publish y Deliver OMITIDOS en PR.
+#     Publish + Deliver solo en push A/F/PROD (post-merge).
+#
+#   QG informativo  = continue-on-error: true  (falla el step, no el job)
+#   QG estricto     = continue-on-error: false (falla el job y bloquea Publish)
 #
 # Mapeo ante PR: usar **base_ref** como destino lógico (ambiente donde se fusionará),
 # no la rama sintética de merge.
 #
-# Jobs Deliver + gates Operaciones/Dev siguen sólo cuando `push` ó `workflow_dispatch`
-# (`github.event_name`) — sobre PR sólo compilás/calidades/publicás etiqueta provisional.
+# Jobs Deliver + gates Operaciones/Dev siguen sólo cuando `push` ó `workflow_dispatch`.
 #
 # ==============================================================================
 name: "Reusable: Microservice CI/CD pipeline"
@@ -213,8 +219,14 @@ jobs:
           mkdir -p build/classes/java/main build/classes/java/test
 
       - name: "Quality Gates · SonarCloud analisis de codigo"
-        # Informativo en feature/* (continue-on-error); bloqueante en troncales.
-        continue-on-error: ${{ github.event_name == 'push' && startsWith(github.ref_name, 'feature/') }}
+        # Informativo (feature→E): push feature/**, push E, PR base E.
+        # Estricto    (E→A/F/PROD): PR base A/F/PRODUCCION y push a A/F/PRODUCCION.
+        continue-on-error: >-
+          ${{
+            (github.event_name == 'push' && startsWith(github.ref_name, 'feature/')) ||
+            (github.event_name == 'push' && github.ref_name == 'E') ||
+            (github.event_name == 'pull_request' && github.base_ref == 'E')
+          }}
         uses: SonarSource/sonarcloud-github-action@e44258b109568baa0df60ed515909fc6c72cba92 # v3.0.0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -223,8 +235,14 @@ jobs:
           projectBaseDir: ${{ inputs.microservice_name }}
 
       - name: "Quality Gates · Trivy filesystem scan (JAR + dependencias)"
-        # Informativo en feature/* (continue-on-error); bloqueante en troncales.
-        continue-on-error: ${{ github.event_name == 'push' && startsWith(github.ref_name, 'feature/') }}
+        # Informativo (feature→E): push feature/**, push E, PR base E.
+        # Estricto    (E→A/F/PROD): PR base A/F/PRODUCCION y push a A/F/PRODUCCION.
+        continue-on-error: >-
+          ${{
+            (github.event_name == 'push' && startsWith(github.ref_name, 'feature/')) ||
+            (github.event_name == 'push' && github.ref_name == 'E') ||
+            (github.event_name == 'pull_request' && github.base_ref == 'E')
+          }}
         uses: aquasecurity/trivy-action@76071ef0d7ec797419534a183b498b4d6366cf37 # 0.30.0
         with:
           scan-type: fs
@@ -246,10 +264,9 @@ jobs:
 
 # ------------------------------------------------------------------------------
 # JOB 4 – Publish (Docker build + image scan + push GHCR)
-# Solo corre en ramas troncales (E/A/F/PRODUCCION) después del merge, o en
-# pull_request (imagen provisional sin push) o workflow_dispatch.
-# En push a feature/* se omite: Build+Test+QualityGates son suficientes como
-# feedback rápido sin publicar imagen ni desplegar.
+# Solo corre tras el merge: push a E/A/F/PRODUCCION o workflow_dispatch.
+# En PR (cualquier base) y en push a feature/* → se omite.
+# La imagen solo se construye y publica cuando el código fue aprobado y mergeado.
 # ------------------------------------------------------------------------------
   publish:
     name: "4 · Publish · Docker build + scan + GHCR [${{ inputs.microservice_name }}]"
@@ -260,7 +277,6 @@ jobs:
       needs.quality-gates.result == 'success' &&
       (
         github.event_name == 'workflow_dispatch' ||
-        github.event_name == 'pull_request' ||
         (
           github.event_name == 'push' &&
           (
