@@ -19,7 +19,7 @@ resources:
 # Tags atualizadas automaticamente pelos pipelines CI/CD
 images:
   - name: ghcr.io/optaresolutions/mx-poc-paymentapp/microservice-a
-    newTag: "1.0.0-SNAPSHOT-d9eea70.87"
+    newTag: "1.0.0-SNAPSHOT-e74cfb9.100"
   - name: ghcr.io/optaresolutions/mx-poc-paymentapp/microservice-b
     newTag: "1.0.0-SNAPSHOT-d9eea70.75"
   - name: ghcr.io/optaresolutions/mx-poc-paymentapp/ui-paymentbox
