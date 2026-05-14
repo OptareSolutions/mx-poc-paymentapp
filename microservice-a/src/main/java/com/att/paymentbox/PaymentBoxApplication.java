@@ -17,6 +17,6 @@ public class PaymentBoxApplication implements CommandLineRunner {
 
     @Override
     public void run(String... args) {
-        log.info("PoC TRA-34 smoke: microservice-a desde E (+ UI + RPA) 2026-05-14");
+        log.info("PoC deploy marker: microservice-a TRA-35 T1 2026-05-13 (base rama E)");
     }
 }
