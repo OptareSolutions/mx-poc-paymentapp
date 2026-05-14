@@ -6,8 +6,8 @@ run-name: "${{ github.event_name == 'pull_request' && format('[microservice-a] C
 
 on:
   push:
-    # Post-merge: pipeline completo (Build+Test+QG+Publish+Deploy)
-    branches: [E, A, F, PRODUCCION]
+    # Post-merge/pre integración sobre ramas con overlay explícito; feature/** ⇒ env por defecto `env-e` en reusable.
+    branches: [feature/**, E, A, F, PRODUCCION]
     paths:
       - 'microservice-a/**'
       - '.github/workflows/pipeline-microservice-a.yml'
@@ -15,7 +15,8 @@ on:
       - '.gitleaks.toml'
       - '.trivyignore'
   pull_request:
-    # Pre-merge: Build+Test+QG+Publish (sin Deploy — el if en reusable lo omite)
+    # Ramos base (rama destino) del PR. Usual: HEAD = feature/** → BUILD validando merge hacia esa base,
+    # sin Deliver hasta el push después del merge — ver reusable (event_name).
     branches: [E, A, F, PRODUCCION]
     paths:
       - 'microservice-a/**'

@@ -67,14 +67,14 @@ El workflow `performance-smoke.yml` se puede disparar:
 
 - **Manual** (`workflow_dispatch`): desde la UI de GitHub Actions con parámetros configurables
 - **Programado** (`schedule`): automáticamente cada día a las 02:00 UTC
-- **Por llamada** (`workflow_call`): desde `pipeline-integration.yml` como gate de calidad
+- **Por llamada** (`workflow_call`): desde `testing-factory.yml` y `golden-pipeline-testing.yml` como gate de calidad
 
 ### Parámetros del workflow_dispatch
 
 | Parámetro | Descripción | Valor por defecto |
 |-----------|-------------|-------------------|
 | `base_url` | URL del servicio | `http://localhost:8080` |
-| `environment` | Entorno objetivo | `develop` |
+| `environment` | Entorno objetivo | `E` |
 | `vus` | Usuarios virtuales | `20` |
 | `duration` | Duración del test | `7m` |
 | `update_baseline` | Actualizar baseline | `false` |
@@ -84,14 +84,14 @@ El workflow `performance-smoke.yml` se puede disparar:
 ### Cómo funciona
 
 1. Cada ejecución genera `smoke_performance_latest.json` con las métricas
-2. El baseline se almacena como artefacto de GitHub Actions (`k6-performance-baseline`)
-3. En cada ejecución se descarga el baseline y se compara con los resultados actuales
+2. El baseline se almacena como artefacto de GitHub Actions por entorno (`k6-performance-baseline-{environment}`)
+3. En cada ejecución se descarga el baseline más reciente disponible y se compara con los resultados actuales
 4. Si hay regresión (> 20% de deterioro), el job falla con detalle del problema
-5. El baseline se actualiza automáticamente en ejecuciones programadas si todos los thresholds pasan
+5. El baseline se actualiza solo desde ramas controladas (`E`, `A`, `F`, `PRODUCCION`) si todos los thresholds pasan
 
 ### Actualizar el Baseline Manualmente
 
-Ejecutar el workflow con el parámetro `update_baseline = true`. Solo se actualiza si todos los thresholds pasan.
+Ejecutar el workflow con el parámetro `update_baseline = true` desde una rama controlada. Las ramas `feature/**` y los PRs solo comparan y publican resultados; no actualizan baseline.
 
 ### Script de Comparación Local
 
@@ -112,19 +112,22 @@ node tests/k6/scripts/compare-results.js \
 | Artefacto | Retención | Descripción |
 |-----------|-----------|-------------|
 | `k6-performance-results-{run_id}` | 90 días | Resultados de cada ejecución |
-| `k6-performance-baseline` | 365 días | Baseline histórico de referencia |
+| `k6-performance-baseline-{environment}` | 365 días | Baseline histórico de referencia por entorno |
 
 ## Integración con Pipeline Principal
 
-Para usar este workflow como gate en `pipeline-integration.yml`:
+Para usar este workflow como gate desde otro workflow:
 
 ```yaml
 performance-check:
   name: "Performance Gate"
   uses: ./.github/workflows/performance-smoke.yml
   with:
-    base_url: http://microservice-a:8080
-    environment: qa
+    base_url: http://localhost:8080
+    environment: ci
+    vus: "20"
+    duration: "7m"
+    update_baseline: false
 ```
 
 ## Seguridad

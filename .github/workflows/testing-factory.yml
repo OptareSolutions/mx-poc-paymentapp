@@ -16,6 +16,7 @@ name: Testing Factory — CI Quality Gates (feature/* · PR→E)
 #   push → feature/**          (CI en ramas de desarrollo)
 #   pull_request → E           (validación antes de integrar a Desarrollo)
 #   workflow_dispatch          (ejecución manual)
+#   También disparan cambios en pipeline-microservice-* / reusable-microservice-pipeline (paths).
 #
 # NOTA: Para PRs hacia A y F, usar golden-pipeline-testing.yml (suite completa).
 # ──────────────────────────────────────────────────────────────────────────────
@@ -30,7 +31,13 @@ on:
       - 'tests/**'
       - 'simulation/**'
       - 'doc/02_CI_CD/rpa/**'
+      - '.github/workflows/rpa.yml'
       - '.github/workflows/testing-factory.yml'
+      - '.github/workflows/reusable-api-testing.yml'
+      - '.github/workflows/performance-smoke.yml'
+      - '.github/workflows/pipeline-microservice-a.yml'
+      - '.github/workflows/pipeline-microservice-b.yml'
+      - '.github/workflows/reusable-microservice-pipeline.yml'
 
   pull_request:
     branches:
@@ -41,6 +48,13 @@ on:
       - 'tests/**'
       - 'simulation/**'
       - 'doc/02_CI_CD/rpa/**'
+      - '.github/workflows/rpa.yml'
+      - '.github/workflows/testing-factory.yml'
+      - '.github/workflows/reusable-api-testing.yml'
+      - '.github/workflows/performance-smoke.yml'
+      - '.github/workflows/pipeline-microservice-a.yml'
+      - '.github/workflows/pipeline-microservice-b.yml'
+      - '.github/workflows/reusable-microservice-pipeline.yml'
 
   workflow_dispatch:
     inputs:
@@ -57,9 +71,13 @@ permissions:
   contents: read
   checks: write
   pull-requests: write
+  actions: read
+  packages: read
 
+# Usar SHA del HEAD del PR cuando existe (pull_request/synchronize); si no, SHA del push/dispatch.
+# Así push + PR sobre el mismo commit comparten grupo y cancel-in-progress evita dos corridas gemelas.
 concurrency:
-  group: testing-factory-${{ github.ref }}
+  group: testing-factory-${{ github.event.pull_request.head.sha || github.sha }}
   cancel-in-progress: true
 
 env:
@@ -72,13 +90,16 @@ env:
 jobs:
 
 # ╔══════════════════════════════════════════════════════════════════════════╗
-# ║  JOB 1 · API Tests — Karate (Functional + Integration + Contract)       ║
-# ║  Smoke tests @smoke, flujo E2E @e2e, contrato @contract + oasdiff       ║
+# ║  JOB 0 · Change Scope                                                   ║
+# ║  Separa cambios de app/tests vs RPA para no ejecutar gates pesados       ║
+# ║  cuando solo se toca la orquestación RPA.                                ║
 # ╚══════════════════════════════════════════════════════════════════════════╝
-  api-tests:
-    name: API Tests — Functional · Integration · Contract
+  change-scope:
+    name: Change Scope — Testing Factory
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    outputs:
+      app_changed: ${{ steps.scope.outputs.app_changed }}
+      rpa_changed: ${{ steps.scope.outputs.rpa_changed }}
 
     steps:
       - name: Checkout
@@ -86,160 +107,68 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Login GHCR
+      - name: Detect changed areas
+        id: scope
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_SHA: ${{ github.event.before }}
+          HEAD_SHA: ${{ github.sha }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
-          echo "${{ secrets.GITHUB_TOKEN }}" \
-            | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
-
-      - name: Iniciar entorno de simulación
-        working-directory: simulation
-        timeout-minutes: 8
-        run: |
-          docker compose up -d --build --wait
-          echo "Entorno listo: microservice-a=${{ env.BASE_URL }} | microservice-b=${{ env.MSVC_B_URL }}"
-
-      - name: Verificar health de servicios
-        run: |
-          curl --retry 12 --retry-delay 5 --retry-connrefused -sf \
-            "${{ env.BASE_URL }}/actuator/health" | grep -q '"status":"UP"' \
-            && echo "microservice-a healthy" \
-            || (echo "microservice-a no responde"; exit 1)
-
-          curl --retry 12 --retry-delay 5 --retry-connrefused -sf \
-            "${{ env.MSVC_B_URL }}/actuator/health" | grep -q '"status":"UP"' \
-            && echo "microservice-b healthy" \
-            || (echo "microservice-b no responde"; exit 1)
-
-      - name: Configurar JDK ${{ env.JAVA_VERSION }}
-        uses: actions/setup-java@c1e323688fd81a25caa38c78aa6df2d33d3e20d9 # v4
-        with:
-          java-version: ${{ env.JAVA_VERSION }}
-          distribution: ${{ env.JAVA_DIST }}
-          cache: maven
-
-      - name: Karate @smoke — Smoke Tests Funcionales
-        working-directory: tests/functional-karate
-        run: |
-          mvn test \
-            -Dkarate.env=ci \
-            -DbaseUrl=${{ env.BASE_URL }} \
-            -Dtest=RecargaFlowRunner#testSmoke \
-            --no-transfer-progress
-
-      - name: Karate @e2e — Flujo E2E Integración (8 pasos)
-        working-directory: tests/functional-karate
-        run: |
-          mvn test \
-            -Dkarate.env=ci \
-            -DbaseUrl=${{ env.BASE_URL }} \
-            -Dtest=RecargaFlowRunner#testRecargaFlow \
-            --no-transfer-progress
-
-      - name: Karate @contract — Contrato entre Microservicios
-        working-directory: tests/functional-karate
-        run: |
-          mvn test \
-            -Dkarate.env=ci \
-            -DbaseUrl=${{ env.BASE_URL }} \
-            -Dtest=RecargaFlowRunner#testContratoMicroservicios \
-            --no-transfer-progress
-
-      - name: Instalar oasdiff
-        run: |
-          OASDIFF_VERSION="1.10.25"
-          curl -fsSL \
-            "https://github.com/tufin/oasdiff/releases/download/v${OASDIFF_VERSION}/oasdiff_${OASDIFF_VERSION}_linux_amd64.tar.gz" \
-            | sudo tar -xz -C /usr/local/bin oasdiff
-          oasdiff --version
-
-      - name: oasdiff — Breaking Changes microservice-a
-        id: oasdiff-a
-        continue-on-error: true
-        run: |
-          BASE_REF="${{ github.base_ref || 'E' }}"
-          SPEC="microservice-a/docs/openapi.yaml"
-          git fetch origin "${BASE_REF}" --depth=1 2>/dev/null || true
-
-          if ! git show "origin/${BASE_REF}:${SPEC}" > /tmp/openapi-base-a.yaml 2>/dev/null; then
-            echo "Sin especificacion base — omitiendo comparacion"
-            echo "has_breaking=false" >> $GITHUB_OUTPUT
-            exit 0
-          fi
-          [ ! -f "$SPEC" ] && echo "has_breaking=false" >> $GITHUB_OUTPUT && exit 0
-
-          RESULT=$(oasdiff breaking /tmp/openapi-base-a.yaml "$SPEC" 2>&1 || true)
-          if [ -n "$RESULT" ]; then
-            echo "Breaking changes en microservice-a:"
-            echo "$RESULT"
-            echo "has_breaking=true" >> $GITHUB_OUTPUT
+          if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
+            APP_CHANGED="true"
+            RPA_CHANGED="true"
           else
-            echo "Sin breaking changes en microservice-a"
-            echo "has_breaking=false" >> $GITHUB_OUTPUT
+            if [ "$EVENT_NAME" = "pull_request" ]; then
+              RANGE="$PR_BASE_SHA...$PR_HEAD_SHA"
+            elif git cat-file -e "$BASE_SHA^{commit}" 2>/dev/null; then
+              RANGE="$BASE_SHA...$HEAD_SHA"
+            else
+              RANGE="HEAD~1...HEAD"
+            fi
+
+            CHANGED_FILES="$(git diff --name-only "$RANGE" || true)"
+
+            APP_CHANGED="false"
+            RPA_CHANGED="false"
+
+            if printf '%s\n' "$CHANGED_FILES" | grep -Eq '^(microservice-a/|microservice-b/|tests/|simulation/|\.github/workflows/reusable-api-testing\.yml|\.github/workflows/testing-factory\.yml|\.github/workflows/pipeline-microservice-a\.yml|\.github/workflows/pipeline-microservice-b\.yml|\.github/workflows/reusable-microservice-pipeline\.yml)'; then
+              APP_CHANGED="true"
+            fi
+
+            if printf '%s\n' "$CHANGED_FILES" | grep -Eq '^(doc/02_CI_CD/rpa/|\.github/workflows/rpa\.yml|\.github/workflows/testing-factory\.yml)'; then
+              RPA_CHANGED="true"
+            fi
           fi
 
-      - name: oasdiff — Breaking Changes microservice-b
-        id: oasdiff-b
-        continue-on-error: true
-        run: |
-          BASE_REF="${{ github.base_ref || 'E' }}"
-          SPEC="microservice-b/docs/openapi.yaml"
-          git fetch origin "${BASE_REF}" --depth=1 2>/dev/null || true
+          {
+            echo "app_changed=$APP_CHANGED"
+            echo "rpa_changed=$RPA_CHANGED"
+          } >> "$GITHUB_OUTPUT"
 
-          if ! git show "origin/${BASE_REF}:${SPEC}" > /tmp/openapi-base-b.yaml 2>/dev/null; then
-            echo "Sin especificacion base — omitiendo comparacion"
-            echo "has_breaking=false" >> $GITHUB_OUTPUT
-            exit 0
-          fi
-          [ ! -f "$SPEC" ] && echo "has_breaking=false" >> $GITHUB_OUTPUT && exit 0
+          {
+            echo "## Testing Factory Change Scope"
+            echo ""
+            echo "| Area | Changed |"
+            echo "|------|---------|"
+            echo "| App/API/Performance | $APP_CHANGED |"
+            echo "| RPA/orchestration | $RPA_CHANGED |"
+          } >> "$GITHUB_STEP_SUMMARY"
 
-          RESULT=$(oasdiff breaking /tmp/openapi-base-b.yaml "$SPEC" 2>&1 || true)
-          if [ -n "$RESULT" ]; then
-            echo "Breaking changes en microservice-b:"
-            echo "$RESULT"
-            echo "has_breaking=true" >> $GITHUB_OUTPUT
-          else
-            echo "Sin breaking changes en microservice-b"
-            echo "has_breaking=false" >> $GITHUB_OUTPUT
-          fi
-
-      - name: Comentar breaking changes en PR
-        if: |
-          github.event_name == 'pull_request' &&
-          (steps.oasdiff-a.outputs.has_breaking == 'true' ||
-           steps.oasdiff-b.outputs.has_breaking == 'true')
-        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7
-        with:
-          script: |
-            await github.rest.issues.createComment({
-              issue_number: context.issue.number,
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              body: '## ⚠️ Breaking Changes Detectados en OpenAPI\n\nSe detectaron cambios incompatibles con versiones anteriores. Revisar antes de hacer merge.',
-            });
-
-      - name: Quality Gate — Fallar si hay breaking changes
-        if: |
-          steps.oasdiff-a.outputs.has_breaking == 'true' ||
-          steps.oasdiff-b.outputs.has_breaking == 'true'
-        run: |
-          echo "Pipeline bloqueado: breaking changes detectados en OpenAPI."
-          exit 1
-
-      - name: Publicar reportes API
-        if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
-        with:
-          name: api-test-reports-${{ github.run_number }}
-          path: |
-            tests/functional-karate/target/karate-reports/
-            tests/functional-karate/target/surefire-reports/
-          retention-days: 30
-          if-no-files-found: warn
-
-      - name: Detener entorno
-        if: always()
-        working-directory: simulation
-        run: docker compose down -v --remove-orphans
+# ╔══════════════════════════════════════════════════════════════════════════╗
+# ║  JOB 1 · API Tests — reusable (Karate + oasdiff)                        ║
+# ╚══════════════════════════════════════════════════════════════════════════╝
+  api-tests:
+    name: API Tests — reusable quality gate
+    needs: change-scope
+    if: needs.change-scope.outputs.app_changed == 'true'
+    uses: ./.github/workflows/reusable-api-testing.yml
+    with:
+      karate_env: ci
+      base_ref: ${{ github.base_ref || 'E' }}
+      artifact_suffix: testing-factory-${{ github.run_number }}
+    secrets: inherit
 
 
 # ╔══════════════════════════════════════════════════════════════════════════╗
@@ -248,131 +177,79 @@ jobs:
 # ╚══════════════════════════════════════════════════════════════════════════╝
   performance-smoke:
     name: Smoke Performance — k6 (20 VUs / 7 min)
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    needs: api-tests
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-
-      - name: Login GHCR
-        run: |
-          echo "${{ secrets.GITHUB_TOKEN }}" \
-            | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
-
-      - name: Iniciar entorno de simulación
-        working-directory: simulation
-        timeout-minutes: 8
-        run: docker compose up -d --build --wait
-
-      - name: Verificar health de microservice-a
-        run: |
-          curl --retry 12 --retry-delay 5 --retry-connrefused -sf \
-            "${{ env.BASE_URL }}/actuator/health" | grep -q '"status":"UP"' \
-            && echo "microservice-a healthy" \
-            || (echo "microservice-a no responde"; exit 1)
-
-      - name: Instalar k6
-        run: |
-          K6_VERSION="v0.55.0"
-          curl -fsSL \
-            "https://github.com/grafana/k6/releases/download/${K6_VERSION}/k6-${K6_VERSION}-linux-amd64.tar.gz" \
-            | sudo tar -xz --strip-components=1 -C /usr/local/bin \
-              "k6-${K6_VERSION}-linux-amd64/k6"
-          k6 version
-
-      - name: k6 Smoke Performance
-        run: |
-          mkdir -p tests/k6/results
-          k6 run \
-            --env BASE_URL="${{ env.BASE_URL }}" \
-            --env ENVIRONMENT="ci" \
-            --out json=tests/k6/results/smoke_raw_${{ github.run_number }}.json \
-            tests/k6/smoke_performance.js
-
-      - name: Publicar resultados de performance
-        if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
-        with:
-          name: performance-smoke-reports-${{ github.run_number }}
-          path: tests/k6/results/
-          retention-days: 30
-          if-no-files-found: warn
-
-      - name: Detener entorno
-        if: always()
-        working-directory: simulation
-        run: docker compose down -v --remove-orphans
+    needs: [change-scope, api-tests]
+    if: needs.change-scope.outputs.app_changed == 'true' && needs.api-tests.result == 'success'
+    uses: ./.github/workflows/performance-smoke.yml
+    with:
+      base_url: http://localhost:8080
+      environment: ci
+      vus: "20"
+      duration: "7m"
+      update_baseline: false
+    secrets: inherit
 
 
 # ╔══════════════════════════════════════════════════════════════════════════╗
-# ║  JOB 3 · Salesforce RPA (Node.js + Playwright — JWT Auth)               ║
-# ║  Flujo completo 10 pasos: Login → Oportunidad → Producto → Validación   ║
+# ║  JOB 3a · RPA Decision                                                  ║
+# ║  Evita duplicar RPA en cada push: solo corre por cambio RPA o variable. ║
 # ╚══════════════════════════════════════════════════════════════════════════╝
-  salesforce-rpa:
-    name: Salesforce RPA — Node.js + Playwright (JWT)
+  rpa-decision:
+    name: RPA Decision — Feature Quality Gate
     runs-on: ubuntu-latest
-    timeout-minutes: 30
-    needs: performance-smoke
-
-    env:
-      RPA_PRODUCT_NAME:        ${{ github.event.inputs.product_name || 'Paquete Básico' }}
-      RPA_PRODUCT_PRICE:       ${{ github.event.inputs.product_price || '1500' }}
-      SALESFORCE_CLIENT_ID:    ${{ secrets.SALESFORCE_CLIENT_ID }}
-      SALESFORCE_USERNAME:     ${{ secrets.SALESFORCE_USERNAME }}
-      SALESFORCE_INSTANCE_URL: ${{ secrets.SALESFORCE_INSTANCE_URL }}
+    needs: [change-scope, performance-smoke]
+    if: always()
+    outputs:
+      run_rpa: ${{ steps.decision.outputs.run_rpa }}
+      reason: ${{ steps.decision.outputs.reason }}
 
     steps:
-      - name: Checkout
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-
-      - name: Configurar Node.js 20
-        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
-        with:
-          node-version: '20'
-          cache: 'npm'
-          cache-dependency-path: doc/02_CI_CD/rpa/package-lock.json
-
-      - name: Instalar dependencias RPA
-        working-directory: doc/02_CI_CD/rpa
-        run: npm ci
-
-      - name: Instalar Playwright Chromium
-        working-directory: doc/02_CI_CD/rpa
-        run: npx playwright install chromium --with-deps
-
-      - name: Instalar Salesforce CLI
-        run: npm install --global @salesforce/cli
-
-      - name: Crear archivo JWT key de Salesforce
+      - name: Decide RPA scope
+        id: decision
+        env:
+          RPA_ENABLED: ${{ vars.RPA_ENABLED }}
+          RPA_CHANGED: ${{ needs.change-scope.outputs.rpa_changed }}
         run: |
-          echo "${{ secrets.SALESFORCE_JWT_KEY }}" > server.key
-          chmod 600 server.key
+          RUN_RPA="false"
+          REASON="Informative RPA skipped: no RPA-critical path changed and RPA_ENABLED is not true"
 
-      - name: Autenticar en Salesforce (JWT)
-        run: |
-          sf org login jwt \
-            --client-id "$SALESFORCE_CLIENT_ID" \
-            --jwt-key-file server.key \
-            --username "$SALESFORCE_USERNAME" \
-            --instance-url "$SALESFORCE_INSTANCE_URL" \
-            --alias rpa-org
+          if [ "$RPA_ENABLED" = "true" ]; then
+            RUN_RPA="true"
+            REASON="Informative RPA requested by repository variable RPA_ENABLED=true"
+          elif [ "$RPA_CHANGED" = "true" ]; then
+            RUN_RPA="true"
+            REASON="Informative RPA requested because RPA-critical files changed"
+          fi
 
-      - name: Exportar sesión Salesforce
-        run: sf org display --target-org rpa-org --json > sf-auth.json
+          {
+            echo "run_rpa=$RUN_RPA"
+            echo "reason=$REASON"
+          } >> "$GITHUB_OUTPUT"
 
-      - name: Ejecutar flujo RPA Salesforce
-        working-directory: doc/02_CI_CD/rpa
-        run: node scripts/rpa-flow.js
+          {
+            echo "## RPA Decision"
+            echo ""
+            echo "| Field | Value |"
+            echo "|-------|-------|"
+            echo "| RPA enabled variable | ${RPA_ENABLED:-false} |"
+            echo "| RPA-critical path changed | $RPA_CHANGED |"
+            echo "| Decision | $RUN_RPA |"
+            echo "| Policy | informative |"
+            echo "| Reason | $REASON |"
+          } >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Publicar evidencias RPA
-        if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
-        with:
-          name: salesforce-rpa-evidences-${{ github.run_number }}
-          path: |
-            doc/02_CI_CD/rpa/results/
-            sf-auth.json
-          retention-days: 30
-          if-no-files-found: warn
+# ╔══════════════════════════════════════════════════════════════════════════╗
+# ║  JOB 3b · Salesforce RPA (Reusable)                                     ║
+# ║  Única implementación: .github/workflows/rpa.yml                        ║
+# ╚══════════════════════════════════════════════════════════════════════════╝
+  salesforce-rpa:
+    name: Salesforce RPA — Reusable Informative Gate
+    needs: rpa-decision
+    if: always()
+    uses: ./.github/workflows/rpa.yml
+    secrets: inherit
+    with:
+      run_rpa: ${{ needs.rpa-decision.outputs.run_rpa == 'true' }}
+      enforce_gate: false
+      reason: ${{ needs.rpa-decision.outputs.reason }}
+      product_name: ${{ github.event.inputs.product_name || 'Paquete Básico' }}
+      product_price: ${{ github.event.inputs.product_price || '1500' }}

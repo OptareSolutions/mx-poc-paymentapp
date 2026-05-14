@@ -1,315 +1,271 @@
 # Estrategia GitFlow de Pipelines — AT&T PaymentBox PoC
 
 > **Proyecto:** AT&T PaymentBox PoC  
-> **Módulo:** CI/CD — Estrategia de Ejecución por Rama  
+> **Módulo:** CI/CD — Ramas, PRs y ejecución por contexto  
 > **Última actualización:** 2026-05-13  
-> **Issue de referencia:** TRA-18 / TRA-19
+> **Issues de referencia:** TRA-18 / TRA-19 / **TRA-33** (alineado a rama `E`)
+
+### Rama base del análisis (`E`)
+
+En este repositorio, la **rama `E`** es la rama de integración de desarrollo: es la referencia sobre la que se validó este documento (lectura de `.github/workflows/*.yml` en el mismo commit en que vive la rama `E`, no la rama `main` ni el `default_branch` de GitHub a menos que coincidan). Los triggers, `paths:` y reusables descritos aquí reflejan ese árbol.
+
+Si necesitas comprobar el detalle en tu clon: `git fetch origin E && git checkout E` y abre los YAML en esa revisión. El cambio de documentación de TRA-33 se integra vía PR con **base `E`**.
 
 ---
 
-## Modelo de Ramas
+## Para quién es este documento
+
+Cualquier persona puede seguir el flujo leyendo **tres ideas**:
+
+1. **Ramas fijas** (`E`, `A`, `F`, `PRODUCCION`) representan ambientes; `feature/*` es trabajo en curso.  
+2. **Los merges solo avanzan en una dirección:** feature → E → A → F → PRODUCCION (mediante PRs).  
+3. **GitHub Actions** dispara pipelines distintos según *evento* (push vs pull request) y *rama*. No todo corre en todas las ramas: muchos jobs tienen **filtros `paths`** (por ejemplo, solo si `microservice-a/**` cambió).
+
+---
+
+## Modelo de ramas y promoción
 
 ```
-feature/* ──→ E (Desarrollo) ──→ A (QA) ──→ F (UAT) ──→ PRODUCCION
-               [env-e]            [env-a]     [env-f]      [prod]
+feature/* ──PR──► E ──PR──► A ──PR──► F ──PR──► PRODUCCION
+              env-e      env-a      env-f         prod
 ```
 
-| Rama | Ambiente | Propósito |
-|------|----------|-----------|
-| `feature/*` | Local / CI | Desarrollo de funcionalidades |
-| `E` | Desarrollo (`env-e`) | Integración continua del equipo |
-| `A` | QA (`env-a`) | Validación por el equipo de calidad |
-| `F` | UAT (`env-f`) | Aceptación por el negocio |
-| `PRODUCCION` | Producción (`prod`) | Entorno productivo |
+| Rama | Overlay Kustomize | Rol |
+|------|-------------------|-----|
+| `feature/*` | — | Desarrollo aislado; CI rápido o validación hacia `E`. |
+| `E` | `env-e` | Integración del equipo (desarrollo compartido). |
+| `A` | `env-a` | QA. |
+| `F` | `env-f` | UAT / preproducción. |
+| `PRODUCCION` | `prod` | Producción. |
+
+**Regla de oro:** un cambio “salta” de ambiente solo cuando el PR correspondiente se **aprueba y se mergea**; el push resultante en la rama destino es lo que suele disparar **build, imagen, y despliegue GitOps** (cuando aplica).
 
 ---
 
-## Inventario de Workflows
+## Stack (herramientas que componen el flujo)
 
-| Workflow | Tipo | Propósito |
-|----------|------|-----------|
-| `pipeline-microservice-a.yml` | Caller | CI/CD completo microservice-a |
-| `pipeline-microservice-b.yml` | Caller | CI/CD completo microservice-b |
-| `reusable-microservice-pipeline.yml` | Reusable (`workflow_call`) | Build → Test → Publish → Deliver |
-| `ci-cd-att.yml` | Orquestador | API Testing + Performance + RPA + Quality Gate |
-| `testing-factory.yml` | Orquestador | Quality Gates unificados |
-| `pipeline-contrato-openapi.yml` | Especializado | oasdiff — breaking changes OpenAPI |
-| `pipeline-integration.yml` | Manual | Promoción deliberada entre ambientes |
-| `performance-smoke.yml` | Reusable (`workflow_call`) | k6 smoke performance |
-| `performance-load-2k.yml` | Reusable (`workflow_call`) | k6 load 2000 VUs |
-| `rpa.yml` | Especializado | RPA Salesforce (Node.js / Playwright) |
+| Capa | Herramientas |
+|------|----------------|
+| CI/CD | GitHub Actions (callers + `workflow_call` reusables) |
+| Build | Gradle 8, Java 17 (Temurin) |
+| Calidad | Gitleaks, SonarCloud, Trivy (filesystem + imagen) |
+| Registro de imágenes | Docker, GHCR (`ghcr.io`) |
+| Despliegue | Kustomize + commit GitOps + sincronización tipo ArgoCD (en pipeline) |
+| API / contrato | Karate (`@smoke`, `@e2e`, `@contract`), oasdiff |
+| Rendimiento | k6 (`performance-smoke.yml`, `performance-load-2k.yml`) |
+| RPA Salesforce | `rpa.yml` (Playwright; política **informativa** o **bloqueante** según variables) |
 
 ---
 
-## Duplicados Identificados y Plan de Consolidación
+## Inventario de workflows (referencia rápida)
 
-### Grupo A — API Testing
-
-Los siguientes workflows duplican la ejecución de pruebas Karate:
-
-| Workflow | Overlap | Acción |
-|----------|---------|--------|
-| `ci-cd-att.yml` | Karate + k6 + RPA | **Conservar** — actualizar ramas a `E/A/F` |
-| `api-smoke-tests.yml` | Subset de Karate @smoke | **Desactivar** trigger push; dejar solo `workflow_dispatch` |
-| `golden-pipeline-testing.yml` | Karate + k6 + RPA | **Corregir** ramas `develop/qa/uat` → `E/A` |
-| `testing-factory.yml` | Placeholders + RPA | **Actualizar** placeholders con Karate real |
-
-### Grupo B — Smoke Performance
-
-| Workflow | Overlap | Acción |
-|----------|---------|--------|
-| `ci-cd-att.yml` (job `performance`) | k6 duplicado | Reemplazar por llamada a `performance-smoke.yml` |
-| `golden-pipeline-testing.yml` (job `smoke-performance`) | k6 duplicado | Igual |
-| `testing-factory.yml` (job `performance-smoke`) | Script demo | Reemplazar por `workflow_call` a `performance-smoke.yml` |
-
-### Grupo C — RPA
-
-| Implementación | Tecnología | Estado |
-|----------------|-----------|--------|
-| `tests/rpa/main.py` | Python / Playwright | Desactivar de pipelines automáticos |
-| `doc/02_CI_CD/rpa/scripts/rpa-flow.js` | Node.js / Playwright (JWT Salesforce) | **Activa** — usar desde `testing-factory.yml` |
+| Workflow | Rol |
+|----------|-----|
+| `pipeline-microservice-a.yml` / `pipeline-microservice-b.yml` | Caller del pipeline reusable por microservicio (rama y evento). |
+| `reusable-microservice-pipeline.yml` | Build → tests → quality gates → publish imagen → (push) aprobación operaciones si aplica → deliver GitOps. |
+| `testing-factory.yml` | **CI de feature y PR hacia `E`:** API reusable + k6 smoke + RPA informativo. |
+| `golden-pipeline-testing.yml` | **Suite completa** en push a `E`/`A`/`F`/`PRODUCCION` y PR hacia `A`/`F`/`PRODUCCION`. |
+| `reusable-api-testing.yml` | Karate + oasdiff reutilizable (lo llaman Testing Factory y Golden). |
+| `pipeline-contrato-openapi.yml` | oasdiff / contrato OpenAPI en PR (`E`, `A`, `F`, `PRODUCCION`) y push (`A`, `F`) con paths acotados. |
+| `performance-smoke.yml` | k6 smoke reusable + `schedule` nocturna (02:00 UTC) + `workflow_dispatch`. |
+| `performance-load-2k.yml` | Carga larga (manual / invocable); pensado para gates de release. |
+| `rpa.yml` | RPA reusable (Playwright). |
+| `pipeline-integration.yml` | **Solo manual** (`workflow_dispatch`): demo de promoción con tests de contrato/E2E (ver nota más abajo). |
+| `ci-cd-att.yml` | **Solo manual** (`workflow_dispatch`): orquestador legacy Karate + k6 + Selenium/RPA opcionales y quality gate interno. |
+| `api-smoke-tests.yml` | **Solo manual** — smoke Karate autocontenido. |
 
 ---
 
-## Estrategia de Ejecución por Contexto
-
-### Leyenda
+## Leyenda (tablas siguientes)
 
 | Símbolo | Significado |
 |---------|-------------|
-| ✅ | Automático y **bloqueante** — falla el pipeline si no pasa |
-| ⚠️ | Automático y **no bloqueante** — registra resultado sin bloquear |
-| 📋 | Manual o bajo demanda — no dispara automáticamente |
-| — | No aplica en este contexto |
+| ✅ | Bloqueante si el job corre y falla |
+| ⚠️ / informativo | Corre pero no rompe el pipeline (o depende de una variable) |
+| 📋 | Manual (`workflow_dispatch`) o revisión humana fuera del YAML |
+| — | No aplica o no está cableado en ese evento |
+
+Muchos workflows solo corren si cambian rutas bajo `paths:` (por ejemplo `microservice-a/**`). Si solo editas documentación en `doc/**`, **no esperes** el pipeline del microservicio.
 
 ---
 
-### Tabla Maestra de Ejecución
+## Qué corre en cada momento (visión por rama y evento)
 
-La tabla se lee por **columna** (contexto de ejecución) e indica qué controles aplican en cada momento del ciclo de vida.
+### A) Push a `feature/*`
 
-| Control de Calidad | Herramienta | `feature/*` push | PR `→ E` | `E` push | PR `E → A` | `A` push | PR `A → F` | `F` push | PR `F → PROD` | `PROD` push |
-|--------------------|-------------|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
-| **BUILD** | | | | | | | | | | |
-| Compilación (Gradle JAR) | Gradle 8 | ✅ | ✅ | ✅ | — | ✅ | — | ✅ | — | ✅ |
-| Detección de secrets | Gitleaks | ✅ | ✅ | ✅ | — | — | — | — | — | — |
-| Tests unitarios + cobertura | JUnit + JaCoCo (≥80%) | ✅ | ✅ | ✅ | — | ✅ | — | — | — | — |
-| Análisis de calidad de código | SonarCloud | ✅ | ✅ | ✅ | — | — | — | — | — | — |
-| **SEGURIDAD** | | | | | | | | | | |
-| Escaneo de dependencias (JAR) | Trivy filesystem | — | ✅ | ✅ | — | — | — | — | — | — |
-| Escaneo de imagen Docker | Trivy image | — | — | ✅ | — | ✅ | — | ✅ | — | ✅ |
-| **API TESTING** | | | | | | | | | | |
-| Breaking changes OpenAPI | oasdiff | — | ✅ | — | ✅ | — | ✅ | — | ✅ | — |
-| Smoke tests de endpoints | Karate `@smoke` | — | ✅ | ✅ | ✅ | ✅ | — | ✅ | — | ✅ |
-| Flujo E2E (8 pasos encadenados) | Karate `@e2e` | — | ✅ | — | ✅ | — | — | — | — | — |
-| Contrato entre microservicios | Karate `@contract` | — | ✅ | — | ✅ | — | ✅ | — | ✅ | — |
-| **PERFORMANCE** | | | | | | | | | | |
-| Smoke performance (20 VUs / 7 min) | k6 | — | ✅ | ✅ | ✅ | ✅ | — | — | — | — |
-| Load test (2000 VUs / 3600 s) | k6 | — | — | — | — | — | 📋 | — | 📋 | — |
-| **AUTOMATIZACIÓN** | | | | | | | | | | |
-| RPA Salesforce (flujo web completo) | Node.js + Playwright | — | ⚠️ | — | ⚠️ | ✅ | — | — | — | — |
-| **ENTREGA** | | | | | | | | | | |
-| Publicación imagen Docker (GHCR) | Docker + GHCR | — | — | ✅ | — | ✅ | — | ✅ | — | ✅ |
-| Despliegue GitOps | Kustomize + ArgoCD | — | — | ✅ | — | ✅ | — | ✅ | — | ✅ |
-| **APROBACIONES** | | | | | | | | | | |
-| Gate manual — Operaciones | Approval GitHub | — | — | — | ✅ | — | ✅ | — | ✅ | — |
-| Gate manual — Seguridad | Approval GitHub | — | — | — | — | — | — | — | ✅ | — |
+| Qué | Workflow típico | Notas |
+|-----|-----------------|--------|
+| Build + tests + Sonar + Trivy FS + publicar imagen | `pipeline-microservice-*.yml` | Solo si cambió el microservicio o los YAML/toml relacionados. **No ejecuta Deliver** (deploy) en feature: Deliver exige `push` a `E`/`A`/`F`/`PRODUCCION`. |
+| API + contrato + k6 smoke + RPA informativo | `testing-factory.yml` | Solo si cambian app, tests, simulación o workflows listados en `paths`. RPA suele ser **informativo** (`enforce_gate: false`). |
+
+**Objetivo:** feedback rápido al desarrollador sin desplegar a clusters compartidos.
 
 ---
 
-## Descripción Detallada por Contexto
+### B) Pull Request `feature/*` → `E`
 
-### 1. Push a `feature/*`
+| Qué | Workflow | Notas |
+|-----|----------|--------|
+| Build + tests + Gitleaks + Sonar + Trivy FS + build/push imagen | `pipeline-microservice-*.yml` | Misma línea que push, pero **sin jobs de deploy** (`Deliver` y gates de operaciones están condicionados a `push`). |
+| Karate (`@smoke`, `@e2e`, `@contract`) + oasdiff | `testing-factory.yml` → `reusable-api-testing.yml` | PR con base `E`. |
+| k6 smoke 20 VUs | `testing-factory.yml` → `performance-smoke.yml` | Tras API exitosa. |
+| RPA | `testing-factory.yml` → `rpa.yml` | **Informativo** salvo políticas futuras. |
+| Breaking changes OpenAPI | `pipeline-contrato-openapi.yml` | Si tocan OpenAPI/Java bajo paths definidos. |
 
-**Objetivo:** Feedback rápido al desarrollador. Sin simulación Docker ni despliegue.  
-**Duración estimada:** 5–8 minutos.
-
-| Etapa | Pipeline | Gate |
-|-------|----------|------|
-| Build + secrets + unit tests | `pipeline-microservice-*.yml` | ✅ Bloqueante |
-| Cobertura ≥ 80% | `reusable-microservice-pipeline.yml` | ✅ Bloqueante |
-| Análisis SonarCloud | `reusable-microservice-pipeline.yml` | ✅ Bloqueante |
-
----
-
-### 2. Pull Request `feature/*` → `E`
-
-**Objetivo:** Garantizar que el código que entra a la rama E no rompe contratos ni performance.  
-**Duración estimada:** 15–20 minutos (jobs en paralelo).
-
-| Etapa | Pipeline | Gate |
-|-------|----------|------|
-| Build + unit tests + Gitleaks + Trivy FS | `pipeline-microservice-*.yml` | ✅ Bloqueante |
-| Breaking changes OpenAPI | `pipeline-contrato-openapi.yml` | ✅ Bloqueante |
-| API Smoke (`@smoke`) | `ci-cd-att.yml` | ✅ Bloqueante |
-| API Integration E2E (`@e2e`) | `ci-cd-att.yml` | ✅ Bloqueante |
-| API Contract (`@contract`) | `ci-cd-att.yml` | ✅ Bloqueante |
-| Smoke Performance (k6) | `ci-cd-att.yml` → `performance-smoke.yml` | ✅ Bloqueante |
-| RPA Salesforce | `testing-factory.yml` | ⚠️ No bloqueante |
+**Objetivo:** que lo que entra a `E` no rompa contratos ni performance básica.
 
 ---
 
-### 3. Push a `E` (integración post-merge)
+### C) Push a `E` (tras merge a desarrollo)
 
-**Objetivo:** Desplegar al ambiente de Desarrollo y ejecutar la suite completa post-deploy.
+| Qué | Workflow | Notas |
+|-----|----------|--------|
+| Pipeline microservicio completo hasta Deliver | `pipeline-microservice-*.yml` | Incluye E2E Karate + k6 local en `Deliver` para **microservice-a** (`test_runner: karate`); **microservice-b** usa runner `smoke`. |
+| Suite completa API + k6 + RPA (política Golden) | `golden-pipeline-testing.yml` | `update_baseline` en k6 puede activarse en push a ramas de ambiente. |
 
-| Etapa | Pipeline | Gate |
-|-------|----------|------|
-| Build → JAR → Docker → tag `env-e-{sha}` | `pipeline-microservice-*.yml` | ✅ Bloqueante |
-| Trivy imagen Docker | `reusable-microservice-pipeline.yml` | ✅ Bloqueante |
-| Deploy a `env-e` (Kustomize + ArgoCD) | `reusable-microservice-pipeline.yml` | ✅ Bloqueante |
-| API Smoke post-deploy | `ci-cd-att.yml` | ✅ Bloqueante |
-| Smoke Performance + actualización de baseline | `performance-smoke.yml` | ✅ Bloqueante |
+**Objetivo:** imagen versionada, GitOps actualizado a `env-e`, validación post-merge.
 
 ---
 
-### 4. Pull Request `E` → `A` (gate de promoción a QA)
+### D) Pull Request `E` → `A`
 
-**Objetivo:** Gate de calidad estricto antes de QA. Usa imágenes reales del registry (no mocks locales).
+| Qué | Workflow | Notas |
+|-----|----------|--------|
+| Validación microservicio (sin deploy hasta merge) | `pipeline-microservice-*.yml` | Igual patrón PR: build/publicación sin Deliver. |
+| Golden: API + k6 + RPA | `golden-pipeline-testing.yml` | PR con base `A`. RPA puede volverse **bloqueante** si `RPA_BLOCKING_GATE=true` (variable de repo). |
+| Contrato OpenAPI | `pipeline-contrato-openapi.yml` | Según paths. |
 
-| Etapa | Pipeline | Gate |
-|-------|----------|------|
-| Contract Tests (imágenes `env-e`) | `pipeline-integration.yml` | ✅ Bloqueante |
-| E2E Full 8 pasos | `pipeline-integration.yml` | ✅ Bloqueante |
-| Breaking changes OpenAPI | `pipeline-contrato-openapi.yml` | ✅ Bloqueante |
-| Smoke Performance + comparación con baseline | `performance-smoke.yml` | ✅ Bloqueante |
-| RPA Salesforce | `testing-factory.yml` | ⚠️ No bloqueante |
-| **Aprobación manual — Operaciones** | GitHub Environments | ✅ Bloqueante |
+**Objetivo:** gate de calidad previo a QA. Las **aprobaciones de Operaciones** configuradas en GitHub no están en el job del PR: aparecen en el flujo de **`push` a `A`** (ver siguiente sección).
 
 ---
 
-### 5. Push a `A` (integración en QA)
+### E) Push a `A` (QA operativo)
 
-**Objetivo:** Desplegar al ambiente de QA y ejecutar la suite completa.
-
-| Etapa | Pipeline | Gate |
-|-------|----------|------|
-| Build → Docker → tag `env-a-{sha}` → push GHCR | `pipeline-microservice-*.yml` | ✅ Bloqueante |
-| Trivy imagen | `reusable-microservice-pipeline.yml` | ✅ Bloqueante |
-| Deploy a `env-a` | `reusable-microservice-pipeline.yml` | ✅ Bloqueante |
-| API Smoke + Integration + Contract | `ci-cd-att.yml` | ✅ Bloqueante |
-| Smoke Performance (nuevo baseline de A) | `performance-smoke.yml` | ✅ Bloqueante |
-| RPA Salesforce | `testing-factory.yml` | ✅ Bloqueante |
+| Qué | Workflow | Notas |
+|-----|----------|--------|
+| Publish + gate **OPERACIONES** + Deliver | `reusable-microservice-pipeline.yml` | Tras publish exitoso en **`push`** a `A`, el job `operations-approval` usa el environment `OPERACIONES` (revisores en GitHub). |
+| Golden suite | `golden-pipeline-testing.yml` | Mantiene baseline de performance y RPA si variables lo piden. |
 
 ---
 
-### 6. Pull Request `A` → `F` (gate de promoción a UAT)
+### F) Pull Request `A` → `F`
 
-**Objetivo:** Validación antes de UAT. Incluye prueba de carga real.
-
-| Etapa | Pipeline | Gate |
-|-------|----------|------|
-| Contract Tests | `pipeline-integration.yml` | ✅ Bloqueante |
-| E2E Full 8 pasos | `pipeline-integration.yml` | ✅ Bloqueante |
-| Breaking changes OpenAPI | `pipeline-contrato-openapi.yml` | ✅ Bloqueante |
-| **Load Performance (2000 VUs / 3600 s)** | `performance-load-2k.yml` | 📋 Manual — resultado visible |
-| RPA Salesforce | `testing-factory.yml` | ⚠️ No bloqueante |
-| **Aprobación manual — Operaciones** | GitHub Environments | ✅ Bloqueante |
+| Qué | Workflow | Notas |
+|-----|----------|--------|
+| Microservicio + Golden + OpenAPI | Igual patrón que PR hacia `A` pero base `F` | Carga pesada **no** está en Golden por defecto. |
+| Load test 2000 VUs | `performance-load-2k.yml` | **Manual** o vía orquestación explícita; pensado como evidencia para UAT. |
 
 ---
 
-### 7. Push a `F` (integración en UAT)
+### G) Push a `F` (UAT)
 
-**Objetivo:** Desplegar al ambiente de UAT con validación mínima post-deploy.
-
-| Etapa | Pipeline | Gate |
-|-------|----------|------|
-| Build → Docker → tag `env-f-{sha}` → push GHCR | `pipeline-microservice-*.yml` | ✅ Bloqueante |
-| Trivy imagen | `reusable-microservice-pipeline.yml` | ✅ Bloqueante |
-| Deploy a `env-f` | `reusable-microservice-pipeline.yml` | ✅ Bloqueante |
-| API Smoke post-deploy (health check) | `ci-cd-att.yml` | ✅ Bloqueante |
-| Performance nocturno (nightly) | `performance-smoke.yml` (cron 02:00 UTC) | ⚠️ Informativo |
+| Qué | Workflow | Notas |
+|-----|----------|--------|
+| Publish + gate **OPERACIONES** + Deliver a `env-f` | `reusable-microservice-pipeline.yml` | Misma lógica que `A`: aprobación en push post-publish. |
+| Golden | `golden-pipeline-testing.yml` | Sigue validando en ramas de release. |
 
 ---
 
-### 8. Pull Request `F` → `PRODUCCION` (gate de producción)
+### H) Pull Request `F` → `PRODUCCION`
 
-**Objetivo:** Gate más estricto del ciclo. Requiere aprobación de Operaciones y Seguridad.
+| Qué | Workflow | Notas |
+|-----|----------|--------|
+| Microservicio + Golden + OpenAPI | `pipeline-microservice-*.yml`, `golden-pipeline-testing.yml`, `pipeline-contrato-openapi.yml` | Máxima exigencia en tests reusables. |
+| Revisión de carga previa | `performance-load-2k.yml` | **Manual** — el equipo revisa resultados antes o durante el PR. |
 
-| Etapa | Pipeline | Gate |
-|-------|----------|------|
-| Contract Tests | `pipeline-integration.yml` | ✅ Bloqueante |
-| E2E Full 8 pasos | `pipeline-integration.yml` | ✅ Bloqueante |
-| Breaking changes OpenAPI | `pipeline-contrato-openapi.yml` | ✅ Bloqueante |
-| Revisión de resultados Load Test (de F) | `performance-load-2k.yml` | 📋 Revisión manual |
-| **Aprobación manual — Seguridad** | GitHub Environments | ✅ Bloqueante |
-| **Aprobación manual — Operaciones** | GitHub Environments | ✅ Bloqueante |
+**Nota:** en el YAML actual, el environment `OPERACIONES` aplica a pushes de **`A`** y **`F`**, no a `PRODUCCION`. Para producción suelen sumarse **reglas de rama, revisores del PR y procedimiento fuera del repo** según la organización.
 
 ---
 
-### 9. Push a `PRODUCCION`
+### I) Push a `PRODUCCION`
 
-**Objetivo:** Despliegue productivo con smoke test post-deploy y notificación.
-
-| Etapa | Pipeline | Gate |
-|-------|----------|------|
-| Build → Docker → tag `prod-{sha}` → push GHCR | `pipeline-microservice-*.yml` | ✅ Bloqueante |
-| Trivy imagen (CRITICAL/HIGH bloquea) | `reusable-microservice-pipeline.yml` | ✅ Bloqueante |
-| Deploy a `prod` (Kustomize + ArgoCD) | `reusable-microservice-pipeline.yml` | ✅ Bloqueante |
-| API Smoke post-deploy | `ci-cd-att.yml` | ✅ Bloqueante |
-| Job Summary + notificación | GitHub Actions Summary | — |
+| Qué | Workflow | Notas |
+|-----|----------|--------|
+| Deliver a `prod` | `pipeline-microservice-*.yml` | Incluye Trivy imagen con severidad **CRITICAL** bloqueante, GitOps `prod`, E2E/smoke en entorno simulado según microservicio. |
+| Golden | `golden-pipeline-testing.yml` | Valida la rama productiva tras cambios relevantes. |
 
 ---
 
-## Flujo Visual Completo
+## Tabla maestra simplificada (por tipo de control)
+
+| Control | Herramienta | feature push | PR → E | push E | PR → A | push A | PR → F | push F | PR → PROD | push PROD |
+|---------|-------------|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
+| Build + unit + JaCoCo ≥80% | Gradle | ✅* | ✅* | ✅* | ✅* | ✅* | ✅* | ✅* | ✅* | ✅* |
+| Secrets + Sonar + Trivy FS | Gitleaks / Sonar / Trivy | ✅* | ✅* | ✅* | ✅* | ✅* | ✅* | ✅* | ✅* | ✅* |
+| Docker build + Trivy imagen + GHCR | Docker / Trivy | ✅* | ✅* | ✅* | ✅* | ✅* | ✅* | ✅* | ✅* | ✅* |
+| Deploy GitOps + sync | Kustomize / script ArgoCD | — | — | ✅ | — | ✅ | — | ✅ | — | ✅ |
+| Karate + oasdiff (suites reusables) | Testing Factory / Golden | ✅† | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| k6 smoke | `performance-smoke.yml` | ✅† | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| k6 smoke baseline en ambiente | Golden / dispatch | — | — | ⚠‡ | — | ⚠‡ | — | ⚠‡ | — | ⚠‡ |
+| RPA Salesforce | `rpa.yml` | ⚠ | ⚠ | ⚠§ | ⚠§ | ⚠§ | ⚠§ | ⚠§ | ⚠§ | ⚠§ |
+| OpenAPI breaking (dedicated workflow) | `pipeline-contrato-openapi.yml` | — | ✅** | — | ✅** | — | ✅** | — | ✅** | — |
+| Aprobación Operaciones (GitHub Environment) | `OPERACIONES` | — | — | — | — | ✅ | — | ✅ | — | — |
+| Suite manual legacy | `ci-cd-att.yml` | 📋 | 📋 | 📋 | 📋 | 📋 | 📋 | 📋 | 📋 | 📋 |
+
+\* Condicionado a `paths` del microservicio.  
+† `testing-factory.yml` con filtro de cambios (`change-scope`).  
+‡ `update_baseline` en Golden en push a ramas de ambiente cuando el job de performance corre.  
+§ Política **informativa** por defecto en Testing Factory; en Golden puede ser **bloqueante** si `RPA_BLOCKING_GATE=true`.  
+\** Solo si cambian OpenAPI o código bajo paths del workflow.
+
+---
+
+## Casos de uso (cómo leer el flujo en la práctica)
+
+| Caso | Qué hacer | Qué observar en Actions |
+|------|-----------|-------------------------|
+| Desarrollo en una feature | Push a `feature/…` | `testing-factory` + quizá `pipeline-microservice-*` según archivos tocados. |
+| Integrar a desarrollo compartido | PR a `E` | Testing Factory + OpenAPI + pipelines de microservicio; tras merge, push a `E` despliega `env-e`. |
+| Promover a QA | PR `E` → `A`; luego merge | En el **push** a `A`, revisar gate `OPERACIONES` antes del Deliver. |
+| Promover a UAT | PR `A` → `F` | Igual: gate de operaciones en **push** a `F`. Evidencia de carga manual si aplica. |
+| Release a producción | PR `F` → `PRODUCCION` | Tras merge, push ejecuta deliver `prod` y Golden; revisión de carga y aprobaciones según proceso del equipo. |
+| Investigación / demo completa sin PR | Actions → `ci-cd-att.yml` | Ejecución manual (UI/Selenium y RPA opcionales vía variables `UI_TESTS_ENABLED`, `RPA_ENABLED`). |
+
+---
+
+## Variables de repositorio relevantes
+
+| Variable | Efecto |
+|----------|--------|
+| `RPA_ENABLED` | En Golden, favorece ejecutar RPA en ramas `E`, `A`, `F`, `PRODUCCION`. En Testing Factory, fuerza RPA informativo si está en `true`. |
+| `RPA_BLOCKING_GATE` | Si es `true`, Golden hace fallar el quality gate si RPA falla. |
+| `UI_TESTS_ENABLED` | Solo para `ci-cd-att.yml` (manual): activa Selenium. |
+
+Secrets típicos para RPA/SF están documentados en `rpa.yml` y en comentarios de `ci-cd-att.yml`.
+
+---
+
+## Flujo visual (resumen)
 
 ```
-feature/*
-   │
-   │  push → Build + Unit Tests + SonarCloud
-   │
-   ▼  Pull Request → E
-   │  ├── API Smoke + E2E + Contract (Karate)
-   │  ├── Breaking Changes (oasdiff)
-   │  ├── Smoke Performance (k6 / 20 VUs)
-   │  └── RPA Salesforce [no bloqueante]
-   │
-   ▼  merge → E
-   │  Build → Docker → Deploy env-e → API Smoke + Performance (baseline)
-   │
-   ▼  Pull Request → A
-   │  ├── Contract Tests (imágenes env-e reales)
-   │  ├── E2E Full 8 pasos
-   │  ├── Breaking Changes (oasdiff)
-   │  ├── Smoke Performance (comparación vs baseline)
-   │  └── Aprobación Operaciones [manual]
-   │
-   ▼  merge → A
-   │  Build → Docker → Deploy env-a → API full + RPA + Performance
-   │
-   ▼  Pull Request → F
-   │  ├── Contract Tests + E2E Full
-   │  ├── Breaking Changes (oasdiff)
-   │  ├── Load Test 2000 VUs [manual / revisión]
-   │  └── Aprobación Operaciones [manual]
-   │
-   ▼  merge → F
-   │  Build → Docker → Deploy env-f → Smoke post-deploy + Nightly perf
-   │
-   ▼  Pull Request → PRODUCCION
-   │  ├── Contract Tests + E2E Full
-   │  ├── Breaking Changes (oasdiff)
-   │  ├── Aprobación Seguridad [manual]
-   │  └── Aprobación Operaciones [manual]
-   │
-   ▼  merge → PRODUCCION
-      Build → Docker → Deploy prod → Smoke post-deploy + Notificación
+feature/*  ──push──► build/test rápido (paths) + Testing Factory (paths)
+     │
+     └── PR a E ──► API reusable + k6 + RPA info + OpenAPI (paths) + microservice PR jobs
+              │
+              merge/push E ──► deploy env-e + Golden + GitOps microservicios
+
+E ──PR──► A ──► (merge) push A ──► gate OPERACIONES ──► deploy env-a + Golden
+A ──PR──► F ──► (merge) push F ──► gate OPERACIONES ──► deploy env-f + Golden
+F ──PR──► PRODUCCION ──► (merge) push PROD ──► deploy prod + Golden
+
+Manuales puntuales: ci-cd-att.yml · api-smoke-tests.yml · pipeline-integration.yml · performance-load-2k.yml
 ```
 
 ---
 
-## Acciones Pendientes (TRA-19)
+## Limitaciones / deuda técnica conocida (no bloquean la lectura del flujo)
 
-| # | Archivo | Acción requerida |
-|---|---------|-----------------|
-| 1 | `ci-cd-att.yml` | Actualizar triggers: push → `feature/**`, PR → `[E, A, F]` |
-| 2 | `testing-factory.yml` | Reemplazar placeholders por Karate real + llamada a `performance-smoke.yml` |
-| 3 | `golden-pipeline-testing.yml` | Corregir ramas `develop/qa/uat` → `E/A` o convertir en `workflow_call` |
-| 4 | `api-smoke-tests.yml` | Desactivar trigger push; conservar `workflow_dispatch` |
-| 5 | `rpa.yml` | Alinear paths con `testing-factory.yml` (evitar doble ejecución) |
-| 6 | `pipeline-integration.yml` | Agregar llamada a `performance-load-2k.yml` como job opcional en A→F |
+1. **`pipeline-integration.yml`** declara entradas `E`/`A`/`F`, pero el job `validate` aún contiene combinaciones antiguas (`develop`/`qa`/`uat`). Trátelo como **workflow de demostración** hasta alinear el script de validación con las ramas reales.  
+2. **`performance-load-2k.yml`** usa etiquetas `develop`/`qa`/`uat` en inputs de entorno: son **nombres del workflow**, no necesariamente las ramas Git `E`/`A`/`F` — al ejecutarlo manualmente, elegir el valor coherente con el ambiente bajo prueba.  
+3. **`golden-pipeline-testing.yml`** mantiene opciones históricas (`develop`, `qa`) en `workflow_dispatch` para inputs; las ramas de producto oficiales son `E`, `A`, `F`, `PRODUCCION`.
 
 ---
 
-*Documentado en: `doc/02_CI_CD/gitflow-pipeline-strategy.md`*  
-*Generado a partir del análisis en TRA-18 — AT&T PaymentBox PoC*
+## Evolución y duplicidad histórica
+
+La PoC consolidó pruebas API en **`reusable-api-testing.yml`** llamado desde **Testing Factory** (camino feature/→E) y **Golden** (release). Los workflows `ci-cd-att.yml` y `api-smoke-tests.yml` quedaron como **herramientas manuales** o legado documentado; no sustituyen a Factory/Golden en triggers automáticos.
+
+---
+
+*Documento: `doc/02_CI_CD/gitflow-pipeline-strategy.md`*  
+*Actualizado para alineación con rama `E` y workflows en `.github/workflows/` (estado al 2026-05-13).*
