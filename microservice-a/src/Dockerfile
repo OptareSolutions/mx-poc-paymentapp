@@ -10,6 +10,7 @@ RUN gradle bootJar --no-daemon
 
 # ── Stage 2: Run ───────────────────────────────────────────────────────────────
 FROM eclipse-temurin:17-jre-alpine
+LABEL com.optare.poc.deploy-marker="microservice-a TRA-36 T2 2026-05-14 (base rama E)"
 WORKDIR /app
 RUN addgroup -S appgroup && adduser -S appuser -G appgroup
 COPY --from=build /app/build/libs/*.jar app.jar
