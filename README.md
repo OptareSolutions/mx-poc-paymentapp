@@ -3,38 +3,55 @@
 > **Optare Solutions** para Telco Operator | Arquitecto: QE & DevSecOps  
 > Validado con: Evelyn Pineda & Billy Cortes
 
-[![microservice-a](../../actions/workflows/pipeline-microservice-a.yml/badge.svg)](../../actions/workflows/pipeline-microservice-a.yml)
-[![microservice-b](../../actions/workflows/pipeline-microservice-b.yml/badge.svg)](../../actions/workflows/pipeline-microservice-b.yml)
-[![integración](../../actions/workflows/pipeline-integration.yml/badge.svg)](../../actions/workflows/pipeline-integration.yml)
+[![microservice-a](https://github.com/OptareSolutions/mx-poc-paymentapp/actions/workflows/pipeline-microservice-a.yml/badge.svg?branch=E)](https://github.com/OptareSolutions/mx-poc-paymentapp/actions/workflows/pipeline-microservice-a.yml)
+[![microservice-b](https://github.com/OptareSolutions/mx-poc-paymentapp/actions/workflows/pipeline-microservice-b.yml/badge.svg?branch=E)](https://github.com/OptareSolutions/mx-poc-paymentapp/actions/workflows/pipeline-microservice-b.yml)
+[![testing-factory](https://github.com/OptareSolutions/mx-poc-paymentapp/actions/workflows/testing-factory.yml/badge.svg?branch=E)](https://github.com/OptareSolutions/mx-poc-paymentapp/actions/workflows/testing-factory.yml)
+[![golden](https://github.com/OptareSolutions/mx-poc-paymentapp/actions/workflows/golden-pipeline-testing.yml/badge.svg?branch=E)](https://github.com/OptareSolutions/mx-poc-paymentapp/actions/workflows/golden-pipeline-testing.yml)
+[![pipeline-contrato-openapi](https://github.com/OptareSolutions/mx-poc-paymentapp/actions/workflows/pipeline-contrato-openapi.yml/badge.svg?branch=E)](https://github.com/OptareSolutions/mx-poc-paymentapp/actions/workflows/pipeline-contrato-openapi.yml)
+[![integración](https://github.com/OptareSolutions/mx-poc-paymentapp/actions/workflows/pipeline-integration.yml/badge.svg?branch=E)](https://github.com/OptareSolutions/mx-poc-paymentapp/actions/workflows/pipeline-integration.yml)
 
 ---
 
 ## Objetivo
 
-Demostrar una cadena de entrega multi-ambiente con **calidad declarativa** y **promoción controlada** entre entornos, donde cada cambio en un microservicio desencadena automáticamente un ciclo completo de validación sin intervención humana, cubriendo los 8 pasos del flujo "Recarga por PaymentBox".
+Demostrar una cadena de entrega **multi-ambiente** con **calidad declarativa** y **promoción por PR** (`feature/*` ? `E` ? `A` ? `F` ? `PRODUCCION`), donde los cambios en código disparan validación automática (tests API, contrato OpenAPI, k6, RPA informativo en feature, suite **Golden** en promoción) y **publish / Deliver GitOps** solo en pushes a ramas de ambiente.
 
-Dos escenarios de demo ilustran el valor de los gates de calidad:
-- **DEMO BREAK 1** — una ruptura de contrato entre servicios, detectada antes de llegar a QA
-- **DEMO BREAK 2** — una ruptura de comportamiento, detectada en E2E antes de actualizar el manifiesto GitOps
+Dos escenarios de demo ilustran gates de calidad end-to-end:
 
----
-
-## Arquitectura Multi-Ambiente
-
-```
-Rama          Entorno   Overlay Kustomize
-----------    ------    -----------------
-develop    ?  env-e     k8s/overlays/env-e/   (Desarrollo)
-qa         ?  env-a     k8s/overlays/env-a/   (QA)
-uat        ?  env-u     k8s/overlays/env-u/   (UAT)
-main       ?  prod      k8s/overlays/prod/    (Producción)
-```
-
-La **promoción entre entornos es manual y declarativa**: se activa con `pipeline-integration.yml` (workflow_dispatch), que ejecuta tests de contrato + E2E completo antes de copiar las tags de imagen al overlay destino.
+- **DEMO BREAK 1** — ruptura de **contrato** (OpenAPI / Karate entre servicios): debe detectarse en **PR** o en jobs de contrato, antes de promover.
+- **DEMO BREAK 2** — ruptura de **comportamiento** en el flujo de negocio: debe detectarse en **Deliver** (Karate E2E) al integrar en rama con despliegue, sin actualizar manifiesto si falla.
 
 ---
 
-## Flujo de 8 Pasos Automatizado
+## Documentación relacionada
+
+| Recurso | Contenido |
+|---------|-----------|
+| [**Estrategia GitFlow y pipelines**](doc/02_CI_CD/gitflow-pipeline-strategy.md) | Ramas `E` / `A` / `F` / `PRODUCCION`, inventario de workflows, guion de demo (README + PRs), matriz de ejecución, **casos verde vs rojo** (contrato, E2E, cobertura, Trivy, OPERACIONES). |
+| [**Guía de demo local**](demo/DEMO_GUIDE.md) | Arquitectura del entorno simulado, narrativa de los DEMO BREAK y uso de scripts. |
+| [**Documentación CI/CD**](doc/02_CI_CD/README.md) | Detalle por carpeta (API testing, performance, RPA, quality gates). |
+
+La línea de producto PoC en GitHub convive a veces con ramas históricas (`develop` / `qa` / …). La referencia de flujo **oficial PaymentBox** para este repo es la rama **`E`**.
+
+---
+
+## Arquitectura multi-ambiente (GitFlow)
+
+```
+Rama Git       Rol típico        Overlay Kustomize (manifiesto)
+--------       ----------          ------------------------------
+E              Desarrollo          k8s/overlays/env-e/
+A              QA                  k8s/overlays/env-a/
+F              UAT / preprod       (pipeline usa prefijo env-f en imagen; en repo puede alinearse con overlays existentes, p. ej. env-u — revisar `k8s/overlays/`)
+PRODUCCION     Producción          k8s/overlays/prod/
+feature/*      Trabajo aislado     Sin overlay propio; CI sin publish hasta integrar
+```
+
+La **promoción** entre ambientes es por **merge** a la rama destino; en `A`, `F` y `PRODUCCION` el pipeline puede exigir aprobación del environment **OPERACIONES** antes del **Deliver** (ver documento de estrategia).
+
+---
+
+## Flujo de 8 pasos automatizado
 
 | Paso | Tipo | Herramienta | Descripción |
 |------|------|-------------|-------------|
@@ -43,199 +60,148 @@ La **promoción entre entornos es manual y declarativa**: se activa con `pipeline
 | **3** | UI/DB | Karate DSL + SQL | Seleccionar Monto (coherencia con BD) |
 | **4** | Mock/Contrato | Prism CLI | API Operador BLUE (validación de contrato) |
 | **5** | UI | Selenium Headless | Seleccionar Método de Pago |
-| **6** | Performance | k6 Smoke Test | Ruta Crítica — umbrales p95 < 2s |
+| **6** | Performance | k6 Smoke Test | Ruta crítica — umbrales p95 |
 | **7** | DB | Karate DSL | Persistencia del pago en el entorno |
 | **8** | Mock/API | Prism CLI | Emisión del recibo (PDF sintético) |
 
 ---
 
-## Estructura del Repositorio
+## Estructura del repositorio
 
 ```
 mx-poc-paymentapp/
-+-- .github/workflows/
-¦   +-- pipeline-microservice-a.yml   # Pipeline Team A (4 jobs, path trigger)
-¦   +-- pipeline-microservice-b.yml   # Pipeline Team B (4 jobs, path trigger)
-¦   +-- pipeline-integration.yml      # Promoción manual entre entornos
-¦   +-- pipeline.yml                  # LEGACY — mantenido como referencia
-+-- microservice-a/                   # PaymentBox Core (port 8080)
-¦   +-- src/main/java/                # Spring Boot (controller, service, model)
-¦   +-- src/test/java/                # JUnit 5 + Mockito (cobertura >= 80%)
-¦   +-- src/Dockerfile                # Multi-stage (gradle build ? JRE alpine)
-¦   +-- build.gradle
-¦   +-- sonar-project.properties
-+-- microservice-b/                   # Customer Profile Service (port 8081)
-¦   +-- src/main/java/                # Customer profile API (CustomerProfileDto)
-¦   +-- src/test/java/
-¦   +-- src/Dockerfile
-¦   +-- build.gradle
-¦   +-- sonar-project.properties
-+-- ui-paymentbox/                    # Angular UI (port 80)
-¦   +-- src/app/
-¦   +-- Dockerfile
-¦   +-- nginx.conf
-+-- k8s/
-¦   +-- base/                         # Manifests K8s base (Deployment + Service)
-¦   ¦   +-- microservice-a/
-¦   ¦   +-- microservice-b/
-¦   ¦   +-- ui-paymentbox/
-¦   +-- overlays/                     # Kustomize overlays por entorno
-¦       +-- env-e/kustomization.yaml  # develop ? tags env-e-{sha}
-¦       +-- env-a/kustomization.yaml  # qa      ? tags env-a-{sha}
-¦       +-- env-u/kustomization.yaml  # uat     ? tags env-u-{sha}
-¦       +-- prod/kustomization.yaml   # main    ? tags prod-{sha}
-+-- simulation/
-¦   +-- docker-compose.yml            # Entorno simulado completo (4 servicios)
-¦   +-- prism-mocks/
-¦   ¦   +-- operador.yaml             # OpenAPI mock — Paso 4
-¦   ¦   +-- recibo.yaml               # OpenAPI mock — Paso 8
-¦   +-- tdm-seeders/
-¦       +-- 01_schema.sql
-¦       +-- 02_billy_profiles.sql     # Perfiles Billy 1-5
-+-- tests/
-¦   +-- functional-karate/            # Karate DSL — 8 pasos + contrato
-¦   +-- ui-selenium/                  # Selenium Headless — pasos 1, 3, 5
-¦   +-- k6/smoke_recarga.js           # Performance Smoke — Paso 6
-+-- demo/
-    +-- break-contract.ps1            # DEMO BREAK 1 — rompe contrato DTO
-    +-- break-behavior.ps1            # DEMO BREAK 2 — activa validación monto
-    +-- restore.ps1                   # Restaurar estado verde
+??? .github/workflows/
+?   ??? pipeline-microservice-a.yml      # CICD Team A (path trigger; llama reusable)
+?   ??? pipeline-microservice-b.yml      # CICD Team B
+?   ??? reusable-microservice-pipeline.yml
+?   ??? testing-factory.yml              # feature/* + PR ? E
+?   ??? golden-pipeline-testing.yml    # push/PR promoción hacia A/F/PRODUCCION
+?   ??? reusable-api-testing.yml
+?   ??? pipeline-contrato-openapi.yml
+?   ??? performance-smoke.yml
+?   ??? rpa.yml
+?   ??? pipeline-integration.yml        # manual (demo promoción)
+?   ??? legacy/pipeline.yml              # LEGACY — referencia
+??? microservice-a/                     # PaymentBox Core (puerto 8080)
+?   ??? src/main/java/
+?   ??? src/test/java/
+?   ??? src/Dockerfile
+?   ??? build.gradle
+?   ??? docs/openapi*.yaml
+?   ??? sonar-project.properties
+??? microservice-b/                     # Customer Profile (puerto 8081)
+?   ??? …
+?   ??? docs/openapi*.yaml
+??? ui-paymentbox/                      # Angular UI
+??? k8s/
+?   ??? base/
+?   ??? overlays/                       # env-e, env-a, env-u, prod
+??? simulation/                         # docker-compose + Prism + TDM
+??? tests/                              # Karate, Selenium, k6
+??? demo/
+?   ??? break-contract.ps1              # DEMO BREAK 1
+?   ??? break-behavior.ps1              # DEMO BREAK 2
+?   ??? restore.ps1
+?   ??? DEMO_GUIDE.md
+??? doc/02_CI_CD/
+    ??? README.md
+    ??? gitflow-pipeline-strategy.md    # Estrategia y guiones de demo
 ```
 
 ---
 
 ## Pipelines GitHub Actions
 
-### Pipeline por Microservicio (automático en push)
+### Por microservicio (`pipeline-microservice-*.yml`)
 
-Cada microservicio tiene su propio pipeline independiente con **path triggers**. Los dos equipos pueden trabajar en paralelo sin bloqueos.
+Triggers en **`feature/**`**, **`E`**, **`A`**, **`F`**, **`PRODUCCION`** con filtros `paths` por carpeta del servicio. El reusable ejecuta, en orden conceptual:
 
+1. **Build** — JAR Gradle  
+2. **Test** — unitarios + JaCoCo (umbral **? 80%**)  
+3. **Quality gates** — Gitleaks, Sonar, Trivy FS *(según evento/rama; no en todos los push, p. ej. `feature/*` no ejecuta este job)*  
+4. **Publish** — build de imagen, **Trivy imagen (CRITICAL bloqueante)**, push GHCR *(solo push a ramas de ambiente + `workflow_dispatch`)*  
+5. **OPERACIONES** — aprobación en **`A` / `F` / `PRODUCCION`** antes de continuar  
+6. **Deliver** — validación E2E/smoke + actualización `k8s/overlays/<overlay>/kustomization.yaml` + sync simulado ArgoCD  
+
+**Tag de imagen (GHCR):** `{version}-{sha7}.{run_number}` (definido en el reusable).
+
+### Testing Factory y Golden
+
+- **Testing Factory** — `push` en `feature/**` y `pull_request` con base **`E`**: API (Karate + oasdiff vía reusable), k6 smoke, RPA (informativo por defecto).  
+- **Golden** — `push` en **`E`/`A`/`F`/`PRODUCCION`** y **PR** con base **`A`/`F`/`PRODUCCION`**: suite completa consolidada.
+
+### Contrato OpenAPI dedicado
+
+**`pipeline-contrato-openapi.yml`** — breaking changes en PR hacia ramas de ambiente y revalidación en push según `paths` (specs y código bajo prefijos definidos en el YAML).
+
+### Casos verde y rojo (demo)
+
+Para una matriz de **qué falla y dónde** (contrato OpenAPI, Karate, E2E Deliver, cobertura, Trivy, OPERACIONES, Golden), usar la sección **«Casos de demostración: camino verde vs fallos esperados»** en [`doc/02_CI_CD/gitflow-pipeline-strategy.md`](doc/02_CI_CD/gitflow-pipeline-strategy.md). Los scripts **`demo/break-contract.ps1`** y **`demo/break-behavior.ps1`** aplican roturas reproducibles; **`demo/restore.ps1`** revierte.
+
+### Pipeline de integración (manual)
+
+**`pipeline-integration.yml`** — `workflow_dispatch` para escenarios de **promoción** y validación de contrato/E2E sin depender de un PR concreto. Revisar inputs y overlays en el YAML antes de la demo (algunos comentarios históricos pueden referir nombres antiguos de entorno).
+
+---
+
+## DEMO: escenarios de ruptura
+
+### DEMO BREAK 1 — Ruptura de contrato
+
+**Quién:** Team B (`microservice-b`) altera el contrato público (DTO / OpenAPI) sin coordinar con consumidores.  
+**Dónde falla (automático):** **`testing-factory.yml`** / **`reusable-api-testing.yml`** (Karate + oasdiff) en **PR `feature/*` ? `E`**, y/o **`pipeline-contrato-openapi.yml`** si los archivos tocados entran en `paths`.  
+**Dónde falla (manual):** Job de contrato en **`pipeline-integration.yml`**.
+
+```powershell
+# Rama ejemplo: feature/demo-break1 desde E
+.\demo\break-contract.ps1
+git add .
+git commit -m "demo: BREAK 1 - contrato"
+git push -u origin feature/demo-break1
+# Abrir PR ? E y observar fallo en API/contrato OpenAPI
+# Restaurar:
+.\demo\restore.ps1
+git add . && git commit -m "restore: contrato" && git push
 ```
-Push a develop|qa|uat|main  (cambio en microservice-{a|b}/**)
-  |
-  v
-Job 1 · Build & Calidad     ? JUnit + JaCoCo (=80%) + SonarCloud
-  |
-  v
-Job 2 · Seguridad            ? Trivy fs scan (CRITICAL+HIGH, bloqueante)
-  |
-  v
-Job 3 · Image Ops            ? Docker build + Trivy image scan + Push GHCR
-  |                             Tag: {env-prefix}-{7-char-sha}
-  v
-Job 4 · E2E / Smoke + GitOps ? Karate E2E (msvc-a) | Smoke test (msvc-b)
-                                 ? Si pasa ? actualiza kustomization.yaml
-                                 ? git commit [skip ci] + ArgoCD sync (sim.)
-```
 
-**Tag de imagen por entorno:**
+### DEMO BREAK 2 — Ruptura de comportamiento (E2E)
 
-| Rama | Tag |
-|------|-----|
-| `develop` | `env-e-a1b2c3d` |
-| `qa` | `env-a-a1b2c3d` |
-| `uat` | `env-u-a1b2c3d` |
-| `main` | `prod-a1b2c3d` |
+**Quién:** Team A introduce una regla (p. ej. validación de monto) que rompe el flujo de 8 pasos.  
+**Dónde falla:** **Deliver** · **Karate E2E** en **`reusable-microservice-pipeline.yml`**, cuando hay **`push`** tras merge en rama con **publish + Deliver** (p. ej. integración en **`E`**).
 
-### Pipeline de Integración (promoción manual)
-
-Activado manualmente desde **Actions ? Pipeline Integración ? Run workflow**.
-
-```
-workflow_dispatch (promote_from, promote_to)
-  |
-  v
-Job 0 · Validar Promoción    ? Solo permite: develop?qa | qa?uat | uat?main
-  |
-  v
-Job 1 · Tests Contrato       ? ?? DEMO BREAK 1: Karate valida campos del
-  |                              API público de microservice-b
-  v
-Job 2 · E2E Completo         ? Karate 8 pasos + k6
-  |
-  v
-Job 3 · GitOps Promoción     ? Copia tags de imagen origen ? destino
-                                git commit [skip ci] + ArgoCD sync (sim.)
+```powershell
+.\demo\break-behavior.ps1
+git add .
+git commit -m "demo: BREAK 2 - comportamiento"
+# Integrar vía PR hasta ejecutar push con Deliver (p. ej. merge a E)
+# Observar fallo en paso DEMO BREAK 2 · Karate E2E
+.\demo\restore.ps1
+git add . && git commit -m "restore: comportamiento" && git push
 ```
 
 ---
 
-## DEMO: Escenarios de Ruptura
-
-### DEMO BREAK 1 — Ruptura de Contrato
-
-**Quién:** Team B (microservice-b) renombra campos del DTO público sin coordinar con Team A.  
-**Rama:** `develop`  
-**Dónde falla:** `pipeline-integration.yml` Job 1 (Tests de Contrato)
-
-```powershell
-# 1. Ejecutar el script de ruptura
-demo\break-contract.ps1
-
-# 2. Push a develop — pipeline-microservice-b PASA ? (tests unitarios actualizados)
-git add . && git commit -m "demo: BREAK 1 - romper contrato DTO" && git push origin develop
-
-# 3. Trigger manual: pipeline-integration.yml  (develop ? qa)
-# ? Job 1 FALLA ?  Karate: match response.telefono == '4544'  ? campo ya es 'phone'
-# ? Promoción a env-a BLOQUEADA
-
-# 4. Restaurar
-demo\restore.ps1 && git add . && git commit -m "restore" && git push origin develop
-```
-
-### DEMO BREAK 2 — Ruptura de Comportamiento
-
-**Quién:** Team A activa una validación de monto mínimo ($100) sin avisar a QA.  
-**Rama:** `qa`  
-**Dónde falla:** `pipeline-microservice-a.yml` Job 4 (E2E Karate, rama qa)
-
-```powershell
-# 1. Ejecutar el script de ruptura
-demo\break-behavior.ps1
-
-# 2. Push a qa — Jobs 1-3 PASAN ? (unit tests no cubren el escenario Billy $20)
-git add . && git commit -m "demo: BREAK 2 - validación monto mínimo" && git push origin qa
-
-# 3. pipeline-microservice-a.yml Job 4 FALLA ?
-#    Karate Paso 6/7: POST /api/pagos/registrar monto=20 ? HTTP 400 (esperaba 201)
-#    El overlay env-a NO se actualiza — GitOps protege el entorno
-
-# 4. Restaurar
-demo\restore.ps1 && git add . && git commit -m "restore" && git push origin qa
-```
-
----
-
-## Probar Localmente
+## Probar localmente
 
 ```bash
-# Levantar el entorno simulado completo
 cd simulation
 docker compose up -d
-docker compose ps   # todos los servicios deben estar "healthy"
+docker compose ps
 
-# API microservice-a
+# API microservice-a / microservice-b
 open http://localhost:8080/swagger-ui.html
-
-# API microservice-b
 open http://localhost:8081/swagger-ui.html
 
-# Ejecutar tests Karate
 cd tests/functional-karate && mvn test
-
-# Ejecutar tests Selenium (headless)
-cd tests/ui-selenium && mvn test -Dapp.url=http://localhost:8080
-
-# Ejecutar smoke test k6
+cd ../ui-selenium && mvn test -Dapp.url=http://localhost:8080
 k6 run --env BASE_URL=http://localhost:8080 tests/k6/smoke_recarga.js
 
-# Detener el entorno
-cd simulation && docker compose down -v
+cd ../../simulation && docker compose down -v
 ```
 
 ---
 
-## Datos Sintéticos (TDM)
+## Datos sintéticos (TDM)
 
 | Perfil | Teléfono | Estado | Uso |
 |--------|----------|--------|-----|
@@ -251,7 +217,7 @@ cd simulation && docker compose down -v
 
 | Métrica | Objetivo | Mecanismo |
 |---------|----------|-----------|
-| **Deployment Frequency** | Cada push por rama | Pipelines automáticos con path triggers |
-| **Lead Time for Changes** | < 10 min pipeline | 4 jobs secuenciales por microservicio |
-| **Change Failure Rate** | < 1% | JaCoCo =80% + Trivy + Karate E2E + gates GitOps |
-| **MTTR** | Automático | Manifiesto no se actualiza si falla E2E; rollback por git revert |
+| **Deployment Frequency** | Cada cambio integrado en rama de ambiente | Path triggers + publish en `E`/`A`/… |
+| **Lead Time for Changes** | Acotado por duración de jobs | Pipeline reusable en etapas paralelizables donde aplica |
+| **Change Failure Rate** | Gateo con tests, contrato, Trivy y aprobaciones | Bloqueo antes de Deliver o sin merge si falla PR |
+| **MTTR** | Revert / fix en rama | Manifiesto no avanza si Deliver falla; rollback vía git |

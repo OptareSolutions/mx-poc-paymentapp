@@ -5,7 +5,7 @@
 > **Última actualización:** 2026-05-14  
 > **Issues de referencia:** TRA-18 / TRA-19 / TRA-33 / **TRA-41** (guion de demostración y matriz)
 
-> **Doble verificación:** contenido releído frente a **`origin/E`** en el commit **`e822d2f`**, en especial `reusable-microservice-pipeline.yml` (jobs build/test, `quality-gates`, `publish`, gate **OPERACIONES** en `A`/`F`/`PRODUCCION`, Deliver), `pipeline-microservice-a.yml` / `b`, `testing-factory.yml` y `golden-pipeline-testing.yml`. La rama previa del agente se eliminó en remoto; este archivo vive en la rama `verify/tra41-from-e` partiendo de ese mismo `E`.
+> **Doble verificación:** contenido contrastado con los workflows de la rama **`E`** (`reusable-microservice-pipeline.yml`, callers, `testing-factory.yml`, `golden-pipeline-testing.yml`, `pipeline-contrato-openapi.yml`). Tras cada sincronización con `origin/E`, conviene revisar que los `paths:` sigan coincidiendo.
 
 ### Rama base del análisis (`E`)
 
@@ -288,6 +288,33 @@ Evento y ramas en columnas; marcamos si el workflow **puede** ejecutarse cuando 
 
 ---
 
+## Casos de demostración: camino verde vs fallos esperados
+
+En la demo conviene enseñar **dos familias** de resultados: flujos que **terminan bien** (gates en verde, merge y Deliver cuando aplica) y otros donde **algo rompe de forma controlada** (contrato, negocio, calidad o seguridad), para que la audiencia vea *shift-left* y promoción real.
+
+### Tabla resumen (qué probar y dónde se nota)
+
+| Tipo | Ejemplo de cambio | Dónde suele verse el resultado |
+|------|-------------------|-------------------------------|
+| **Verde** | Solo `README`, doc, o código que mantiene contratos y tests | **Testing Factory** y/o CICD de microservicio completan; tras merge a `E`/`A`/… aparecen **publish + Deliver** (y **Golden** en ramas de ambiente) según el guion de arriba. |
+| **Rojo — OpenAPI / oasdiff** | Spec incompatible (`microservice-*/docs/openapi*.yaml`) o cambio de API analizado como *breaking* | **`reusable-api-testing.yml`**: paso de *breaking changes* bloquea el job. También **`pipeline-contrato-openapi.yml`** en PR cuando los `paths:` del workflow aplican. En el PR, puede generarse comentario con el diff oasdiff. |
+| **Rojo — contrato en Karate (runtime)** | DTO o JSON real no coincide con features `@contract` / integración (p. ej. renombre de campos sin avisar) | Misma **API reusable** (Karate); en escenarios manuales, job de contrato en **`pipeline-integration.yml`**; en **Deliver**, el smoke de **microservice-b** o E2E de **microservice-a** según qué consumidor rompe. |
+| **Rojo — negocio / E2E (DEMO BREAK 2)** | Regla nueva (p. ej. validación de monto) que rompe el flujo de los 8 pasos | Job **Deliver** · paso **Karate E2E** en **`reusable-microservice-pipeline.yml`** (push tras integración en rama con Deliver; típicamente post-merge a `E` o superior). El manifiesto GitOps **no** debe actualizarse si el job falla. |
+| **Rojo — tests o cobertura** | Test unitario fallido o cobertura estricta de JaCoCo no cumplida (umbral **≥ 80%**) | Job **Test** · `jacocoTestCoverageVerification` en el reusable (bloquea antes de publish). |
+| **Rojo — imagen** | Vulnerabilidad **CRITICAL** en imagen (Trivy) | Job **Publish** · scan de imagen con `exit-code: 1` en severidad CRITICAL. |
+| **Rojo — operaciones** | Falta aprobación o rechazo explícito | Environment **`OPERACIONES`** en push a **`A`**, **`F`** o **`PRODUCCION`**: el flujo queda esperando revisión en **Deployments** antes de Deliver. |
+| **RPA / performance (Golden)** | Umbrales k6 o RPA cuando `RPA_BLOCKING_GATE=true` | **`golden-pipeline-testing.yml`** (y cadenas que invocan los mismos reusables). En Testing Factory el RPA suele ser **informativo** salvo configuración. |
+
+### Guion mínimo verde + rojo
+
+1. **Verde:** seguir la sección *Guion de demostración* (README en ambos microservicios, PR a `E`, observar Factory + CICD sin tocar OpenAPI).  
+2. **Rojo contrato:** en una `feature/*`, aplicar **`demo/break-contract.ps1`** (o un cambio OpenAPI breaking manual), commit + push, abrir PR → `E` y mostrar el fallo en **Testing Factory** y/o **`pipeline-contrato-openapi`**. Restaurar con **`demo/restore.ps1`** y un commit de reversión.  
+3. **Rojo comportamiento:** **`demo/break-behavior.ps1`**, integrar el cambio hasta un **push** que ejecute **Deliver** con Karate (p. ej. tras merge a `E`), y mostrar el paso **DEMO BREAK 2** en rojo. Restaurar igualmente.
+
+Detalle paso a paso de los guiones PowerShell y narrativa local: **`demo/DEMO_GUIDE.md`**.
+
+---
+
 ## Casos de uso (cómo leer el flujo en la práctica)
 
 | Caso | Qué hacer | Qué observar en Actions |
@@ -346,4 +373,4 @@ La PoC consolidó pruebas API en **`reusable-api-testing.yml`** llamado desde **
 ---
 
 *Documento: `doc/02_CI_CD/gitflow-pipeline-strategy.md`*  
-*Actualizado para alineación con rama `E` y workflows en `.github/workflows/` (revisión 2026-05-14, contra commit `e822d2f` en `E`; incluye guion TRA-41).*
+*Actualizado para alineación con rama `E` y workflows en `.github/workflows/` (revisión 2026-05-14; guion TRA-41 + casos verde/rojo).*
