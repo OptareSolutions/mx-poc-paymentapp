@@ -8,14 +8,24 @@
 #   image_name         – GHCR image path (without registry prefix)
 #   test_runner        – karate (E2E full suite) | smoke (contract smoke test)
 #
-# Branch → Environment mapping:
-#   E          → env-e  (Desarrollo / Dev)
-#   A          → env-a  (QA)
-#   F          → env-f  (Preprod)
-#   PRODUCCION → prod   (Producción)
+# Branch → Overlay (suffix tag / manifest):
+#   E          → env-e  · Desarrollo
+#   A          → env-a  · QA
+#   F          → env-f  · Preprod (alias en scripts)
+#   PRODUCCION → prod   · Producción
+#   *          → env-e  · ramas tipo `feature/*`, etc.: overlay desarrollo
 #
-# Deliver job (step 5) only runs on push events (post-merge deploys).
-# On pull_request events it is skipped — validation only, no deploy.
+# Momentos (caller `pipeline-microservice-*.yml`):
+#   · push sobre feature/*, E, A, F, PRODUCCIÓN  → ejecuta reproducible hasta Publish (+ Deliver si `push|dispatch`)
+#   · pull_request ↔ base branch ∈ {E, A, F, PRODUCCIÓN} típico head feature/*
+#       ⇒ validación antes de fusionar; Deliver sigue sólo después del merge (`push`).
+#
+# Mapeo ante PR: usar **base_ref** como destino lógico (ambiente donde se fusionará),
+# no la rama sintética de merge.
+#
+# Jobs Deliver + gates Operaciones/Dev siguen sólo cuando `push` ó `workflow_dispatch`
+# (`github.event_name`) — sobre PR sólo compilás/calidades/publicás etiqueta provisional.
+#
 # ==============================================================================
 name: "Reusable: Microservice CI/CD pipeline"
 
@@ -259,7 +269,15 @@ jobs:
       - name: "Publish · Mapear rama a ambiente"
         id: env-info
         run: |
-          case "${{ github.ref_name }}" in
+          EVENT="${{ github.event_name }}"
+          if [ "${EVENT}" = "pull_request" ]; then
+            BRANCH_MAP="${{ github.base_ref }}"
+          else
+            BRANCH_MAP="${{ github.ref_name }}"
+          fi
+          echo "Mapped branch for overlays: ${BRANCH_MAP}" >> $GITHUB_STEP_SUMMARY
+
+          case "${BRANCH_MAP}" in
             E)          echo "overlay=env-e" >> $GITHUB_OUTPUT ; echo "name=E (Desarrollo)" >> $GITHUB_OUTPUT ; echo "prefix=env-e" >> $GITHUB_OUTPUT ;;
             A)          echo "overlay=env-a" >> $GITHUB_OUTPUT ; echo "name=A (QA)"         >> $GITHUB_OUTPUT ; echo "prefix=env-a" >> $GITHUB_OUTPUT ;;
             F)          echo "overlay=env-f" >> $GITHUB_OUTPUT ; echo "name=F (Preprod)"    >> $GITHUB_OUTPUT ; echo "prefix=env-f" >> $GITHUB_OUTPUT ;;
