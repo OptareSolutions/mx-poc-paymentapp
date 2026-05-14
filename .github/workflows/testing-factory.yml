@@ -74,8 +74,10 @@ permissions:
   actions: read
   packages: read
 
+# Usar SHA del HEAD del PR cuando existe (pull_request/synchronize); si no, SHA del push/dispatch.
+# Así push + PR sobre el mismo commit comparten grupo y cancel-in-progress evita dos corridas gemelas.
 concurrency:
-  group: testing-factory-${{ github.ref }}
+  group: testing-factory-${{ github.event.pull_request.head.sha || github.sha }}
   cancel-in-progress: true
 
 env:
