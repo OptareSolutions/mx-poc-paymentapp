@@ -308,8 +308,8 @@ En la demo conviene enseñar **dos familias** de resultados: flujos que **termin
 ### Guion mínimo verde + rojo
 
 1. **Verde:** seguir la sección *Guion de demostración* (README en ambos microservicios, PR a `E`, observar Factory + CICD sin tocar OpenAPI).  
-2. **Rojo contrato:** en una `feature/*`, aplicar **`demo/break-contract.ps1`** (o un cambio OpenAPI breaking manual), commit + push, abrir PR → `E` y mostrar el fallo en **Testing Factory** y/o **`pipeline-contrato-openapi`**. Restaurar con **`demo/restore.ps1`** y un commit de reversión.  
-3. **Rojo comportamiento:** **`demo/break-behavior.ps1`**, integrar el cambio hasta un **push** que ejecute **Deliver** con Karate (p. ej. tras merge a `E`), y mostrar el paso **DEMO BREAK 2** en rojo. Restaurar igualmente.
+2. **Rojo contrato:** en una `feature/*`, aplicar **`demo/break-contract.ps1`** (Windows) o **`./demo/break-contract.sh`** (macOS/Linux), o un cambio OpenAPI breaking manual, commit + push, abrir PR → `E` y mostrar el fallo en **Testing Factory** y/o **`pipeline-contrato-openapi`**. Restaurar con **`demo/restore.ps1`** o **`./demo/restore.sh`** y un commit de reversión.  
+3. **Rojo comportamiento:** **`demo/break-behavior.ps1`** / **`./demo/break-behavior.sh`**, integrar el cambio hasta un **push** que ejecute **Deliver** con Karate (p. ej. tras merge a `E`), y mostrar el paso **DEMO BREAK 2** en rojo. Restaurar igualmente.
 
 Detalle paso a paso de los guiones PowerShell y narrativa local: **[`demo/README.md`](../../demo/README.md)** · **[`demo/DEMO_GUIDE.md`](../../demo/DEMO_GUIDE.md)**.
 

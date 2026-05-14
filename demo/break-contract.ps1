@@ -31,6 +31,11 @@ Write-Host "[DEMO BREAK 1] Renombrando campos del contrato en CustomerProfileDto
 
 $content = Get-Content $dtoFile -Raw
 
+if ($content -notmatch 'private String telefono;' -and $content -match 'private String phone;') {
+    Write-Error "El DTO ya parece roto (phone/fullName). Ejecuta restore.ps1 o partes de E limpio."
+    exit 1
+}
+
 $content = $content `
     -replace 'private String telefono;', 'private String phone;       // BROKEN: era "telefono"' `
     -replace 'private String nombre;',   'private String fullName;    // BROKEN: era "nombre"' `
