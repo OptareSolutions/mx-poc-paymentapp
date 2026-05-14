@@ -28,7 +28,8 @@ Dos escenarios de demo ilustran gates de calidad end-to-end:
 | Recurso | Contenido |
 |---------|-----------|
 | [**Estrategia GitFlow y pipelines**](doc/02_CI_CD/gitflow-pipeline-strategy.md) | Ramas `E` / `A` / `F` / `PRODUCCION`, inventario de workflows, guion de demo (README + PRs), matriz de ejecución, **casos verde vs rojo** (contrato, E2E, cobertura, Trivy, OPERACIONES). |
-| [**Guía de demo local**](demo/DEMO_GUIDE.md) | Arquitectura del entorno simulado, narrativa de los DEMO BREAK y uso de scripts. |
+| [**Carpeta `demo/` (índice)**](demo/README.md) | Scripts reproducibles (`break-contract`, `break-behavior`, `restore`) y enlaces a la guía detallada. |
+| [**Guía de demo local**](demo/DEMO_GUIDE.md) | Arquitectura del entorno simulado, narrativa de los DEMO BREAK y flujos en GitHub Actions (rama `E`). |
 | [**Documentación CI/CD**](doc/02_CI_CD/README.md) | Detalle por carpeta (API testing, performance, RPA, quality gates). |
 
 La línea de producto PoC en GitHub convive a veces con ramas históricas (`develop` / `qa` / …). La referencia de flujo **oficial PaymentBox** para este repo es la rama **`E`**.
@@ -99,8 +100,9 @@ mx-poc-paymentapp/
 ??? simulation/                         # docker-compose + Prism + TDM
 ??? tests/                              # Karate, Selenium, k6
 ??? demo/
-?   ??? break-contract.ps1              # DEMO BREAK 1
-?   ??? break-behavior.ps1              # DEMO BREAK 2
+?   ??? README.md                   # indice: scripts + enlaces
+?   ??? break-contract.ps1          # DEMO BREAK 1
+?   ??? break-behavior.ps1          # DEMO BREAK 2
 ?   ??? restore.ps1
 ?   ??? DEMO_GUIDE.md
 ??? doc/02_CI_CD/

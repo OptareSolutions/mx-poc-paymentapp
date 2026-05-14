@@ -1,6 +1,11 @@
-# Guía de Demo — Telco Operator PaymentBox QA PoC
+# Guía de Demo — Telco Operator PaymentBox PoC (rama `E`)
 
-## Arquitectura del Entorno
+> Flujo de referencia: **`feature/*` → `E` → `A` → `F` → `PRODUCCION`**.  
+> Detalle de pipelines, PRs y casos *verde/rojo*: [`doc/02_CI_CD/gitflow-pipeline-strategy.md`](../doc/02_CI_CD/gitflow-pipeline-strategy.md).
+
+---
+
+## Arquitectura local (entorno simulado)
 
 ```
 Browser ──────────────────────────────► ui-paymentbox (Angular) :4200
@@ -17,65 +22,89 @@ Browser ────────────────────────
            (Perfiles Billy 1-5)
 ```
 
-## Pipeline CI/CD (4 Jobs)
+Levantar stack:
 
-| Job | Nombre | Qué valida |
-|-----|--------|-----------|
-| 1 | Build & Quality | Unit tests + JaCoCo ≥80% (microservice-a **y** microservice-b) |
-| 2 | Integration & Contract | DB seeders, mocks Prism, **contrato A↔B (Karate)** |
-| 3 | Image Ops | Build y push Docker: microservice-a, microservice-b, ui-paymentbox |
-| 4 | Functional E2E | Ambiente completo, **Karate 8 pasos**, Selenium, k6 |
-
----
-
-## Escenario Base — Todo en Verde ✅
-
-El pipeline pasa los 4 jobs. La UI en `http://localhost:4200` muestra el flujo completo de recarga.
-
-Para levantar el ambiente local:
 ```bash
 cd simulation
 docker compose pull
 docker compose up -d
 ```
 
-Accede a:
-- **UI PaymentBox**: http://localhost:4200
-- **API microservice-a**: http://localhost:8080/swagger-ui.html
-- **API microservice-b**: http://localhost:8081/swagger-ui.html
+- **UI PaymentBox:** http://localhost:4200  
+- **API microservice-a:** http://localhost:8080/swagger-ui.html  
+- **API microservice-b:** http://localhost:8081/swagger-ui.html  
 
 ---
 
-## DEMO BREAK 1 — Ruptura de Contrato (falla en Job 2)
+## Pipelines en GitHub (rama `E`)
+
+Cada microservicio tiene su **caller** (`pipeline-microservice-a.yml` / `b`) que invoca el reusable **`reusable-microservice-pipeline.yml`**. No es un único “pipeline de 4 jobs” monolítico: hay **dos** CICD en paralelo si cambian ambos servicios.
+
+Etapas típicas del reusable (resumen):
+
+| Etapa | Contenido |
+|-------|-----------|
+| Build | JAR Gradle |
+| Test | Unitarios + JaCoCo (≥ 80 %) |
+| Quality gates | Gitleaks, Sonar, Trivy FS *(según evento/rama; en `push` a `feature/**` este job no corre)* |
+| Publish | Imagen Docker, Trivy imagen CRITICAL, push GHCR *(solo `push` a `E` / `A` / `F` / `PRODUCCION` o manual)* |
+| OPERACIONES | Aprobación en GitHub Environments *(solo en `push` a `A` / `F` / `PRODUCCION`)* |
+| Deliver | Karate E2E (ms-a) o smoke contrato (ms-b), actualización GitOps |
+
+Además:
+
+- **`testing-factory.yml`** — `push` en `feature/**` y **`pull_request`** con base **`E`**: API (reusable), k6 smoke, RPA informativo.
+- **`golden-pipeline-testing.yml`** — en **`push`** a ramas de ambiente y **PR** hacia **`A`** / **`F`** / **`PRODUCCION`**.
+- **`pipeline-contrato-openapi.yml`** — breaking changes OpenAPI en PR (y push según `paths`).
+- **`pipeline-integration.yml`** — **manual** (`workflow_dispatch`): promoción **`E→A`**, **`A→F`** o **`F→PRODUCCION`** con gates de contrato + E2E antes de copiar tags entre overlays.
+
+---
+
+## Escenario base — todo en verde
+
+Con código compatible y PRs limpios, los workflows llegan a completar según rama (sin Deliver en `feature/**` hasta integrar en `E`).
+
+---
+
+## DEMO BREAK 1 — Ruptura de contrato
 
 ### Contexto
 
-`microservice-a` llama a `microservice-b` para obtener el perfil del cliente. El contrato
-público de `microservice-b` es: responder con campos `telefono`, `nombre`, `status`.
+**microservice-a** consume el API público de **microservice-b**. Los tests **Karate** y/o **oasdiff** asumen campos como `telefono`, `nombre`, `status`. El script **renombra** el DTO a `phone`, `fullName`, etc., y ajusta el **test unitario** de **microservice-b** para que **compile** (el pipeline unitario del servicio B sigue en verde). La ruptura se detecta al validar **contrato entre equipos**.
 
-Un desarrollador **renombra los campos** del DTO sin avisar ni actualizar los consumidores.
+### Camino recomendado (automático, shift-left)
 
-### Ejecutar
+1. Desde **`E`:**  
+   `git fetch origin && git checkout -b feature/demo-break1 origin/E`
+2. Ejecutar:  
+   `.\demo\break-contract.ps1`
+3. Commit y push:  
+   `git add . && git commit -m "demo: BREAK 1 contrato" && git push -u origin feature/demo-break1`
+4. Abrir **PR → base `E`**.
 
-```powershell
-.\demo\break-contract.ps1
-git add .
-git commit -m "demo: romper contrato inter-servicios"
-git push
+**Qué observar**
+
+- **`testing-factory.yml`** / **`reusable-api-testing.yml`**: fallo en pasos **Karate @contract** u **OpenAPI breaking** cuando aplica.
+- Opcionalmente **`pipeline-contrato-openapi.yml`** si los `paths:` incluyen tus cambios en `openapi*.yaml` o `src/main/java/**`.
+
+Ejemplo típico (Karate):
+
 ```
-
-### Qué falla
-
-**Job 2** — paso `⚠️ DEMO BREAK 1 → Karate Contrato microservice-a↔microservice-b`:
-
-```
-FAILED - contract_microservices.feature:27
 match response.telefono == '4544'
-  actual: {phone: '4544', fullName: 'Billy 1 - Cortes', status: 'ACTIVO'}
-  expected: response.telefono to exist
+  actual: { phone: '4544', fullName: '...', ... }
 ```
 
-**Jobs 3 y 4 nunca se ejecutan** → el pipeline se detiene aquí (shift-left).
+**Publish / Deliver aún no aplican** en el PR: el merge bloqueado evita integrar el cambio roto.
+
+### Camino alternativo (manual, promoción)
+
+Tras tener imágenes coherentes en el overlay de origen:
+
+1. **Actions →** `pipeline-integration.yml` **→ Run workflow**  
+2. **promote_from:** `E` — **promote_to:** `A` (u otra combinación válida: `A→F`, `F→PRODUCCION`)  
+3. El job de **tests de contrato** puede fallar con el mismo síntoma si el código roto ya está en la imagen de origen.
+
+*(La validación de inputs del workflow fue alineada a ramas `E` / `A` / `F` / `PRODUCCION`.)*
 
 ### Restaurar
 
@@ -88,35 +117,26 @@ git push
 
 ---
 
-## DEMO BREAK 2 — Ruptura de Comportamiento (falla en Job 4)
+## DEMO BREAK 2 — Ruptura de comportamiento (E2E)
 
 ### Contexto
 
-Un desarrollador añade una **validación de negocio** (monto mínimo $100) en
-`RecargaService` sin actualizar los tests. Los perfiles Billy usan montos de $20.
+Se activa una **validación de negocio** (monto mínimo **$100**) en **microservice-a** sin actualizar Karate. Los flujos Billy usan **$20** → **HTTP 400**. Los **unit tests** pueden seguir pasando.
 
-### Ejecutar
+### Camino recomendado
 
-```powershell
-.\demo\break-behavior.ps1
-git add .
-git commit -m "demo: agregar monto mínimo $100"
-git push
-```
+1. `git checkout -b feature/demo-break2 origin/E`
+2. `.\demo\break-behavior.ps1`
+3. `git add . && git commit -m "demo: BREAK 2 comportamiento" && git push -u origin feature/demo-break2`
+4. **PR → `E`** y **merge** cuando quieras mostrar el fallo en integración.
 
-### Qué falla
+**Qué observar**
 
-**Job 4** — paso `⚠️ DEMO BREAK 2 → Karate DSL - Tests Funcionales`:
+En el **`push` a `E`** tras el merge, el reusable ejecuta **Publish** (si aplica) y luego **Deliver**. El paso:
 
-```
-FAILED - recarga_flow.feature:60 (Pasos 6 y 7 - Registrar pago)
-  POST /api/pagos/registrar
-  expected: status 201
-  actual:   status 400  {"message": "Monto mínimo $100"}
-```
+`Deliver · DEMO BREAK 2 - Karate E2E · Flujo Completo 8 Pasos`
 
-**Jobs 1, 2 y 3 pasan** — el defecto llega hasta E2E (más costoso de detectar).
-Esto demuestra **por qué el contrato** (Job 2) es una capa de calidad anterior.
+falla (por ejemplo esperaba **201** y recibe **400** con mensaje de monto mínimo). El manifiesto GitOps **no** debe actualizarse si el job falla.
 
 ### Restaurar
 
@@ -129,10 +149,6 @@ git push
 
 ---
 
-## Mensaje Clave para Telco Operator
+## Mensaje clave para la demo
 
-> *"El mismo repositorio contiene la lógica de negocio, los tests, el contrato
-> entre servicios, y la UI. Cualquier cambio que rompa el contrato **se detecta
-> en Job 2**, antes de construir imágenes o desplegar. Cualquier cambio que
-> rompa el comportamiento **se detecta en Job 4**, con Karate ejecutando el
-> flujo real de los 8 pasos contra el ambiente simulado completo."*
+> *El repo unifica negocio, tests y contratos. Un cambio que rompe el **contrato** entre servicios se detecta en **Testing Factory / contrato OpenAPI** en el **PR hacia `E`**. Un cambio que rompe el **flujo de negocio** completo se detecta en **Deliver (Karate E2E)** cuando el código se integra en rama de ambiente. Los scripts bajo `demo/` reproducen ambos casos.*

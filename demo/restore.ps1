@@ -1,15 +1,15 @@
 ﻿# ══════════════════════════════════════════════════════════════════════════════
-# DEMO RESTORE: Revertir todos los cambios de demo
+# DEMO RESTORE: Revertir cambios locales de BREAK 1 y BREAK 2
 # ══════════════════════════════════════════════════════════════════════════════
 #
-# Reverte:
-#   DEMO BREAK 1 (contrato)    → CustomerProfileDto.java + CustomerControllerTest.java
-#   DEMO BREAK 2 (comportamiento) → RecargaService.java
+# Restaura respecto al ultimo commit:
+#   BREAK 1 -> CustomerProfileDto.java + CustomerControllerTest.java (microservice-b)
+#   BREAK 2 -> RecargaService.java (microservice-a)
 # ══════════════════════════════════════════════════════════════════════════════
 
 $ErrorActionPreference = "Stop"
 
-Write-Host "🔄 Restaurando archivos originales via git checkout..." -ForegroundColor Cyan
+Write-Host "Restaurando archivos via git checkout..." -ForegroundColor Cyan
 
 Push-Location (Split-Path -Parent (Split-Path -Parent $MyInvocation.MyCommand.Path))
 
@@ -20,15 +20,11 @@ git checkout -- `
 
 Pop-Location
 
-Write-Host "✅ Archivos restaurados al estado original" -ForegroundColor Green
+Write-Host "OK Archivos restaurados al HEAD del repo" -ForegroundColor Green
 Write-Host ""
-Write-Host "📋 Ahora ejecuta:" -ForegroundColor Cyan
-Write-Host "   # Para restaurar env-e (develop):"
-Write-Host "   git add . ; git commit -m 'demo: restaurar estado verde' ; git push origin develop"
+Write-Host "Siguiente:" -ForegroundColor Cyan
+Write-Host "  git status"
+Write-Host "  git commit -am `"demo: restaurar estado verde`"   # o git add + commit"
+Write-Host "  git push"
 Write-Host ""
-Write-Host "   # Para restaurar env-a (qa) si se corrió BREAK 2 en branch qa:"
-Write-Host "   git add . ; git commit -m 'demo: restaurar estado verde' ; git push origin qa"
-Write-Host ""
-Write-Host "🔍 Pipeline volverá a verde en todos los jobs ✅"
-Write-Host "   BREAK 1: pipeline-microservice-b + pipeline-integration (develop→qa)"
-Write-Host "   BREAK 2: pipeline-microservice-a Job 4 (branch qa)"
+Write-Host "Si ya mergeaste un BREAK a E, puede hacer falta revert del merge en lugar de este script." -ForegroundColor DarkYellow
