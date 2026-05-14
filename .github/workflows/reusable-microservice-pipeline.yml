@@ -13,7 +13,7 @@
 #   A          → env-a  · QA
 #   F          → env-f  · Preprod (alias en scripts)
 #   PRODUCCION → prod   · Producción
-#   * (p.ej.)  → env-e  · Rama feature/feature/* ⇒ siempre desarrollo hasta integrar en E+
+#   *          → env-e  · ramas tipo `feature/*`, etc.: overlay desarrollo
 #
 # Momentos (caller `pipeline-microservice-*.yml`):
 #   · push sobre feature/*, E, A, F, PRODUCCIÓN  → ejecuta reproducible hasta Publish (+ Deliver si `push|dispatch`)
