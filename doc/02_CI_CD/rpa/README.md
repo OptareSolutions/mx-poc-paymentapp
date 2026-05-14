@@ -1,5 +1,7 @@
 # AT&T QA – RPA Automation (Playwright + GitHub Actions) — PoC
 
+> Smoke **TRA-34** (2026-05-14): cambio mínimo en doc RPA para validar disparadores en `feature/*`.
+
 Automatización web liviana integrada en el pipeline CI/CD usando [Playwright](https://playwright.dev/) en modo headless.
 
 ---
