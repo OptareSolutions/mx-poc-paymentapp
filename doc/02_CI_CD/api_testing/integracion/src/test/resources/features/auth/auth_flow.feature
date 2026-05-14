@@ -69,7 +69,7 @@ Feature: Flujo de Autenticación E2E
     And header Authorization = 'Bearer ' + token
     When method GET
     Then status 200
-    And match response.phone  == '4544'
+    And match response.telefono == '4544'
     And match response.status == 'ACTIVO'
 
   @negative @auth-use-token

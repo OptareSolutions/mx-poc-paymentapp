@@ -48,8 +48,8 @@ class CustomerControllerTest {
         CustomerProfileDto dto = response.getBody();
         assertThat(dto).isNotNull();
         // âš ï¸ CONTRATO: estos campos deben existir â€” si se renombran rompe microservice-a
-        assertThat(dto.getPhone()).isEqualTo("4544");
-        assertThat(dto.getFullName()).isEqualTo("Billy 1 - Cortes");
+        assertThat(dto.getTelefono()).isEqualTo("4544");
+        assertThat(dto.getNombre()).isEqualTo("Billy 1 - Cortes");
         assertThat(dto.getStatus()).isEqualTo("ACTIVO");
     }
 
@@ -75,6 +75,6 @@ class CustomerControllerTest {
         var result = customerController.getAll();
 
         assertThat(result).hasSize(2);
-        assertThat(result.get(0).getPhone()).isEqualTo("4544");
+        assertThat(result.get(0).getTelefono()).isEqualTo("4544");
     }
 }

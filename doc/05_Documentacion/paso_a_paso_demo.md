@@ -192,7 +192,7 @@ git push origin feature/demo-att-paymentbox
 ```
 FAILED - contract_microservices.feature:27
 match response.telefono == '4544'
-  actual: {phone: '4544', fullName: 'Billy 1 - Cortes', status: 'ACTIVO'}
+  actual: {telefono: '4544', nombre: 'Billy 1 - Cortes', status: 'ACTIVO'}
   expected: response.telefono to exist
 ```
 

@@ -15,7 +15,7 @@ Tests de humo (smoke tests) funcionales sobre los endpoints críticos de la API 
 
 | Endpoint | Método | Paso | HTTP esperado | Validación Body |
 |----------|--------|------|---------------|-----------------|
-| `/api/clientes/buscar?telefono=4544` | GET | Paso 2 | 200 | `status=ACTIVO`, `fullName contains 'Billy'` |
+| `/api/clientes/buscar?telefono=4544` | GET | Paso 2 | 200 | `status=ACTIVO`, `nombre contains 'Billy'` |
 | `/api/clientes/buscar?telefono=4545` | GET | Paso 2 | 200 | `status=ACTIVO` |
 | `/api/clientes/buscar?telefono=4546` | GET | Paso 2 | 200 | `status=ACTIVO` |
 | `/api/recargas/montos?operador=BLUE` | GET | Paso 3 | 200 | Array no vacío con `{id, monto, operador}` |

@@ -23,8 +23,8 @@ Feature: Flujo E2E — Validación de Servicios Externos y Perfil de Cliente
     And path '/api/customers/<telefono>'
     When method GET
     Then status 200
-    And match response.phone    == '<telefono>'
-    And match response.fullName == '#string'
+    And match response.telefono == '<telefono>'
+    And match response.nombre   == '#string'
     And match response.status   == '#string'
 
     Examples:
@@ -42,7 +42,7 @@ Feature: Flujo E2E — Validación de Servicios Externos y Perfil de Cliente
 
   # ─────────────────────────────────────────────────────────────────────────────
   # 2. COHERENCIA DE DATOS entre microservice-a y microservice-b
-  #    microservice-a usa el campo 'phone' de microservice-b como 'telefono'
+  #    microservice-a refleja los mismos nombres JSON que microservice-b (telefono, nombre)
   # ─────────────────────────────────────────────────────────────────────────────
   @smoke @coherencia
   Scenario: DEP-03 Los datos de cliente son coherentes entre microservice-a y microservice-b
@@ -53,8 +53,8 @@ Feature: Flujo E2E — Validación de Servicios Externos y Perfil de Cliente
     Then status 200
     * def profileFromB = response
     # Guardar datos de microservice-b para comparación
-    * def telefono_b  = profileFromB.phone
-    * def nombre_b    = profileFromB.fullName
+    * def telefono_b  = profileFromB.telefono
+    * def nombre_b    = profileFromB.nombre
     * def status_b    = profileFromB.status
 
     # Consulta a microservice-a (que internamente llama a microservice-b)
@@ -63,9 +63,9 @@ Feature: Flujo E2E — Validación de Servicios Externos y Perfil de Cliente
     And param telefono = telefono_b
     When method GET
     Then status 200
-    # Validar coherencia: el campo 'phone' de microservice-a debe coincidir
-    And match response.phone    == telefono_b
-    And match response.fullName == nombre_b
+    # Validar coherencia entre servicios
+    And match response.telefono == telefono_b
+    And match response.nombre   == nombre_b
     And match response.status   == status_b
 
   @smoke @coherencia
@@ -102,7 +102,7 @@ Feature: Flujo E2E — Validación de Servicios Externos y Perfil de Cliente
     And path '/api/customers/4544'
     When method GET
     Then status 200
-    * def clienteTelefono = response.phone
+    * def clienteTelefono = response.telefono
     * def clienteStatus   = response.status
     And match clienteStatus == 'ACTIVO'
 

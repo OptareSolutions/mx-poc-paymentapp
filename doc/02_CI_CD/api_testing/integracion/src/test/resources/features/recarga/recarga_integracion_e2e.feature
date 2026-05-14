@@ -38,12 +38,12 @@ Feature: Flujo E2E de Recarga — Integración Completa entre Servicios
     And param telefono = '4544'
     When method GET
     Then status 200
-    And match response.phone    == '4544'
+    And match response.telefono == '4544'
     And match response.status   == 'ACTIVO'
-    And match response.fullName == '#string'
+    And match response.nombre == '#string'
     # Transportar teléfono al siguiente paso
-    * def clienteTelefono = response.phone
-    * def clienteNombre   = response.fullName
+    * def clienteTelefono = response.telefono
+    * def clienteNombre   = response.nombre
 
     # ── PASO 3: Selección de monto desde DB ─────────────────────────────────────
     Given path '/api/recargas/montos'
@@ -113,7 +113,7 @@ Feature: Flujo E2E de Recarga — Integración Completa entre Servicios
     When method GET
     Then status 200
     And match response.status == 'ACTIVO'
-    * def tel = response.phone
+    * def tel = response.telefono
 
     # Paso 3: Montos
     Given path '/api/recargas/montos'

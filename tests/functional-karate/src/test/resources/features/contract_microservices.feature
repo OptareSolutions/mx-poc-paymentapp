@@ -9,8 +9,8 @@ Feature: Contrato entre Microservicios - microservice-a consume microservice-b
     Given path "/api/customers/<telefono>"
     When method GET
     Then status 200
-    And match response.phone    == "<telefono>"
-    And match response.fullName == "#string"
+    And match response.telefono == "<telefono>"
+    And match response.nombre   == "#string"
     And match response.status   == "#string"
 
     Examples:

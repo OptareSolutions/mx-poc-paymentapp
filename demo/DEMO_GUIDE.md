@@ -92,7 +92,7 @@ Ejemplo típico (Karate):
 
 ```
 match response.telefono == '4544'
-  actual: { phone: '4544', fullName: '...', ... }
+  actual: { telefono: '4544', nombre: '...', ... }
 ```
 
 **Publish / Deliver aún no aplican** en el PR: el merge bloqueado evita integrar el cambio roto.

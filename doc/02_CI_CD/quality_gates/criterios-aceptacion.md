@@ -298,7 +298,7 @@ api-integration → RecargaFlowRunner#testRecargaFlow
 api-contract → oasdiff + RecargaFlowRunner#testContratoMicroservicios
   criterio:
     - oasdiff exit 0 (sin breaking changes en openapi.yaml)
-    - Campos: phone, fullName, status en /api/customers/{telefono}
+    - Campos: telefono, nombre, status en /api/customers/{telefono}
     - Tipos y requerimientos sin cambios incompatibles
   bloqueante: true
 ```

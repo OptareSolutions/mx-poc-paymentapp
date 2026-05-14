@@ -721,10 +721,10 @@ jobs:
           echo "$RESP" | python3 -c "
           import sys, json
           data = json.load(sys.stdin)
-          assert 'phone' in data, 'FAIL: campo phone ausente (contrato roto?)'
-          assert 'fullName' in data, 'FAIL: campo fullName ausente (contrato roto?)'
+          assert 'telefono' in data, 'FAIL: campo telefono ausente (contrato roto?)'
+          assert 'nombre' in data, 'FAIL: campo nombre ausente (contrato roto?)'
           assert 'status'   in data, 'FAIL: campo status ausente'
-          assert data['phone'] == '4544', f'FAIL: phone={data[\"phone\"]}'
+          assert data['telefono'] == '4544', f'FAIL: telefono={data[\"telefono\"]}'
           print('Smoke test OK - campos del contrato presentes')
           "
 
