@@ -1,6 +1,5 @@
 # [microservice-a] CI - Caller para reusable-microservice-pipeline.yml
-# Equipo: PaymentBox Core (Team A)
-# Deliver: `feature/**` ⇒ smoke + GitOps (liviano); troncales E/A/F/PRODUCCION ⇒ karate/E2E + GitOps.
+# Equipo: PaymentBox Core (Team A) | test_runner: karate (E2E + k6 + Selenium)
 # Ambientes: E->dev | A->qa | F->preprod | PRODUCCION->prod
 name: "[microservice-a] CICD"
 run-name: "${{ github.event_name == 'pull_request' && format('[microservice-a] CICD · #{0}: {1}', github.event.pull_request.number, github.event.pull_request.title) || '[microservice-a] CICD' }}"
@@ -38,6 +37,5 @@ jobs:
     with:
       microservice_name: microservice-a
       image_name: optaresolutions/mx-poc-paymentapp/microservice-a
-      # E2E (Karate) sólo en troncales; features iteran con smoke+GitOps hacia env-e.
-      test_runner: ${{ startsWith(github.ref_name, 'feature/') && 'smoke' || 'karate' }}
+      test_runner: karate
     secrets: inherit
