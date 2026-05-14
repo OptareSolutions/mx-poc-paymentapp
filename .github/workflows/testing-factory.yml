@@ -16,6 +16,7 @@ name: Testing Factory — CI Quality Gates (feature/* · PR→E)
 #   push → feature/**          (CI en ramas de desarrollo)
 #   pull_request → E           (validación antes de integrar a Desarrollo)
 #   workflow_dispatch          (ejecución manual)
+#   También disparan cambios en pipeline-microservice-* / reusable-microservice-pipeline (paths).
 #
 # NOTA: Para PRs hacia A y F, usar golden-pipeline-testing.yml (suite completa).
 # ──────────────────────────────────────────────────────────────────────────────
@@ -34,6 +35,9 @@ on:
       - '.github/workflows/testing-factory.yml'
       - '.github/workflows/reusable-api-testing.yml'
       - '.github/workflows/performance-smoke.yml'
+      - '.github/workflows/pipeline-microservice-a.yml'
+      - '.github/workflows/pipeline-microservice-b.yml'
+      - '.github/workflows/reusable-microservice-pipeline.yml'
 
   pull_request:
     branches:
@@ -48,6 +52,9 @@ on:
       - '.github/workflows/testing-factory.yml'
       - '.github/workflows/reusable-api-testing.yml'
       - '.github/workflows/performance-smoke.yml'
+      - '.github/workflows/pipeline-microservice-a.yml'
+      - '.github/workflows/pipeline-microservice-b.yml'
+      - '.github/workflows/reusable-microservice-pipeline.yml'
 
   workflow_dispatch:
     inputs:
@@ -124,7 +131,7 @@ jobs:
             APP_CHANGED="false"
             RPA_CHANGED="false"
 
-            if printf '%s\n' "$CHANGED_FILES" | grep -Eq '^(microservice-a/|microservice-b/|tests/|simulation/|\.github/workflows/reusable-api-testing\.yml)'; then
+            if printf '%s\n' "$CHANGED_FILES" | grep -Eq '^(microservice-a/|microservice-b/|tests/|simulation/|\.github/workflows/reusable-api-testing\.yml|\.github/workflows/testing-factory\.yml|\.github/workflows/pipeline-microservice-a\.yml|\.github/workflows/pipeline-microservice-b\.yml|\.github/workflows/reusable-microservice-pipeline\.yml)'; then
               APP_CHANGED="true"
             fi
 
