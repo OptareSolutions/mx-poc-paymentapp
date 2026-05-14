@@ -1,17 +1,17 @@
 name: "Pipeline Integracion · Build · Test · Quality Gates · Deliver"
 
 # ------------------------------------------------------------------------------
-# Trigger: MANUAL (workflow_dispatch) � promoci�n deliberada entre ambientes
+# Trigger: MANUAL (workflow_dispatch) — promoción deliberada entre ambientes
 #
-# Flujo de promoci�n:
-#   develop ? qa    (env-e ? env-a)   Equipa valida no E e promove para QA
-#   qa      ? uat   (env-a ? env-u)   QA valida e promove para UAT
-#   uat     ? main  (env-u ? prod)    UAT valida e promove para Produ��o
+# Flujo (solo combinaciones secuenciales):
+#   E → A           (env-e → env-a)
+#   A → F           (env-a → env-f)
+#   F → PRODUCCION  (env-f → prod)
 #
 # Gates declarativos:
-#   Job 2 � Tests de Contrato entre servicios  (?? DEMO BREAK 1: falla aqu�)
-#   Job 3 � E2E completo con entorno simulado
-#   Job 4 � Promoci�n GitOps + ArgoCD simulado  (solo ejecuta si Jobs 2+3 verdes)
+#   Job de contrato — Karate inter-servicios (DEMO BREAK 1 puede fallar aquí)
+#   E2E completo con entorno simulado
+#   Promoción GitOps + ArgoCD simulado (solo si los gates previos pasan)
 # ------------------------------------------------------------------------------
 
 on:
@@ -53,28 +53,28 @@ jobs:
           FROM="${{ inputs.promote_from }}"
           TO="${{ inputs.promote_to }}"
           VALID=false
-          [ "$FROM" = "develop" ] && [ "$TO" = "qa"   ] && VALID=true
-          [ "$FROM" = "qa"      ] && [ "$TO" = "uat"  ] && VALID=true
-          [ "$FROM" = "uat"     ] && [ "$TO" = "main" ] && VALID=true
+          [ "$FROM" = "E" ] && [ "$TO" = "A" ] && VALID=true
+          [ "$FROM" = "A" ] && [ "$TO" = "F" ] && VALID=true
+          [ "$FROM" = "F" ] && [ "$TO" = "PRODUCCION" ] && VALID=true
           if [ "$VALID" = "false" ]; then
-            echo "? Combinaci�n inv�lida: ${FROM} ? ${TO}"
-            echo "   Combinaciones v�lidas: develop?qa | qa?uat | uat?main"
+            echo "::error::Combinacion invalida: ${FROM} -> ${TO}"
+            echo "   Validas: E->A | A->F | F->PRODUCCION"
             exit 1
           fi
-          echo "? Promoci�n v�lida: ${FROM} ? ${TO}"
+          echo "OK Promocion valida: ${FROM} -> ${TO}"
 
       - name: "Build · Mapear ambientes y overlays"
         id: mapping
         run: |
           case "${{ inputs.promote_from }}" in
-            develop) echo "from_overlay=env-e" >> $GITHUB_OUTPUT ; echo "from_name=E (Desarrollo)" >> $GITHUB_OUTPUT ;;
-            qa)      echo "from_overlay=env-a" >> $GITHUB_OUTPUT ; echo "from_name=A (QA)"              >> $GITHUB_OUTPUT ;;
-            uat)     echo "from_overlay=env-u" >> $GITHUB_OUTPUT ; echo "from_name=U (UAT)"             >> $GITHUB_OUTPUT ;;
+            E) echo "from_overlay=env-e" >> $GITHUB_OUTPUT ; echo "from_name=E (Desarrollo)" >> $GITHUB_OUTPUT ;;
+            A) echo "from_overlay=env-a" >> $GITHUB_OUTPUT ; echo "from_name=A (QA)"         >> $GITHUB_OUTPUT ;;
+            F) echo "from_overlay=env-f" >> $GITHUB_OUTPUT ; echo "from_name=F (Preprod)"    >> $GITHUB_OUTPUT ;;
           esac
           case "${{ inputs.promote_to }}" in
-            qa)   echo "to_overlay=env-a" >> $GITHUB_OUTPUT ; echo "to_name=A (QA)"    >> $GITHUB_OUTPUT ;;
-            uat)  echo "to_overlay=env-u" >> $GITHUB_OUTPUT ; echo "to_name=U (UAT)"   >> $GITHUB_OUTPUT ;;
-            main) echo "to_overlay=prod"  >> $GITHUB_OUTPUT ; echo "to_name=Producci�n"  >> $GITHUB_OUTPUT ;;
+            A)          echo "to_overlay=env-a" >> $GITHUB_OUTPUT ; echo "to_name=A (QA)"      >> $GITHUB_OUTPUT ;;
+            F)          echo "to_overlay=env-f" >> $GITHUB_OUTPUT ; echo "to_name=F (Preprod)" >> $GITHUB_OUTPUT ;;
+            PRODUCCION) echo "to_overlay=prod"  >> $GITHUB_OUTPUT ; echo "to_name=Produccion"  >> $GITHUB_OUTPUT ;;
           esac
 
 # ------------------------------------------------------------------------------
