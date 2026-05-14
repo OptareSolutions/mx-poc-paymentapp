@@ -333,69 +333,102 @@ jobs:
           cache-to: type=gha,mode=max
 
 # ------------------------------------------------------------------------------
-# JOB 4b – Aprobación Operaciones (solo despliegue A / F, solo en push post-publish)
-# Requiere en GitHub: Settings → Environments → OPERACIONES (reviewers opcional
-# para la PoC demo). Ramos E / PRODUCCION / otros usan passthrough sin espera.
+# JOB 4b – Puerta Operaciones sólo alta (GitHub Environment)
+#
+# Ramos **dev** (**E**, **feature/**…) → pasan directos (sin espera Deployments).
+# Ramos **A** / **F** / **PRODUCCION** → `environment: OPERACIONES` con al menos una
+# aprobación desde la pestaña Deployments. El copy nombre/steps marca explícito
+# **Equipo de Operaciones**; en PoC pueden listar cualquier revisor válido como
+# aprobador efectivo configurando ese environment del repo (quien apruebe hace las
+# veces «Operaciones» a efectos de auditoría).
+#
+# Eventos: push + workflow_dispatch (coherente con Deliver).
+# Repo: crear **OPERACIONES** en Settings → Environments cuando no exista.
 # ------------------------------------------------------------------------------
-  operations-approval:
-    name: "4b · Operaciones · Aprobación [${{ inputs.microservice_name }}]"
+  operations-approval-operaciones:
+    name: "4b · Equipo de Operaciones · Aprobación requerida (A/F/PRODUCCION) [${{ inputs.microservice_name }}]"
     needs: publish
     if: |
       always() &&
       needs.publish.result == 'success' &&
-      github.event_name == 'push' &&
-      (github.ref_name == 'A' || github.ref_name == 'F')
+      (
+        github.event_name == 'push' ||
+        github.event_name == 'workflow_dispatch'
+      ) &&
+      (
+        github.ref_name == 'A' ||
+        github.ref_name == 'F' ||
+        github.ref_name == 'PRODUCCION'
+      )
     runs-on: ubuntu-latest
     environment: OPERACIONES
     permissions:
       contents: read
     steps:
-      - name: "Operaciones · Aprobación despliegue ${{ github.ref_name }}"
+      - name: "Equipo de Operaciones — pendiente revisión / Approve antes de Deliver"
         run: |
-          echo "Operaciones Pre-Productivo autoriza el despliegue en ambiente ${{ github.ref_name }}" >> $GITHUB_STEP_SUMMARY
+          echo "### Equipo de Operaciones · despliegue pendiente de aprobación" >> $GITHUB_STEP_SUMMARY
+          echo "**Rama actual:** ${{ github.ref_name }}. En la UI de Deployments aparece esta petición etiquetada con el gate **OPERACIONES** (Equipo Operaciones)." >> $GITHUB_STEP_SUMMARY
+          echo "**PoC:** configure el environment `OPERACIONES` con quien debe poder aceptar formalmente (**cualquier** colaborador con permiso cuenta si lo agregás como reviewer)." >> $GITHUB_STEP_SUMMARY
 
-  operations-pass-through:
-    name: "4b · Operaciones · Sin gate (rama ${{ github.ref_name }}) [${{ inputs.microservice_name }}]"
+  operations-pass-through-no-ops-dev:
+    name: "4b · Passthrough dev (sin aprobación, rama ${{ github.ref_name }}) [${{ inputs.microservice_name }}]"
     needs: publish
     if: |
       always() &&
       needs.publish.result == 'success' &&
-      github.event_name == 'push' &&
+      (
+        github.event_name == 'push' ||
+        github.event_name == 'workflow_dispatch'
+      ) &&
       github.ref_name != 'A' &&
-      github.ref_name != 'F'
+      github.ref_name != 'F' &&
+      github.ref_name != 'PRODUCCION'
     runs-on: ubuntu-latest
     permissions:
       contents: read
     steps:
-      - name: "Operaciones · Sin aprobación requerida"
+      - name: "Sin gate GitHub Deployments para desarrollo (E / features)"
         run: |
-          echo "Rama ${{ github.ref_name }}: sin gate de operaciones (solo A y F)." >> $GITHUB_STEP_SUMMARY
+          echo "Rama ${{ github.ref_name }}: desarrollo/feature — **Deliver continúa sin aprobación** (no existe gate OPERACIONES en este punto)." >> $GITHUB_STEP_SUMMARY
 
   deploy-ready:
     name: "4c · Gate · Listo para Deliver [${{ inputs.microservice_name }}]"
-    needs: [publish, operations-approval, operations-pass-through]
+    needs: [publish, operations-approval-operaciones, operations-pass-through-no-ops-dev]
     if: |
       always() &&
       needs.publish.result == 'success' &&
-      github.event_name == 'push' &&
-      ( needs.operations-approval.result == 'success' ||
-        needs.operations-pass-through.result == 'success' )
+      (
+        github.event_name == 'push' ||
+        github.event_name == 'workflow_dispatch'
+      ) &&
+      (
+        needs.operations-approval-operaciones.result == 'success' ||
+        needs.operations-pass-through-no-ops-dev.result == 'success'
+      )
     runs-on: ubuntu-latest
     permissions:
       contents: read
     steps:
-      - name: "Gate · Operaciones OK"
+      - name: "Deliver desbloqueado (operaciones sí / dev bypass)"
         run: echo "Listo para etapa Deliver."
 
 # ------------------------------------------------------------------------------
 # JOB 5a – Deliver (E2E Tests + GitOps Deploy · microservice-a)
 # Runs when test_runner == 'karate'
+#
+# IMPORTANTE: always() + comprobar publish/deploy-ready; así Deliver no hereda skips
+# de la dependencia paralela (**gate Operaciones alta** vs passthrough desarrollo).
 # ------------------------------------------------------------------------------
   e2e-gitops:
     name: "5 · Deliver · E2E + GitOps [${{ needs.publish.outputs.env-name }}]"
-    if: inputs.test_runner == 'karate' && github.event_name == 'push'
-    runs-on: ubuntu-latest
     needs: [publish, deploy-ready]
+    if: >-
+      ${{ always() && inputs.test_runner == 'karate' &&
+      (github.event_name == 'push' || github.event_name == 'workflow_dispatch') &&
+      needs.publish.result == 'success' &&
+      needs.deploy-ready.result == 'success' }}
+    runs-on: ubuntu-latest
     permissions:
       contents: write
 
@@ -559,9 +592,13 @@ jobs:
 # ------------------------------------------------------------------------------
   smoke-gitops:
     name: "5 · Deliver · Smoke + GitOps [${{ needs.publish.outputs.env-name }}]"
-    if: inputs.test_runner == 'smoke' && github.event_name == 'push'
-    runs-on: ubuntu-latest
     needs: [publish, deploy-ready]
+    if: >-
+      ${{ always() && inputs.test_runner == 'smoke' &&
+      (github.event_name == 'push' || github.event_name == 'workflow_dispatch') &&
+      needs.publish.result == 'success' &&
+      needs.deploy-ready.result == 'success' }}
+    runs-on: ubuntu-latest
     permissions:
       contents: write
 
