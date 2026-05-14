@@ -1,53 +1,34 @@
-name: "🚀 [Performance] k6 Smoke — PaymentBox"
-
-# ──────────────────────────────────────────────────────────────────────────────
-# Workflow: k6 Smoke Performance con comparación histórica de resultados
-#
-# Propósito: Medir tiempos de respuesta del flujo completo de 8 pasos bajo
-#            carga controlada (20 VUs, 7 minutos) y comparar contra baseline.
-#
-# Triggers:
-#   - workflow_dispatch: ejecución manual con parámetros configurables
-#   - schedule: ejecución diaria a las 02:00 UTC
-#   - workflow_call: llamada desde otros pipelines (p.ej. pipeline-integration)
-#
-# Thresholds:
-#   - Flujo completo p95 < 3s
-#   - Login p95 < 700ms
-#   - Consulta p95 < 900ms
-#   - Actualización p95 < 1200ms
-#   - Error rate < 1%
-# ──────────────────────────────────────────────────────────────────────────────
+name: "[Performance] k6 Smoke Reusable — PaymentBox"
 
 on:
   workflow_dispatch:
     inputs:
       base_url:
-        description: "URL base del servicio (ej: http://localhost:8080)"
+        description: "URL base del servicio"
         required: false
         default: "http://localhost:8080"
       environment:
         description: "Entorno a testear"
         required: true
         type: choice
-        options: [develop, qa, uat]
-        default: develop
+        options: [E, A, F, PRODUCCION]
+        default: E
       vus:
-        description: "Número de usuarios virtuales"
+        description: "Usuarios virtuales"
         required: false
         default: "20"
       duration:
-        description: "Duración del test (ej: 7m)"
+        description: "Duracion del test (5m a 10m)"
         required: false
         default: "7m"
       update_baseline:
-        description: "¿Actualizar baseline con estos resultados?"
+        description: "Actualizar baseline si los gates pasan"
         type: boolean
         required: false
         default: false
 
   schedule:
-    - cron: '0 2 * * *'
+    - cron: "0 2 * * *"
 
   workflow_call:
     inputs:
@@ -58,310 +39,289 @@ on:
       environment:
         type: string
         required: false
-        default: develop
+        default: "ci"
+      vus:
+        type: string
+        required: false
+        default: "20"
+      duration:
+        type: string
+        required: false
+        default: "7m"
+      update_baseline:
+        type: boolean
+        required: false
+        default: false
     outputs:
       performance_passed:
-        description: "Si los tests de performance pasaron todos los thresholds"
+        description: "true si k6 y la comparacion contra baseline aprobaron"
         value: ${{ jobs.k6-performance.outputs.passed }}
 
-# Solo una ejecución por entorno a la vez; no cancelar si ya está corriendo
 concurrency:
-  group: performance-${{ github.event.inputs.environment || 'develop' }}
+  group: performance-smoke-${{ inputs.environment || github.event.inputs.environment || github.ref_name || 'ci' }}
   cancel-in-progress: false
 
 permissions:
   contents: read
   actions: read
+  packages: read
 
 jobs:
-  # ──────────────────────────────────────────────────────────────────────────
-  # JOB 1 — Preparar entorno: levantar servicios mock
-  # ──────────────────────────────────────────────────────────────────────────
-  setup-environment:
-    name: "1 — Levantar Entorno Mock"
-    runs-on: ubuntu-latest
-    outputs:
-      base_url: ${{ steps.resolve-url.outputs.base_url }}
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
-
-      - name: Resolver BASE_URL
-        id: resolve-url
-        run: |
-          BASE_URL="${{ inputs.base_url || 'http://localhost:8080' }}"
-          echo "base_url=${BASE_URL}" >> "$GITHUB_OUTPUT"
-          echo "🎯 BASE_URL: ${BASE_URL}"
-
-      - name: Configurar JDK 17
-        uses: actions/setup-java@c5195efecf7bdfc987ee8bae7a71cb8b11521c00  # v4.7.1
-        with:
-          java-version: "17"
-          distribution: temurin
-
-      - name: Configurar Gradle
-        uses: gradle/actions/setup-gradle@06832c7b30a0129d7fb559bcc6e43d26f6374244  # v4.3.1
-        with:
-          gradle-version: "8.7"
-
-      - name: Build microservice-a
-        working-directory: microservice-a
-        run: gradle bootJar --no-daemon -q
-
-      - name: Levantar microservice-a (background)
-        working-directory: microservice-a
-        run: |
-          java -jar build/libs/*.jar --server.port=8080 &
-          echo "PID microservice-a: $!" > /tmp/svc.pid
-          # Esperar hasta 60s a que el servicio responda
-          for i in $(seq 1 12); do
-            sleep 5
-            if curl -sf http://localhost:8080/actuator/health > /dev/null 2>&1; then
-              echo "✅ microservice-a listo en iteración $i"
-              exit 0
-            fi
-            echo "⏳ Esperando microservice-a... ($((i*5))s)"
-          done
-          echo "❌ microservice-a no respondió en 60s"
-          exit 1
-
-  # ──────────────────────────────────────────────────────────────────────────
-  # JOB 2 — Ejecutar k6 + comparar con baseline
-  # ──────────────────────────────────────────────────────────────────────────
   k6-performance:
-    name: "2 — k6 Smoke Performance"
+    name: "Smoke Performance — k6 (20 VUs / 7 min)"
     runs-on: ubuntu-latest
-    needs: setup-environment
+    timeout-minutes: 25
     outputs:
       passed: ${{ steps.evaluate.outputs.passed }}
 
+    env:
+      BASE_URL: ${{ inputs.base_url || github.event.inputs.base_url || 'http://localhost:8080' }}
+      ENVIRONMENT: ${{ inputs.environment || github.event.inputs.environment || github.ref_name || 'ci' }}
+      K6_VUS: ${{ inputs.vus || github.event.inputs.vus || '20' }}
+      K6_DURATION: ${{ inputs.duration || github.event.inputs.duration || '7m' }}
+      RESULTS_DIR: tests/k6/results
+
     steps:
       - name: Checkout
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Login GHCR
+        run: |
+          echo "${{ secrets.GITHUB_TOKEN }}" \
+            | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+
+      - name: Iniciar entorno de simulacion
+        working-directory: simulation
+        timeout-minutes: 8
+        run: docker compose up -d --build --wait
+
+      - name: Verificar health de microservice-a
+        run: |
+          curl --retry 12 --retry-delay 5 --retry-connrefused -sf \
+            "${BASE_URL}/actuator/health" | grep -q '"status":"UP"' \
+            && echo "microservice-a healthy" \
+            || (echo "microservice-a no responde"; exit 1)
 
       - name: Instalar k6
         run: |
-          # Install k6 via direct binary download (avoids GPG/APT issues on Ubuntu 24.04)
           K6_VERSION="v0.55.0"
-          curl -fsSL "https://github.com/grafana/k6/releases/download/${K6_VERSION}/k6-${K6_VERSION}-linux-amd64.tar.gz" \
-            | sudo tar -xz --strip-components=1 -C /usr/local/bin k6-${K6_VERSION}-linux-amd64/k6
+          curl -fsSL \
+            "https://github.com/grafana/k6/releases/download/${K6_VERSION}/k6-${K6_VERSION}-linux-amd64.tar.gz" \
+            | sudo tar -xz --strip-components=1 -C /usr/local/bin \
+              "k6-${K6_VERSION}-linux-amd64/k6"
           k6 version
 
-      # Descargar baseline de la última ejecución exitosa (si existe)
-      - name: Descargar baseline histórico
-        id: download-baseline
-        uses: actions/download-artifact@95815c38cf2ff2164869cbab79da8d1f422bc89  # v4.2.1
+      - name: Configurar Node.js para comparacion
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
-          name: k6-performance-baseline
-          path: tests/k6/results/
-        continue-on-error: true
+          node-version: "20"
 
-      - name: Verificar baseline disponible
-        id: check-baseline
-        run: |
-          if [ -f "tests/k6/results/baseline.json" ]; then
-            echo "baseline_exists=true" >> "$GITHUB_OUTPUT"
-            echo "✅ Baseline encontrado"
-            cat tests/k6/results/baseline.json | python3 -c "
-          import json,sys
-          d = json.load(sys.stdin)
-          m = d.get('metrics', {})
-          print(f'  Baseline timestamp : {d.get(\"timestamp\", \"N/A\")}')
-          print(f'  Flujo completo p95 : {m.get(\"flujo_completo_p95_ms\", \"N/A\")} ms')
-          print(f'  Login p95          : {m.get(\"login_p95_ms\", \"N/A\")} ms')
-          print(f'  Error rate         : {m.get(\"error_rate\", \"N/A\")}')
-          "
-          else
-            echo "baseline_exists=false" >> "$GITHUB_OUTPUT"
-            echo "ℹ️  Sin baseline previo — primera ejecución de referencia"
-          fi
+      - name: Descargar baseline anterior
+        id: baseline
+        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7
+        env:
+          BASELINE_NAME: k6-performance-baseline-${{ env.ENVIRONMENT }}
+          RESULTS_DIR: ${{ env.RESULTS_DIR }}
+        with:
+          script: |
+            const fs = require('fs');
+            const path = require('path');
+            const { execFileSync } = require('child_process');
+
+            const artifactName = process.env.BASELINE_NAME;
+            const resultsDir = process.env.RESULTS_DIR;
+            const { owner, repo } = context.repo;
+            fs.mkdirSync(resultsDir, { recursive: true });
+
+            const artifacts = await github.paginate(
+              github.rest.actions.listArtifactsForRepo,
+              { owner, repo, per_page: 100 }
+            );
+
+            const baseline = artifacts
+              .filter((a) => a.name === artifactName && !a.expired)
+              .filter((a) => !a.workflow_run || a.workflow_run.id !== context.runId)
+              .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))[0];
+
+            if (!baseline) {
+              core.info(`Sin baseline previo (${artifactName})`);
+              core.setOutput('exists', 'false');
+              return;
+            }
+
+            const zip = await github.rest.actions.downloadArtifact({
+              owner,
+              repo,
+              artifact_id: baseline.id,
+              archive_format: 'zip',
+            });
+
+            const zipPath = path.join(resultsDir, 'baseline.zip');
+            fs.writeFileSync(zipPath, Buffer.from(zip.data));
+            execFileSync('unzip', ['-qo', zipPath, '-d', resultsDir]);
+
+            const downloaded = path.join(resultsDir, 'baseline.json');
+            if (!fs.existsSync(downloaded)) {
+              const latest = path.join(resultsDir, 'smoke_performance_latest.json');
+              if (fs.existsSync(latest)) fs.renameSync(latest, downloaded);
+            }
+
+            core.info(`Baseline descargado: ${artifactName} (${baseline.created_at})`);
+            core.setOutput('exists', fs.existsSync(downloaded) ? 'true' : 'false');
 
       - name: Ejecutar k6 Smoke Performance
         id: k6-run
         env:
-          BASE_URL: ${{ needs.setup-environment.outputs.base_url }}
-          ENVIRONMENT: ${{ github.event.inputs.environment || 'develop' }}
           GITHUB_RUN_ID: ${{ github.run_id }}
-          K6_VUS: ${{ github.event.inputs.vus || '20' }}
-          K6_DURATION: ${{ github.event.inputs.duration || '7m' }}
         run: |
-          mkdir -p tests/k6/results
-
+          mkdir -p "${RESULTS_DIR}"
+          echo "k6 smoke: ${K6_VUS} VUs / ${K6_DURATION} / ${BASE_URL}"
           k6 run \
             --env BASE_URL="${BASE_URL}" \
             --env ENVIRONMENT="${ENVIRONMENT}" \
             --env GITHUB_RUN_ID="${GITHUB_RUN_ID}" \
             --env K6_VUS="${K6_VUS}" \
             --env K6_DURATION="${K6_DURATION}" \
-            --out json=tests/k6/results/k6_raw.json \
-            tests/k6/smoke_performance.js || true
+            --out json="${RESULTS_DIR}/k6_raw_${GITHUB_RUN_ID}.json" \
+            tests/k6/smoke_performance.js
 
-          # Verificar que se generó el resumen
-          if [ ! -f "tests/k6/results/smoke_performance_latest.json" ]; then
-            echo "❌ No se generó el archivo de resultados"
-            exit 1
-          fi
-          echo "✅ Resultados generados"
-
-      - name: Instalar Node.js para comparación
-        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020  # v4.4.0
-        with:
-          node-version: '20'
-
-      - name: Comparar con baseline histórico
+      - name: Comparar con baseline historico
         id: compare
+        if: always()
         run: |
-          if [ "${{ steps.check-baseline.outputs.baseline_exists }}" = "true" ]; then
-            echo "📊 Comparando con baseline..."
+          if [ -f "${RESULTS_DIR}/smoke_performance_latest.json" ] && [ -f "${RESULTS_DIR}/baseline.json" ]; then
             node tests/k6/scripts/compare-results.js \
-              --current  tests/k6/results/smoke_performance_latest.json \
-              --baseline tests/k6/results/baseline.json \
-              --output   tests/k6/results/comparison_report.md
-            COMPARE_EXIT=$?
-            echo "compare_exit=${COMPARE_EXIT}" >> "$GITHUB_OUTPUT"
+              --current  "${RESULTS_DIR}/smoke_performance_latest.json" \
+              --baseline "${RESULTS_DIR}/baseline.json" \
+              --output   "${RESULTS_DIR}/comparison_report.md"
+            echo "compare_passed=true" >> "$GITHUB_OUTPUT"
           else
-            echo "ℹ️  Primera ejecución: sin comparación disponible"
-            echo "compare_exit=0" >> "$GITHUB_OUTPUT"
+            echo "Sin baseline previo para comparar; se publica solo el resultado actual."
+            echo "compare_passed=true" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Evaluar resultado final
+      - name: Evaluar quality gates
         id: evaluate
+        if: always()
         run: |
-          # Verificar thresholds desde el JSON de resultados
-          python3 - <<'EOF'
-          import json, sys, os
+          python3 - <<'PY'
+          import json, os
 
-          with open('tests/k6/results/smoke_performance_latest.json') as f:
-            data = json.load(f)
-
-          m = data.get('metrics', {})
-          errors = []
-
+          result_path = os.path.join(os.environ['RESULTS_DIR'], 'smoke_performance_latest.json')
           checks = [
-            ('flujo_completo_p95_ms', 3000,  'Flujo completo p95 < 3000ms'),
-            ('login_p95_ms',          700,   'Login p95 < 700ms'),
-            ('consulta_p95_ms',       900,   'Consulta p95 < 900ms'),
-            ('pago_p95_ms',           1200,  'Actualización p95 < 1200ms'),
-            ('error_rate',            0.01,  'Error rate < 1%'),
+              ('flujo_completo_p95_ms', 3000, 'Flujo completo p95 < 3000ms'),
+              ('login_p95_ms', 700, 'Login p95 < 700ms'),
+              ('consulta_p95_ms', 900, 'Consulta p95 < 900ms'),
+              ('pago_p95_ms', 1200, 'Actualizacion/pago p95 < 1200ms'),
+              ('error_rate', 0.01, 'Error rate < 1%'),
           ]
 
+          errors = []
+          if not os.path.exists(result_path):
+              errors.append('No se genero smoke_performance_latest.json')
+              metrics = {}
+          else:
+              with open(result_path, encoding='utf-8') as f:
+                  metrics = json.load(f).get('metrics', {})
+
           for key, limit, desc in checks:
-            val = m.get(key)
-            if val is None:
-              print(f'⚠️  {desc}: sin datos')
-            elif val > limit:
-              errors.append(f'❌ {desc}: {val:.2f} > {limit}')
-              print(errors[-1])
-            else:
-              print(f'✅ {desc}: {val:.2f}')
+              val = metrics.get(key)
+              if val is None:
+                  errors.append(f'{desc}: sin datos')
+              elif val > limit:
+                  errors.append(f'{desc}: {val:.2f} > {limit}')
+              else:
+                  print(f'OK: {desc}: {val:.2f}')
+
+          compare_passed = os.environ.get('COMPARE_PASSED', 'false') == 'true'
+          if not compare_passed:
+              errors.append('Comparacion contra baseline fallo')
+
+          with open(os.environ['GITHUB_OUTPUT'], 'a', encoding='utf-8') as out:
+              out.write(f"passed={'false' if errors else 'true'}\n")
 
           if errors:
-            print(f'\n❌ {len(errors)} threshold(s) fallaron')
-            with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
-              f.write('passed=false\n')
-          else:
-            print('\n✅ Todos los thresholds pasaron')
-            with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
-              f.write('passed=true\n')
-          EOF
+              print('\n'.join(f'FAIL: {e}' for e in errors))
+              raise SystemExit(1)
+          PY
+        env:
+          COMPARE_PASSED: ${{ steps.compare.outputs.compare_passed }}
 
-      - name: Publicar resumen en Job Summary
+      - name: Publicar resumen
         if: always()
         run: |
-          echo "## 🚀 k6 Smoke Performance — PaymentBox" >> "$GITHUB_STEP_SUMMARY"
-          echo "" >> "$GITHUB_STEP_SUMMARY"
-          echo "| Campo | Valor |" >> "$GITHUB_STEP_SUMMARY"
-          echo "|-------|-------|" >> "$GITHUB_STEP_SUMMARY"
-          echo "| Entorno | \`${{ github.event.inputs.environment || 'develop' }}\` |" >> "$GITHUB_STEP_SUMMARY"
-          echo "| VUs | ${{ github.event.inputs.vus || '20' }} |" >> "$GITHUB_STEP_SUMMARY"
-          echo "| Duración | ${{ github.event.inputs.duration || '7m' }} |" >> "$GITHUB_STEP_SUMMARY"
-          echo "| Run ID | ${{ github.run_id }} |" >> "$GITHUB_STEP_SUMMARY"
-          echo "" >> "$GITHUB_STEP_SUMMARY"
+          {
+            echo "## k6 Smoke Performance — PaymentBox"
+            echo ""
+            echo "| Campo | Valor |"
+            echo "|-------|-------|"
+            echo "| Entorno | \`${ENVIRONMENT}\` |"
+            echo "| VUs | ${K6_VUS} |"
+            echo "| Duracion | ${K6_DURATION} |"
+            echo "| Baseline | ${{ steps.baseline.outputs.exists == 'true' && 'descargado' || 'no disponible' }} |"
+            echo ""
+          } >> "$GITHUB_STEP_SUMMARY"
 
-          if [ -f "tests/k6/results/comparison_report.md" ]; then
-            cat tests/k6/results/comparison_report.md >> "$GITHUB_STEP_SUMMARY"
-          else
-            python3 - <<'EOF'
+          if [ -f "${RESULTS_DIR}/comparison_report.md" ]; then
+            cat "${RESULTS_DIR}/comparison_report.md" >> "$GITHUB_STEP_SUMMARY"
+          elif [ -f "${RESULTS_DIR}/smoke_performance_latest.json" ]; then
+            python3 - <<'PY' >> "$GITHUB_STEP_SUMMARY"
           import json, os
-          try:
-            with open('tests/k6/results/smoke_performance_latest.json') as f:
-              d = json.load(f)
-            m = d.get('metrics', {})
-            lines = [
-              "## Métricas de Rendimiento\n",
-              "| Métrica | Resultado | Límite | Estado |",
-              "|---------|-----------|--------|--------|",
-              f"| Flujo completo p95 | {m.get('flujo_completo_p95_ms', 'N/A')} ms | 3000 ms | {'✅' if m.get('flujo_completo_p95_ms', 9999) <= 3000 else '❌'} |",
-              f"| Login p95 | {m.get('login_p95_ms', 'N/A')} ms | 700 ms | {'✅' if m.get('login_p95_ms', 9999) <= 700 else '❌'} |",
-              f"| Consulta p95 | {m.get('consulta_p95_ms', 'N/A')} ms | 900 ms | {'✅' if m.get('consulta_p95_ms', 9999) <= 900 else '❌'} |",
-              f"| Actualización p95 | {m.get('pago_p95_ms', 'N/A')} ms | 1200 ms | {'✅' if m.get('pago_p95_ms', 9999) <= 1200 else '❌'} |",
-              f"| Error rate | {round(m.get('error_rate', 0)*100, 2)} % | 1 % | {'✅' if m.get('error_rate', 1) <= 0.01 else '❌'} |",
-            ]
-            summary_path = os.environ['GITHUB_STEP_SUMMARY']
-            with open(summary_path, 'a') as f:
-              f.write('\n'.join(lines) + '\n')
-          except Exception as e:
-            print(f'Error generando resumen: {e}')
-          EOF
+          with open(os.path.join(os.environ['RESULTS_DIR'], 'smoke_performance_latest.json'), encoding='utf-8') as f:
+              m = json.load(f).get('metrics', {})
+          rows = [
+              ('Flujo completo p95', m.get('flujo_completo_p95_ms'), '3000 ms'),
+              ('Login p95', m.get('login_p95_ms'), '700 ms'),
+              ('Consulta p95', m.get('consulta_p95_ms'), '900 ms'),
+              ('Actualizacion/pago p95', m.get('pago_p95_ms'), '1200 ms'),
+              ('Error rate', (m.get('error_rate') or 0) * 100, '1 %'),
+          ]
+          print('| Metrica | Resultado | Limite |')
+          print('|---------|-----------|--------|')
+          for name, value, limit in rows:
+              suffix = '%' if name == 'Error rate' else 'ms'
+              text = 'N/A' if value is None else f'{value:.2f} {suffix}'
+              print(f'| {name} | {text} | {limit} |')
+          PY
           fi
 
-      - name: Subir resultados como artefacto
+      - name: Preparar baseline actualizado
+        if: |
+          steps.evaluate.outputs.passed == 'true' &&
+          (
+            (github.event_name == 'push' && contains(fromJSON('["E","A","F","PRODUCCION"]'), github.ref_name)) ||
+            (github.event_name == 'schedule' && contains(fromJSON('["E","A","F","PRODUCCION"]'), github.ref_name)) ||
+            ((inputs.update_baseline || github.event.inputs.update_baseline == 'true') && contains(fromJSON('["E","A","F","PRODUCCION"]'), github.ref_name))
+          )
+        run: |
+          cp "${RESULTS_DIR}/smoke_performance_latest.json" "${RESULTS_DIR}/baseline.json"
+
+      - name: Subir resultados
         if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4.6.2
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: k6-performance-results-${{ github.run_id }}
           path: tests/k6/results/
           retention-days: 90
-
-      # Actualizar baseline solo si se solicitó y los tests pasaron
-      - name: Actualizar baseline histórico
-        if: |
-          (github.event.inputs.update_baseline == 'true' ||
-           github.event_name == 'schedule') &&
-          steps.evaluate.outputs.passed == 'true'
-        run: |
-          cp tests/k6/results/smoke_performance_latest.json \
-             tests/k6/results/baseline.json
-          echo "✅ Baseline actualizado con los resultados de esta ejecución"
+          if-no-files-found: warn
 
       - name: Subir baseline actualizado
         if: |
-          (github.event.inputs.update_baseline == 'true' ||
-           github.event_name == 'schedule') &&
-          steps.evaluate.outputs.passed == 'true'
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4.6.2
+          steps.evaluate.outputs.passed == 'true' &&
+          hashFiles('tests/k6/results/baseline.json') != '' &&
+          (
+            (github.event_name == 'push' && contains(fromJSON('["E","A","F","PRODUCCION"]'), github.ref_name)) ||
+            (github.event_name == 'schedule' && contains(fromJSON('["E","A","F","PRODUCCION"]'), github.ref_name)) ||
+            ((inputs.update_baseline || github.event.inputs.update_baseline == 'true') && contains(fromJSON('["E","A","F","PRODUCCION"]'), github.ref_name))
+          )
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          name: k6-performance-baseline
+          name: k6-performance-baseline-${{ env.ENVIRONMENT }}
           path: tests/k6/results/baseline.json
           retention-days: 365
           overwrite: true
 
-      # Fallar el job si los thresholds no pasan
-      - name: Verificar resultado final
-        if: steps.evaluate.outputs.passed == 'false'
-        run: |
-          echo "❌ Los tests de performance no pasaron los thresholds configurados."
-          echo "   Revisa el Job Summary para el detalle de las métricas."
-          exit 1
-
-  # ──────────────────────────────────────────────────────────────────────────
-  # JOB 3 — Notificación de resultados (solo en schedule o regresión)
-  # ──────────────────────────────────────────────────────────────────────────
-  notify:
-    name: "3 — Notificación de Resultados"
-    runs-on: ubuntu-latest
-    needs: k6-performance
-    if: always() && (github.event_name == 'schedule' || needs.k6-performance.outputs.passed == 'false')
-
-    steps:
-      - name: Notificación de resultado
-        run: |
-          PASSED="${{ needs.k6-performance.outputs.passed }}"
-          if [ "$PASSED" = "true" ]; then
-            echo "✅ Performance OK: todos los thresholds pasaron"
-          else
-            echo "❌ Performance FALLA: thresholds no cumplidos"
-            echo "   Ver artefactos del run ${{ github.run_id }} para detalles"
-            # Aquí se podría integrar notificación a Slack/Teams/email
-          fi
+      - name: Detener entorno
+        if: always()
+        working-directory: simulation
+        run: docker compose down -v --remove-orphans

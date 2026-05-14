@@ -1,12 +1,23 @@
 # [microservice-a] CI - Caller para reusable-microservice-pipeline.yml
 # Equipo: PaymentBox Core (Team A) | test_runner: karate (E2E + k6 + Selenium)
-# Ambientes: develop->env-e | qa->env-a | uat->env-u | main->prod
-# DEMO BREAK 2 activo en rama qa (Karate falla con monto minimo $100)
-name: "[microservice-a] CI . Build . Calidad . Seguridad . Deploy"
+# Ambientes: E->dev | A->qa | F->preprod | PRODUCCION->prod
+name: "[microservice-a] CICD"
+run-name: "${{ github.event_name == 'pull_request' && format('[microservice-a] CICD · #{0}: {1}', github.event.pull_request.number, github.event.pull_request.title) || '[microservice-a] CICD' }}"
 
 on:
   push:
-    branches: [develop, qa, uat, main]
+    # Post-merge/pre integración sobre ramas con overlay explícito; feature/** ⇒ env por defecto `env-e` en reusable.
+    branches: [feature/**, E, A, F, PRODUCCION]
+    paths:
+      - 'microservice-a/**'
+      - '.github/workflows/pipeline-microservice-a.yml'
+      - '.github/workflows/reusable-microservice-pipeline.yml'
+      - '.gitleaks.toml'
+      - '.trivyignore'
+  pull_request:
+    # Ramos base (rama destino) del PR. Usual: HEAD = feature/** → BUILD validando merge hacia esa base,
+    # sin Deliver hasta el push después del merge — ver reusable (event_name).
+    branches: [E, A, F, PRODUCCION]
     paths:
       - 'microservice-a/**'
       - '.github/workflows/pipeline-microservice-a.yml'
@@ -21,6 +32,7 @@ concurrency:
 
 jobs:
   pipeline:
+    name: CICD
     uses: ./.github/workflows/reusable-microservice-pipeline.yml
     with:
       microservice_name: microservice-a

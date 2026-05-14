@@ -1,0 +1,336 @@
+name: "🏆 Golden Pipeline — API Testing · Performance · RPA · Quality Gates"
+
+# ──────────────────────────────────────────────────────────────────────────────
+# PIPELINE: Golden Pipeline de Calidad — AT&T PaymentBox PoC
+#
+# PROPÓSITO:
+#   Pipeline unificado que ejecuta todas las suites de prueba en cada push/PR
+#   y aplica Quality Gates consolidados. Bloquea la entrega si cualquier gate
+#   obligatorio falla.
+#
+# SUITES INCLUIDAS:
+#   1a. API Functional   — Karate smoke tests (@smoke): endpoints críticos,
+#                          validación de códigos HTTP, body response.
+#   1b. API Integration  — Karate E2E (@e2e): flujo completo 8 pasos,
+#                          autenticación, dependencias entre servicios.
+#   1c. API Contract     — oasdiff (breaking changes OpenAPI/Swagger) +
+#                          Karate @contract (contrato entre microservicios).
+#   2.  Smoke Perf.      — k6 20 VUs / 7 min: thresholds p95, error rate.
+#   3.  RPA              — Playwright: login, consulta, descarga, registro.
+#   4.  Quality Gate     — Gate consolidado; falla si cualquier suite falla.
+#
+# ACTIVACIÓN:
+#   push → E | A | F | PRODUCCION   (rutas relevantes de código/tests)
+#   pull_request → A | F | PRODUCCION
+#   workflow_dispatch            (ejecución manual con opciones)
+#
+# THRESHOLDS (Quality Gates):
+#   API Functional   → 100% smoke scenarios pass
+#   API Integration  → flujo E2E 8 pasos completo sin fallos
+#   API Contract     → 0 breaking changes detectados (oasdiff exit 0)
+#   Smoke Perf. k6   → p95 flujo < 3000ms | error rate < 1%
+#                       login p95 < 700ms | consulta p95 < 900ms | pago p95 < 1200ms
+#   RPA              → ejecución completada (no bloqueante si SF_URL no configurado)
+# ──────────────────────────────────────────────────────────────────────────────
+
+on:
+  push:
+    branches: [E, A, F, PRODUCCION]
+    paths:
+      - 'microservice-a/**'
+      - 'microservice-b/**'
+      - 'tests/**'
+      - 'simulation/**'
+      - 'doc/02_CI_CD/rpa/**'
+      - '.github/workflows/rpa.yml'
+      - '.github/workflows/golden-pipeline-testing.yml'
+      - '.github/workflows/reusable-api-testing.yml'
+      - '.github/workflows/performance-smoke.yml'
+  pull_request:
+    branches: [A, F, PRODUCCION]
+    paths:
+      - 'microservice-a/**'
+      - 'microservice-b/**'
+      - 'tests/**'
+      - 'simulation/**'
+      - 'doc/02_CI_CD/rpa/**'
+      - '.github/workflows/rpa.yml'
+      - '.github/workflows/golden-pipeline-testing.yml'
+      - '.github/workflows/reusable-api-testing.yml'
+      - '.github/workflows/performance-smoke.yml'
+  workflow_dispatch:
+    inputs:
+      run_rpa:
+        description: "Ejecutar RPA (requiere secrets SF_URL / SF_USERNAME / SF_PASSWORD)"
+        type: boolean
+        default: false
+        required: false
+      environment:
+        description: "Entorno objetivo"
+        type: choice
+        options: [ci, develop, qa]
+        default: ci
+        required: false
+
+# ── Permisos mínimos (least privilege) ───────────────────────────────────────
+permissions:
+  contents: read
+  checks: write          # publicar resultados en UI de GitHub
+  pull-requests: write   # comentar breaking changes en PRs
+  actions: read          # leer artefactos de baseline
+  packages: read         # login GHCR para entorno de simulacion
+
+# ── Control de concurrencia ───────────────────────────────────────────────────
+concurrency:
+  group: golden-pipeline-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+# ── Variables globales ────────────────────────────────────────────────────────
+env:
+  JAVA_VERSION: "17"
+  JAVA_DIST:    "temurin"
+  BASE_URL:     "http://localhost:8080"
+  MSVC_B_URL:   "http://localhost:18081"
+  KARATE_ENV:   ${{ github.event.inputs.environment || 'ci' }}
+
+# ══════════════════════════════════════════════════════════════════════════════
+jobs:
+
+  api-tests:
+    name: "1 · API Testing — reusable quality gate"
+    uses: ./.github/workflows/reusable-api-testing.yml
+    with:
+      karate_env: ${{ github.event.inputs.environment || 'ci' }}
+      base_ref: ${{ github.base_ref || github.event.repository.default_branch || 'E' }}
+      artifact_suffix: golden-api-${{ github.run_id }}
+    secrets: inherit
+
+
+# ╔══════════════════════════════════════════════════════════════════════════╗
+# ║  JOB 2 · SMOKE PERFORMANCE (k6 — 20 VUs / 5-10 min)                    ║
+# ║  Mide tiempos de respuesta bajo carga moderada. Compara contra          ║
+# ║  ejecución anterior para detectar regresiones de performance.            ║
+# ║                                                                          ║
+# ║  Thresholds:                                                             ║
+# ║    flujo_completo p95 < 3000ms   |  error rate < 1%                     ║
+# ║    login p95 < 700ms             |  consulta p95 < 900ms                ║
+# ║    pago/actualización p95 < 1200ms                                       ║
+# ╚══════════════════════════════════════════════════════════════════════════╝
+  smoke-performance:
+    name: "2 · Smoke Performance (k6 — 20 VUs / 7 min)"
+    needs: [api-tests]
+    uses: ./.github/workflows/performance-smoke.yml
+    with:
+      base_url: http://localhost:8080
+      environment: ${{ github.event.inputs.environment || github.ref_name || 'ci' }}
+      vus: "20"
+      duration: "7m"
+      update_baseline: ${{ github.event_name == 'push' && contains(fromJSON('["E","A","F","PRODUCCION"]'), github.ref_name) }}
+    secrets: inherit
+
+
+# ╔══════════════════════════════════════════════════════════════════════════╗
+# ║  JOB 3a · RPA Decision                                                  ║
+# ║  Gate visible en release flow, bloqueante solo con RPA_BLOCKING_GATE.   ║
+# ╚══════════════════════════════════════════════════════════════════════════╝
+  rpa-decision:
+    name: "3a · RPA Decision — Release Quality Gate"
+    runs-on: ubuntu-latest
+    needs: [api-tests, smoke-performance]
+    if: always()
+    outputs:
+      run_rpa: ${{ steps.decision.outputs.run_rpa }}
+      enforce_gate: ${{ steps.decision.outputs.enforce_gate }}
+      reason: ${{ steps.decision.outputs.reason }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          fetch-depth: 0
+
+      - name: Decide RPA policy
+        id: decision
+        env:
+          RPA_ENABLED: ${{ vars.RPA_ENABLED }}
+          RPA_BLOCKING_GATE: ${{ vars.RPA_BLOCKING_GATE }}
+          EVENT_NAME: ${{ github.event_name }}
+          REF_NAME: ${{ github.ref_name }}
+          BASE_REF: ${{ github.base_ref }}
+          BASE_SHA: ${{ github.event.before }}
+          HEAD_SHA: ${{ github.sha }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          MANUAL_RPA: ${{ github.event.inputs.run_rpa }}
+        run: |
+          if [ "$EVENT_NAME" = "pull_request" ]; then
+            RANGE="$PR_BASE_SHA...$PR_HEAD_SHA"
+          elif git cat-file -e "$BASE_SHA^{commit}" 2>/dev/null; then
+            RANGE="$BASE_SHA...$HEAD_SHA"
+          else
+            RANGE="HEAD~1...HEAD"
+          fi
+
+          CHANGED_FILES="$(git diff --name-only "$RANGE" || true)"
+          RPA_CHANGED="false"
+          if printf '%s\n' "$CHANGED_FILES" | grep -Eq '^(doc/02_CI_CD/rpa/|\.github/workflows/rpa\.yml|\.github/workflows/golden-pipeline-testing\.yml)'; then
+            RPA_CHANGED="true"
+          fi
+
+          RUN_RPA="false"
+          ENFORCE_GATE="false"
+          REASON="RPA visible in quality gate and skipped: not requested"
+
+          if [ "$RPA_BLOCKING_GATE" = "true" ]; then
+            ENFORCE_GATE="true"
+          fi
+
+          if [ "$MANUAL_RPA" = "true" ]; then
+            RUN_RPA="true"
+            REASON="RPA requested manually"
+          elif [ "$RPA_ENABLED" = "true" ] && { [ "$REF_NAME" = "E" ] || [ "$REF_NAME" = "A" ]; }; then
+            RUN_RPA="true"
+            REASON="RPA requested automatically on $REF_NAME by RPA_ENABLED=true"
+          elif [ "$RPA_ENABLED" = "true" ] && { [ "$REF_NAME" = "F" ] || [ "$REF_NAME" = "PRODUCCION" ]; }; then
+            RUN_RPA="true"
+            REASON="RPA requested on release branch by RPA_ENABLED=true"
+          elif [ "$EVENT_NAME" = "pull_request" ] && [ "$RPA_CHANGED" = "true" ]; then
+            RUN_RPA="true"
+            REASON="RPA requested because RPA-critical files changed in PR to $BASE_REF"
+          fi
+
+          {
+            echo "run_rpa=$RUN_RPA"
+            echo "enforce_gate=$ENFORCE_GATE"
+            echo "reason=$REASON"
+          } >> "$GITHUB_OUTPUT"
+
+          {
+            echo "## RPA Decision"
+            echo ""
+            echo "| Field | Value |"
+            echo "|-------|-------|"
+            echo "| Event | $EVENT_NAME |"
+            echo "| Branch/Base | ${REF_NAME:-$BASE_REF} |"
+            echo "| RPA enabled variable | ${RPA_ENABLED:-false} |"
+            echo "| Blocking gate variable | ${RPA_BLOCKING_GATE:-false} |"
+            echo "| RPA-critical path changed | $RPA_CHANGED |"
+            echo "| Decision | $RUN_RPA |"
+            echo "| Policy | $([ "$ENFORCE_GATE" = "true" ] && echo blocking || echo informative) |"
+            echo "| Reason | $REASON |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+# ╔══════════════════════════════════════════════════════════════════════════╗
+# ║  JOB 3b · RPA (Reusable)                                                ║
+# ║  Única implementación operativa: .github/workflows/rpa.yml              ║
+# ╚══════════════════════════════════════════════════════════════════════════╝
+  rpa:
+    name: "3b · RPA — Reusable Quality Gate"
+    needs: rpa-decision
+    if: always()
+    uses: ./.github/workflows/rpa.yml
+    secrets: inherit
+    with:
+      run_rpa: ${{ needs.rpa-decision.outputs.run_rpa == 'true' }}
+      enforce_gate: ${{ needs.rpa-decision.outputs.enforce_gate == 'true' }}
+      reason: ${{ needs.rpa-decision.outputs.reason }}
+      product_name: "Paquete Básico"
+      product_price: "1500"
+
+
+# ╔══════════════════════════════════════════════════════════════════════════╗
+# ║  JOB 4 · QUALITY GATE — Consolidado                                     ║
+# ║  Evalúa el resultado de todas las suites. Falla el pipeline si          ║
+# ║  cualquier gate obligatorio no pasa.                                    ║
+# ║                                                                          ║
+# ║  Gates obligatorios: api-tests | smoke-performance                       ║
+# ║  Gates opcionales:   rpa (no bloquea)                                   ║
+# ╚══════════════════════════════════════════════════════════════════════════╝
+  quality-gate:
+    name: "4 · Quality Gate — Consolidado"
+    runs-on: ubuntu-latest
+    needs: [api-tests, smoke-performance, rpa]
+    if: always()
+
+    steps:
+      - name: Evaluar Quality Gates
+        run: |
+          API_TESTS="${{ needs.api-tests.result }}"
+          PERFORMANCE="${{ needs.smoke-performance.result }}"
+          RPA="${{ needs.rpa.result }}"
+          RPA_STATUS="${{ needs.rpa.outputs.status }}"
+          RPA_POLICY="${{ needs.rpa.outputs.policy }}"
+
+          GATE_FAILED=false
+
+          {
+            echo "## 🏁 Quality Gate — Resultados Consolidados"
+            echo ""
+            echo "| Suite | Tipo | Resultado |"
+            echo "|-------|------|-----------|"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          check_gate() {
+            local name="$1" result="$2" required="$3" detail="$4"
+            local icon
+            case "$result" in
+              success)  icon="✅ PASS" ;;
+              skipped)  icon="⏭️ SKIP" ;;
+              *)        icon="❌ FAIL" ;;
+            esac
+            echo "| $name | $detail | $icon |" >> "$GITHUB_STEP_SUMMARY"
+            if [ "$result" != "success" ] && [ "$result" != "skipped" ] && [ "$required" = "true" ]; then
+              GATE_FAILED=true
+            fi
+          }
+
+          check_gate "API Testing reusable (Functional + Integration + Contract)" "$API_TESTS" "true" "Obligatorio"
+          check_gate "Smoke Performance (k6 Thresholds)"    "$PERFORMANCE" "true"  "Obligatorio"
+
+          case "${RPA_STATUS:-$RPA}" in
+            passed) icon="✅ PASS" ;;
+            skipped) icon="⏭️ SKIP" ;;
+            failed_non_blocking) icon="⚠️ FAIL informativo" ;;
+            success) icon="✅ PASS" ;;
+            *) icon="❌ FAIL" ;;
+          esac
+          echo "| RPA (Node.js + Playwright/Salesforce) | ${RPA_POLICY:-informative} | $icon |" >> "$GITHUB_STEP_SUMMARY"
+
+          if [ "${RPA_STATUS:-$RPA}" = "failed" ] && [ "$RPA_POLICY" = "blocking" ]; then
+            GATE_FAILED=true
+          fi
+
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "### Thresholds de Performance (k6)" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Métrica | Límite |" >> "$GITHUB_STEP_SUMMARY"
+          echo "|---------|--------|" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Flujo completo p95 | < 3000ms |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Login p95 | < 700ms |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Consulta p95 | < 900ms |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Pago/actualización p95 | < 1200ms |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Error rate | < 1% |" >> "$GITHUB_STEP_SUMMARY"
+
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+
+          if [ "$GATE_FAILED" = "true" ]; then
+            echo "## ❌ Quality Gate: FAILED" >> "$GITHUB_STEP_SUMMARY"
+            echo "Una o más suites obligatorias fallaron. Revisar reportes de cada job."
+            exit 1
+          else
+            echo "## ✅ Quality Gate: PASSED" >> "$GITHUB_STEP_SUMMARY"
+            echo "✅ Todos los gates obligatorios aprobados."
+          fi
+
+      - name: Resumen de rama y commit
+        if: always()
+        run: |
+          {
+            echo ""
+            echo "---"
+            echo "| Campo | Valor |"
+            echo "|-------|-------|"
+            echo "| Rama | \`${{ github.ref_name }}\` |"
+            echo "| Commit | \`${{ github.sha }}\` |"
+            echo "| Run | [${{ github.run_id }}](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}) |"
+            echo "| Trigger | ${{ github.event_name }} |"
+          } >> "$GITHUB_STEP_SUMMARY"

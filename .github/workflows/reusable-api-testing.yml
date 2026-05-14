@@ -1,0 +1,400 @@
+name: Reusable API Testing
+
+on:
+  workflow_call:
+    inputs:
+      karate_env:
+        description: Karate environment to use for API tests.
+        required: false
+        type: string
+        default: ci
+      base_ref:
+        description: Base branch for OpenAPI comparisons. When empty, it is inferred from the event and environment branch.
+        required: false
+        type: string
+        default: ""
+      artifact_suffix:
+        description: Suffix used in artifact names.
+        required: false
+        type: string
+        default: api
+
+permissions:
+  contents: read
+  pull-requests: write
+
+env:
+  JAVA_VERSION: "17"
+  JAVA_DIST: "temurin"
+  BASE_URL: "http://localhost:8080"
+  MSVC_B_URL: "http://localhost:18081"
+  KARATE_ENV: ${{ inputs.karate_env }}
+  OASDIFF_VERSION: "1.10.25"
+
+jobs:
+  api-functional:
+    name: API Functional - Karate smoke
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Login GHCR
+        run: |
+          echo "${{ secrets.GITHUB_TOKEN }}" \
+            | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+
+      - name: Start simulation environment
+        working-directory: simulation
+        timeout-minutes: 8
+        run: docker compose up -d --build --wait
+
+      - name: Verify service health
+        run: |
+          curl --retry 12 --retry-delay 5 --retry-connrefused -sf \
+            "${{ env.BASE_URL }}/actuator/health" | grep -q '"status":"UP"'
+          curl --retry 12 --retry-delay 5 --retry-connrefused -sf \
+            "${{ env.MSVC_B_URL }}/actuator/health" | grep -q '"status":"UP"'
+
+      - name: Setup JDK ${{ env.JAVA_VERSION }}
+        uses: actions/setup-java@c1e323688fd81a25caa38c78aa6df2d33d3e20d9 # v4
+        with:
+          java-version: ${{ env.JAVA_VERSION }}
+          distribution: ${{ env.JAVA_DIST }}
+          cache: maven
+
+      - name: API Functional - smoke tests
+        working-directory: tests/functional-karate
+        run: |
+          mvn test \
+            -Dkarate.env=${{ env.KARATE_ENV }} \
+            -DbaseUrl=${{ env.BASE_URL }} \
+            -Dtest=RecargaFlowRunner#testSmoke \
+            --no-transfer-progress
+
+      - name: Publish functional reports
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: api-functional-report-${{ inputs.artifact_suffix }}
+          path: |
+            tests/functional-karate/target/karate-reports/
+            tests/functional-karate/target/surefire-reports/
+          retention-days: 30
+          if-no-files-found: warn
+
+      - name: Stop simulation environment
+        if: always()
+        working-directory: simulation
+        run: docker compose down -v --remove-orphans
+
+  api-integration:
+    name: API Integration - Karate E2E
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Login GHCR
+        run: |
+          echo "${{ secrets.GITHUB_TOKEN }}" \
+            | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+
+      - name: Start simulation environment
+        working-directory: simulation
+        timeout-minutes: 8
+        run: docker compose up -d --build --wait
+
+      - name: Verify service health
+        run: |
+          curl --retry 12 --retry-delay 5 --retry-connrefused -sf \
+            "${{ env.BASE_URL }}/actuator/health" | grep -q '"status":"UP"'
+          curl --retry 12 --retry-delay 5 --retry-connrefused -sf \
+            "${{ env.MSVC_B_URL }}/actuator/health" | grep -q '"status":"UP"'
+
+      - name: Setup JDK ${{ env.JAVA_VERSION }}
+        uses: actions/setup-java@c1e323688fd81a25caa38c78aa6df2d33d3e20d9 # v4
+        with:
+          java-version: ${{ env.JAVA_VERSION }}
+          distribution: ${{ env.JAVA_DIST }}
+          cache: maven
+
+      - name: API Integration - E2E flow
+        working-directory: tests/functional-karate
+        run: |
+          mvn test \
+            -Dkarate.env=${{ env.KARATE_ENV }} \
+            -DbaseUrl=${{ env.BASE_URL }} \
+            -Dtest=RecargaFlowRunner#testRecargaFlow \
+            --no-transfer-progress
+
+      - name: Publish integration reports
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: api-integration-report-${{ inputs.artifact_suffix }}
+          path: |
+            tests/functional-karate/target/karate-reports/
+            tests/functional-karate/target/surefire-reports/
+          retention-days: 30
+          if-no-files-found: warn
+
+      - name: Stop simulation environment
+        if: always()
+        working-directory: simulation
+        run: docker compose down -v --remove-orphans
+
+  api-contract:
+    name: API Contract - Karate and OpenAPI
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          fetch-depth: 0
+
+      - name: Resolve OpenAPI base branch
+        id: base
+        run: |
+          if [ -n "${{ inputs.base_ref }}" ]; then
+            BASE_REF="${{ inputs.base_ref }}"
+          elif [ "${{ github.event_name }}" = "pull_request" ]; then
+            BASE_REF="${{ github.base_ref }}"
+          else
+            case "${{ github.ref_name }}" in
+              feature/*|E) BASE_REF="E" ;;
+              A) BASE_REF="E" ;;
+              F) BASE_REF="A" ;;
+              PRODUCCION) BASE_REF="F" ;;
+              *) BASE_REF="E" ;;
+            esac
+          fi
+          echo "ref=${BASE_REF}" >> "$GITHUB_OUTPUT"
+          echo "OpenAPI base branch: ${BASE_REF}" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Install oasdiff
+        run: |
+          curl -fsSL \
+            "https://github.com/tufin/oasdiff/releases/download/v${OASDIFF_VERSION}/oasdiff_${OASDIFF_VERSION}_linux_amd64.tar.gz" \
+            | sudo tar -xz -C /usr/local/bin oasdiff
+          oasdiff --version
+
+      - name: OpenAPI breaking changes - microservice-a
+        id: oasdiff-a
+        continue-on-error: true
+        run: |
+          BASE_REF="${{ steps.base.outputs.ref }}"
+          SPEC="microservice-a/docs/openapi.yaml"
+          BASE_SPEC="/tmp/openapi-base-a.yaml"
+          git fetch origin "${BASE_REF}" --depth=1 2>/dev/null || true
+
+          if ! git show "origin/${BASE_REF}:${SPEC}" > "$BASE_SPEC" 2>/dev/null; then
+            echo "No base specification found for ${SPEC}; skipping comparison."
+            echo "has_breaking=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          if [ ! -f "$SPEC" ]; then
+            echo "No current specification found for ${SPEC}; skipping comparison."
+            echo "has_breaking=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          RESULT=$(oasdiff breaking "$BASE_SPEC" "$SPEC" 2>&1 || true)
+          if [ -n "$RESULT" ]; then
+            echo "$RESULT"
+            echo "has_breaking=true" >> "$GITHUB_OUTPUT"
+            {
+              echo "breaking_changes<<OASDIFF_EOF"
+              echo "$RESULT"
+              echo "OASDIFF_EOF"
+            } >> "$GITHUB_OUTPUT"
+          else
+            echo "has_breaking=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: OpenAPI breaking changes - microservice-b
+        id: oasdiff-b
+        continue-on-error: true
+        run: |
+          BASE_REF="${{ steps.base.outputs.ref }}"
+          SPEC="microservice-b/docs/openapi.yaml"
+          BASE_SPEC="/tmp/openapi-base-b.yaml"
+          git fetch origin "${BASE_REF}" --depth=1 2>/dev/null || true
+
+          if ! git show "origin/${BASE_REF}:${SPEC}" > "$BASE_SPEC" 2>/dev/null; then
+            echo "No base specification found for ${SPEC}; skipping comparison."
+            echo "has_breaking=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          if [ ! -f "$SPEC" ]; then
+            echo "No current specification found for ${SPEC}; skipping comparison."
+            echo "has_breaking=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          RESULT=$(oasdiff breaking "$BASE_SPEC" "$SPEC" 2>&1 || true)
+          if [ -n "$RESULT" ]; then
+            echo "$RESULT"
+            echo "has_breaking=true" >> "$GITHUB_OUTPUT"
+            {
+              echo "breaking_changes<<OASDIFF_EOF"
+              echo "$RESULT"
+              echo "OASDIFF_EOF"
+            } >> "$GITHUB_OUTPUT"
+          else
+            echo "has_breaking=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Comment breaking changes on PR
+        if: |
+          github.event_name == 'pull_request' &&
+          (steps.oasdiff-a.outputs.has_breaking == 'true' ||
+           steps.oasdiff-b.outputs.has_breaking == 'true')
+        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7
+        env:
+          OASDIFF_A: ${{ steps.oasdiff-a.outputs.breaking_changes || 'No breaking changes reported' }}
+          OASDIFF_B: ${{ steps.oasdiff-b.outputs.breaking_changes || 'No breaking changes reported' }}
+        with:
+          script: |
+            const body = [
+              '## OpenAPI breaking changes detected',
+              '',
+              `Base branch: \`${{ steps.base.outputs.ref }}\``,
+              '',
+              '### microservice-a',
+              '```',
+              process.env.OASDIFF_A,
+              '```',
+              '',
+              '### microservice-b',
+              '```',
+              process.env.OASDIFF_B,
+              '```',
+              '',
+              'Review compatibility before merging.',
+            ].join('\n');
+            await github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body,
+            });
+
+      - name: Login GHCR
+        run: |
+          echo "${{ secrets.GITHUB_TOKEN }}" \
+            | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+
+      - name: Start simulation environment
+        working-directory: simulation
+        timeout-minutes: 8
+        run: docker compose up -d --build --wait
+
+      - name: Verify service health
+        run: |
+          curl --retry 12 --retry-delay 5 --retry-connrefused -sf \
+            "${{ env.BASE_URL }}/actuator/health" | grep -q '"status":"UP"'
+          curl --retry 12 --retry-delay 5 --retry-connrefused -sf \
+            "${{ env.MSVC_B_URL }}/actuator/health" | grep -q '"status":"UP"'
+
+      - name: Setup JDK ${{ env.JAVA_VERSION }}
+        uses: actions/setup-java@c1e323688fd81a25caa38c78aa6df2d33d3e20d9 # v4
+        with:
+          java-version: ${{ env.JAVA_VERSION }}
+          distribution: ${{ env.JAVA_DIST }}
+          cache: maven
+
+      - name: API Contract - Karate contract tests
+        working-directory: tests/functional-karate
+        run: |
+          mvn test \
+            -Dkarate.env=${{ env.KARATE_ENV }} \
+            -DbaseUrl=${{ env.BASE_URL }} \
+            -Dtest=RecargaFlowRunner#testContratoMicroservicios \
+            --no-transfer-progress
+
+      - name: Publish contract reports
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: api-contract-report-${{ inputs.artifact_suffix }}
+          path: |
+            tests/functional-karate/target/karate-reports/
+            tests/functional-karate/target/surefire-reports/
+          retention-days: 30
+          if-no-files-found: warn
+
+      - name: Stop simulation environment
+        if: always()
+        working-directory: simulation
+        run: docker compose down -v --remove-orphans
+
+      - name: Quality Gate - fail on breaking changes
+        if: |
+          steps.oasdiff-a.outputs.has_breaking == 'true' ||
+          steps.oasdiff-b.outputs.has_breaking == 'true'
+        run: |
+          echo "OpenAPI breaking changes detected. Blocking merge."
+          exit 1
+
+  publish:
+    name: Publish API summary
+    runs-on: ubuntu-latest
+    needs: [api-functional, api-integration, api-contract]
+    if: always()
+
+    steps:
+      - name: Write API testing summary
+        run: |
+          {
+            echo "## API Testing"
+            echo ""
+            echo "| Suite | Result |"
+            echo "|-------|--------|"
+            echo "| API Functional | ${{ needs.api-functional.result }} |"
+            echo "| API Integration | ${{ needs.api-integration.result }} |"
+            echo "| API Contract | ${{ needs.api-contract.result }} |"
+            echo ""
+            echo "Artifacts published:"
+            echo "- api-functional-report-${{ inputs.artifact_suffix }}"
+            echo "- api-integration-report-${{ inputs.artifact_suffix }}"
+            echo "- api-contract-report-${{ inputs.artifact_suffix }}"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  quality-gate:
+    name: API Quality Gate
+    runs-on: ubuntu-latest
+    needs: [api-functional, api-integration, api-contract, publish]
+    if: always()
+
+    steps:
+      - name: Evaluate API quality gate
+        run: |
+          FUNCTIONAL="${{ needs.api-functional.result }}"
+          INTEGRATION="${{ needs.api-integration.result }}"
+          CONTRACT="${{ needs.api-contract.result }}"
+
+          {
+            echo "## API Quality Gate"
+            echo ""
+            echo "| Gate | Result |"
+            echo "|------|--------|"
+            echo "| Functional smoke | ${FUNCTIONAL} |"
+            echo "| Integration E2E | ${INTEGRATION} |"
+            echo "| Contract and OpenAPI | ${CONTRACT} |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          if [ "$FUNCTIONAL" != "success" ] || [ "$INTEGRATION" != "success" ] || [ "$CONTRACT" != "success" ]; then
+            echo "API Quality Gate failed."
+            exit 1
+          fi
+
+          echo "API Quality Gate passed."

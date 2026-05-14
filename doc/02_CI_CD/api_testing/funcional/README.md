@@ -59,9 +59,11 @@ mvn test -Dkarate.env=ci -Dtest=RecargaFlowRunner#testSmoke
 **Workflow**: `.github/workflows/api-smoke-tests.yml`
 
 **Triggers**:
-- Push a `develop`, `qa`, `uat` cuando hay cambios en microservices, tests o simulación
-- Pull Requests hacia esas ramas
-- `workflow_dispatch` (manual)
+- Push a `feature/**` → `testing-factory.yml` (smoke + integración + contrato)
+- Push a `E`, `A` → `golden-pipeline-testing.yml` (suite completa)
+- Pull Requests hacia `E` → `testing-factory.yml`
+- Pull Requests hacia `A`, `F` → `golden-pipeline-testing.yml`
+- `workflow_dispatch` (manual) — `api-smoke-tests.yml`
 
 **Jobs**:
 1. Checkout + JDK 17 + Maven cache
