@@ -15,18 +15,17 @@
 #   PRODUCCION → prod   · Producción
 #   *          → env-e  · ramas tipo `feature/*`, etc.: overlay desarrollo
 #
-# Momentos y política de Quality Gate (QG):
+# Política de Quality Gate (QG) — solo corre en 4 momentos:
 #
-#   Dirección feature → E  (push feature/**, push E, PR base E):
-#     Build + Test + QG INFORMATIVO  → Publish y Deliver OMITIDOS en PR y feature push.
-#     Publish + Deliver solo en push E (post-merge).
+#   PR  feature/* → E  (pull_request, base_ref=E)   → QG INFORMATIVO  (no bloquea merge)
+#   Push E        (post-merge feature→E)             → QG ESTRICTO     (bloquea Publish)
+#   Push A        (post-merge E→A)                   → QG ESTRICTO     (bloquea Publish)
+#   Push F        (post-merge A→F)                   → QG ESTRICTO     (bloquea Publish)
 #
-#   Dirección E → A/F/PROD  (PR base A, F, PRODUCCION):
-#     Build + Test + QG ESTRICTO (bloqueante) → Publish y Deliver OMITIDOS en PR.
-#     Publish + Deliver solo en push A/F/PROD (post-merge).
+#   QG no corre en: push feature/**, PR base A/F/PRODUCCION, push PRODUCCION.
 #
-#   QG informativo  = continue-on-error: true  (falla el step, no el job)
-#   QG estricto     = continue-on-error: false (falla el job y bloquea Publish)
+#   QG informativo = continue-on-error: true   (falla el step, el job sigue)
+#   QG estricto    = continue-on-error: false  (falla el job, bloquea Publish/Deliver)
 #
 # Mapeo ante PR: usar **base_ref** como destino lógico (ambiente donde se fusionará),
 # no la rama sintética de merge.
@@ -160,11 +159,16 @@ jobs:
 
 # ------------------------------------------------------------------------------
 # JOB 3 – Quality Gates (Gitleaks + SonarCloud + Trivy Filesystem)
+# Corre solo en: PR feature→E (informativo) | push E/A/F (estricto).
+# Omitido en: push feature/**, PR base A/F/PRODUCCION, push PRODUCCION.
 # ------------------------------------------------------------------------------
   quality-gates:
     name: "3 · Quality Gates · Secrets + Sonar + Trivy FS [${{ inputs.microservice_name }}]"
     runs-on: ubuntu-latest
     needs: test
+    if: |
+      (github.event_name == 'pull_request' && github.base_ref == 'E') ||
+      (github.event_name == 'push' && (github.ref_name == 'E' || github.ref_name == 'A' || github.ref_name == 'F'))
     permissions:
       contents: read
       security-events: write
@@ -219,14 +223,8 @@ jobs:
           mkdir -p build/classes/java/main build/classes/java/test
 
       - name: "Quality Gates · SonarCloud analisis de codigo"
-        # Informativo (feature→E): push feature/**, push E, PR base E.
-        # Estricto    (E→A/F/PROD): PR base A/F/PRODUCCION y push a A/F/PRODUCCION.
-        continue-on-error: >-
-          ${{
-            (github.event_name == 'push' && startsWith(github.ref_name, 'feature/')) ||
-            (github.event_name == 'push' && github.ref_name == 'E') ||
-            (github.event_name == 'pull_request' && github.base_ref == 'E')
-          }}
+        # Informativo: PR feature→E (base_ref=E). Estricto: push E/A/F.
+        continue-on-error: ${{ github.event_name == 'pull_request' && github.base_ref == 'E' }}
         uses: SonarSource/sonarcloud-github-action@e44258b109568baa0df60ed515909fc6c72cba92 # v3.0.0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -235,14 +233,8 @@ jobs:
           projectBaseDir: ${{ inputs.microservice_name }}
 
       - name: "Quality Gates · Trivy filesystem scan (JAR + dependencias)"
-        # Informativo (feature→E): push feature/**, push E, PR base E.
-        # Estricto    (E→A/F/PROD): PR base A/F/PRODUCCION y push a A/F/PRODUCCION.
-        continue-on-error: >-
-          ${{
-            (github.event_name == 'push' && startsWith(github.ref_name, 'feature/')) ||
-            (github.event_name == 'push' && github.ref_name == 'E') ||
-            (github.event_name == 'pull_request' && github.base_ref == 'E')
-          }}
+        # Informativo: PR feature→E (base_ref=E). Estricto: push E/A/F.
+        continue-on-error: ${{ github.event_name == 'pull_request' && github.base_ref == 'E' }}
         uses: aquasecurity/trivy-action@76071ef0d7ec797419534a183b498b4d6366cf37 # 0.30.0
         with:
           scan-type: fs
@@ -266,7 +258,7 @@ jobs:
 # JOB 4 – Publish (Docker build + image scan + push GHCR)
 # Solo corre tras el merge: push a E/A/F/PRODUCCION o workflow_dispatch.
 # En PR (cualquier base) y en push a feature/* → se omite.
-# La imagen solo se construye y publica cuando el código fue aprobado y mergeado.
+# Acepta quality-gates 'skipped' (push PRODUCCION no corre QG por diseño).
 # ------------------------------------------------------------------------------
   publish:
     name: "4 · Publish · Docker build + scan + GHCR [${{ inputs.microservice_name }}]"
@@ -274,7 +266,7 @@ jobs:
     needs: [build, quality-gates]
     if: |
       always() &&
-      needs.quality-gates.result == 'success' &&
+      (needs.quality-gates.result == 'success' || needs.quality-gates.result == 'skipped') &&
       (
         github.event_name == 'workflow_dispatch' ||
         (
