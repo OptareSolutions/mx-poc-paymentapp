@@ -101,9 +101,9 @@ mx-poc-paymentapp/
 ??? tests/                              # Karate, Selenium, k6
 ??? demo/
 ?   ??? README.md                   # indice: scripts + enlaces
-?   ??? break-contract.ps1          # DEMO BREAK 1
-?   ??? break-behavior.ps1          # DEMO BREAK 2
-?   ??? restore.ps1
+?   ??? break-contract.ps1 / .sh    # DEMO BREAK 1 (Windows / macOS)
+?   ??? break-behavior.ps1 / .sh    # DEMO BREAK 2
+?   ??? restore.ps1 / .sh
 ?   ??? DEMO_GUIDE.md
 ??? doc/02_CI_CD/
     ??? README.md
@@ -138,7 +138,7 @@ Triggers en **`feature/**`**, **`E`**, **`A`**, **`F`**, **`PRODUCCION`** con fi
 
 ### Casos verde y rojo (demo)
 
-Para una matriz de **qué falla y dónde** (contrato OpenAPI, Karate, E2E Deliver, cobertura, Trivy, OPERACIONES, Golden), usar la sección **«Casos de demostración: camino verde vs fallos esperados»** en [`doc/02_CI_CD/gitflow-pipeline-strategy.md`](doc/02_CI_CD/gitflow-pipeline-strategy.md). Los scripts **`demo/break-contract.ps1`** y **`demo/break-behavior.ps1`** aplican roturas reproducibles; **`demo/restore.ps1`** revierte.
+Para una matriz de **qué falla y dónde** (contrato OpenAPI, Karate, E2E Deliver, cobertura, Trivy, OPERACIONES, Golden), usar la sección **«Casos de demostración: camino verde vs fallos esperados»** en [`doc/02_CI_CD/gitflow-pipeline-strategy.md`](doc/02_CI_CD/gitflow-pipeline-strategy.md). Scripts equivalentes: **`demo/break-contract.ps1`** / **`demo/break-contract.sh`**, **`demo/break-behavior.ps1`** / **`demo/break-behavior.sh`**, **`demo/restore.ps1`** / **`demo/restore.sh`** (en macOS/Linux: `chmod +x demo/*.sh` y ejecutar con `./demo/...`).
 
 ### Pipeline de integración (manual)
 

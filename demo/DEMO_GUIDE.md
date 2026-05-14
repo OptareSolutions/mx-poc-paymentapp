@@ -76,8 +76,9 @@ Con código compatible y PRs limpios, los workflows llegan a completar según ra
 
 1. Desde **`E`:**  
    `git fetch origin && git checkout -b feature/demo-break1 origin/E`
-2. Ejecutar:  
-   `.\demo\break-contract.ps1`
+2. Ejecutar (elige uno):  
+   - **Windows:** `.\demo\break-contract.ps1`  
+   - **macOS / Linux:** `chmod +x demo/*.sh` (solo la primera vez), luego `./demo/break-contract.sh`
 3. Commit y push:  
    `git add . && git commit -m "demo: BREAK 1 contrato" && git push -u origin feature/demo-break1`
 4. Abrir **PR → base `E`**.
@@ -108,8 +109,19 @@ Tras tener imágenes coherentes en el overlay de origen:
 
 ### Restaurar
 
+**Windows (PowerShell):**
+
 ```powershell
 .\demo\restore.ps1
+git add .
+git commit -m "demo: restaurar contrato"
+git push
+```
+
+**macOS / Linux:**
+
+```bash
+./demo/restore.sh
 git add .
 git commit -m "demo: restaurar contrato"
 git push
@@ -126,7 +138,7 @@ Se activa una **validación de negocio** (monto mínimo **$100**) en **microserv
 ### Camino recomendado
 
 1. `git checkout -b feature/demo-break2 origin/E`
-2. `.\demo\break-behavior.ps1`
+2. **Windows:** `.\demo\break-behavior.ps1` — **macOS / Linux:** `./demo/break-behavior.sh`
 3. `git add . && git commit -m "demo: BREAK 2 comportamiento" && git push -u origin feature/demo-break2`
 4. **PR → `E`** y **merge** cuando quieras mostrar el fallo en integración.
 
@@ -140,8 +152,19 @@ falla (por ejemplo esperaba **201** y recibe **400** con mensaje de monto mínim
 
 ### Restaurar
 
+**Windows (PowerShell):**
+
 ```powershell
 .\demo\restore.ps1
+git add .
+git commit -m "demo: restaurar comportamiento"
+git push
+```
+
+**macOS / Linux:**
+
+```bash
+./demo/restore.sh
 git add .
 git commit -m "demo: restaurar comportamiento"
 git push
