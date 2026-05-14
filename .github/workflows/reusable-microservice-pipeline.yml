@@ -16,9 +16,10 @@
 #   *          → env-e  · ramas tipo `feature/*`, etc.: overlay desarrollo
 #
 # Momentos (caller `pipeline-microservice-*.yml`):
-#   · push sobre feature/*, E, A, F, PRODUCCIÓN  → ejecuta reproducible hasta Publish (+ Deliver si `push|dispatch`)
-#   · pull_request ↔ base branch ∈ {E, A, F, PRODUCCIÓN} típico head feature/*
-#       ⇒ validación antes de fusionar; Deliver sigue sólo después del merge (`push`).
+#   · push sobre feature/*   → Build + Test + Quality Gates (informativo) ÚNICAMENTE.
+#                               Publish (imagen) y Deliver (GitOps) se omiten.
+#   · push sobre E/A/F/PROD  → Flujo completo hasta Deliver + GitOps.
+#   · pull_request → base ∈ {E,A,F,PROD}  → validación; Deliver solo tras merge.
 #
 # Mapeo ante PR: usar **base_ref** como destino lógico (ambiente donde se fusionará),
 # no la rama sintética de merge.
@@ -212,6 +213,8 @@ jobs:
           mkdir -p build/classes/java/main build/classes/java/test
 
       - name: "Quality Gates · SonarCloud analisis de codigo"
+        # Informativo en feature/* (continue-on-error); bloqueante en troncales.
+        continue-on-error: ${{ github.event_name == 'push' && startsWith(github.ref_name, 'feature/') }}
         uses: SonarSource/sonarcloud-github-action@e44258b109568baa0df60ed515909fc6c72cba92 # v3.0.0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -220,6 +223,8 @@ jobs:
           projectBaseDir: ${{ inputs.microservice_name }}
 
       - name: "Quality Gates · Trivy filesystem scan (JAR + dependencias)"
+        # Informativo en feature/* (continue-on-error); bloqueante en troncales.
+        continue-on-error: ${{ github.event_name == 'push' && startsWith(github.ref_name, 'feature/') }}
         uses: aquasecurity/trivy-action@76071ef0d7ec797419534a183b498b4d6366cf37 # 0.30.0
         with:
           scan-type: fs
@@ -241,11 +246,31 @@ jobs:
 
 # ------------------------------------------------------------------------------
 # JOB 4 – Publish (Docker build + image scan + push GHCR)
+# Solo corre en ramas troncales (E/A/F/PRODUCCION) después del merge, o en
+# pull_request (imagen provisional sin push) o workflow_dispatch.
+# En push a feature/* se omite: Build+Test+QualityGates son suficientes como
+# feedback rápido sin publicar imagen ni desplegar.
 # ------------------------------------------------------------------------------
   publish:
     name: "4 · Publish · Docker build + scan + GHCR [${{ inputs.microservice_name }}]"
     runs-on: ubuntu-latest
     needs: [build, quality-gates]
+    if: |
+      always() &&
+      needs.quality-gates.result == 'success' &&
+      (
+        github.event_name == 'workflow_dispatch' ||
+        github.event_name == 'pull_request' ||
+        (
+          github.event_name == 'push' &&
+          (
+            github.ref_name == 'E' ||
+            github.ref_name == 'A' ||
+            github.ref_name == 'F' ||
+            github.ref_name == 'PRODUCCION'
+          )
+        )
+      )
     permissions:
       contents: read
       packages: write
