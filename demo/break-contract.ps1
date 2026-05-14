@@ -1,24 +1,22 @@
 ﻿# ══════════════════════════════════════════════════════════════════════════════
 # DEMO BREAK 1: Ruptura de Contrato Inter-Servicios
 # ══════════════════════════════════════════════════════════════════════════════
-# Efecto:    pipeline-integration.yml Job 2 (Testes Contrato) FALLA
-# Branch:    develop
-# Causa:     microservice-b renombra campos del DTO público (telefono→phone,
-#            nombre→fullName). El propio pipeline de microservice-b PASA (sus
-#            tests unitarios se actualizan en este script). La ruptura solo se
-#            detecta en el pipeline de integración al intentar promover env-e→env-a.
+# Efecto:    Karate / oasdiff en CI detectan consumo roto (Testing Factory o Golden)
+# Ramas:     feature/* -> PR base E (recomendado); opcional pipeline-integration manual
+# Causa:     microservice-b renombra DTO publico (telefono->phone, nombre->fullName).
+#            Tests unitarios de B se actualizan en este script => pipeline de B puede
+#            pasar build+test en feature; la ruptura aparece al validar contrato entre MS.
 #
-# Timeline demo:
-#   1. Pipelines en verde ✅ (todos los ambientes)
-#   2. Ejecutar este script  (actualizan DTO + test unitario de microservice-b)
-#   3. git add . && git commit -m "demo: BREAK 1 contrato" && git push origin develop
-#   4. pipeline-microservice-b.yml → Job 1 PASA ✅ (tests unitarios actualizados)
-#      → Job 3 pusha imagen env-e-{sha} al GHCR   ✅
-#   5. Trigger manual: pipeline-integration.yml  (develop → qa)
-#   6. Job 2 (Testes Contrato) FALLA ❌
-#      Karate: match response.telefono == '4544'  ← field 'telefono' ya no existe
-#      La promoción a env-a/QA queda BLOQUEADA
-#   7. Ejecutar restore.ps1 → vuelve a verde ✅
+# Timeline demo (recomendado):
+#   1. git checkout -b feature/demo-break1 origin/E
+#   2. Ejecutar este script
+#   3. git add . ; git commit -m "demo: BREAK 1 contrato" ; git push -u origin feature/demo-break1
+#   4. Abrir PR hacia E
+#   5. testing-factory / reusable-api-testing y/o pipeline-contrato-openapi FALLAN
+#   6. restore.ps1 + commit + push
+#
+# Alternativa manual: pipeline-integration (workflow_dispatch) E->A con imagen origen
+# que ya contenga este cambio; falla en job de contrato Karate.
 # ══════════════════════════════════════════════════════════════════════════════
 
 $ErrorActionPreference = "Stop"
@@ -28,10 +26,15 @@ $repoRoot  = Split-Path -Parent $scriptDir
 $dtoFile  = Join-Path $repoRoot "microservice-b\src\main\java\com\att\paymentbox\customerprofile\dto\CustomerProfileDto.java"
 $testFile = Join-Path $repoRoot "microservice-b\src\test\java\com\att\paymentbox\customerprofile\controller\CustomerControllerTest.java"
 
-# ── Paso 1: Romper el DTO público ────────────────────────────────────────────
-Write-Host "⚠️  [DEMO BREAK 1] Renombrando campos del contrato en CustomerProfileDto..." -ForegroundColor Yellow
+# --- Romper el DTO publico ---
+Write-Host "[DEMO BREAK 1] Renombrando campos del contrato en CustomerProfileDto..." -ForegroundColor Yellow
 
 $content = Get-Content $dtoFile -Raw
+
+if ($content -notmatch 'private String telefono;' -and $content -match 'private String phone;') {
+    Write-Error "El DTO ya parece roto (phone/fullName). Ejecuta restore.ps1 o partes de E limpio."
+    exit 1
+}
 
 $content = $content `
     -replace 'private String telefono;', 'private String phone;       // BROKEN: era "telefono"' `
@@ -46,12 +49,10 @@ $content = $content `
     -replace 'return nombre;',            'return fullName;'
 
 [System.IO.File]::WriteAllText($dtoFile, $content, [System.Text.Encoding]::UTF8)
-Write-Host "✅ DTO modificado: 'telefono' → 'phone', 'nombre' → 'fullName'" -ForegroundColor Green
+Write-Host "OK DTO modificado: telefono -> phone, nombre -> fullName" -ForegroundColor Green
 
-# ── Paso 2: Actualizar el test unitario de microservice-b para que compile ───
-#    NOTA: El test se actualiza para que el pipeline de microservice-b PASE.
-#          La ruptura de contrato solo se detecta en pipeline-integration.yml.
-Write-Host "🔧 Actualizando CustomerControllerTest para compilar con nuevo DTO..." -ForegroundColor Yellow
+# --- Actualizar test unitario de microservice-b (compila; CI de contrato sigue rojo) ---
+Write-Host "Actualizando CustomerControllerTest para compilar con nuevo DTO..." -ForegroundColor Yellow
 
 $testContent = Get-Content $testFile -Raw
 
@@ -61,18 +62,14 @@ $testContent = $testContent `
     -replace 'result\.get\(0\)\.getTelefono\(\)', 'result.get(0).getPhone()'
 
 [System.IO.File]::WriteAllText($testFile, $testContent, [System.Text.Encoding]::UTF8)
-Write-Host "✅ Test unitario actualizado — seguirá compilando y pasando" -ForegroundColor Green
+Write-Host "OK Test unitario actualizado" -ForegroundColor Green
 
-# ── Indicaciones ─────────────────────────────────────────────────────────────
 Write-Host ""
-Write-Host "📋 Pasos a seguir para la demo:" -ForegroundColor Cyan
-Write-Host "   1. git add . ; git commit -m 'demo: BREAK 1 - romper contrato DTO' ; git push origin develop"
-Write-Host "   2. Esperar pipeline-microservice-b.yml → PASA ✅ (imagen env-e-{sha} en GHCR)"
-Write-Host "   3. GitHub Actions → Run workflow → pipeline-integration.yml"
-Write-Host "      promote_from: develop  |  promote_to: qa"
-Write-Host "   4. Observar Job 2 '⚠️ DEMO BREAK 1 → Testes Contrato' FALLA ❌"
+Write-Host "Pasos sugeridos:" -ForegroundColor Cyan
+Write-Host "  git checkout -b feature/demo-break1 origin/E   # si aun no"
+Write-Host "  git add ."
+Write-Host "  git commit -m `"demo: BREAK 1 - romper contrato DTO`""
+Write-Host "  git push -u origin feature/demo-break1"
+Write-Host "  # Abrir PR con base E y observar testing-factory / contrato OpenAPI"
 Write-Host ""
-Write-Host "🔍 El campo 'telefono' ya no existe en la respuesta JSON de microservice-b"
-Write-Host "   Karate: match response.telefono == '4544'  ← FAIL"
-Write-Host "   La promoción a env-a (QA) queda BLOQUEADA hasta que microservice-b"
-Write-Host "   corrija el contrato o microservice-a adapte su client." -ForegroundColor Red
+Write-Host "Opcional: Actions -> pipeline-integration.yml -> E -> A (con codigo ya integrado)." -ForegroundColor DarkGray
