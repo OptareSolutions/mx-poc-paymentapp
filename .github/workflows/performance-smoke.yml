@@ -46,9 +46,6 @@ on:
         required: false
         default: false
 
-  schedule:
-    - cron: '0 2 * * *'
-
   workflow_call:
     inputs:
       base_url:
