@@ -81,6 +81,9 @@ public class RecargaService {
         // Verify client still active before persisting
         buscarClienteActivo(request.getTelefonoCliente());
 
+        if (request.getMonto().compareTo(new java.math.BigDecimal("100")) < 0) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Monto mínimo $100");
+        }
 
         String folio = "B-" + UUID.randomUUID().toString().substring(0, 5).toUpperCase();
 
