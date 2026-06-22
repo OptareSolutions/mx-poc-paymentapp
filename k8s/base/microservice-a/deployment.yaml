@@ -52,6 +52,9 @@ spec:
               value: "http://mock-operador:4010"
             - name: MOCK_RECIBO_URL
               value: "http://mock-recibo:4010"
+            # PoC TRA-36 T2 (2026-05-14): marcador reproducible en runtime (kubectl describe pod)
+            - name: POC_MS_A_DEPLOY_MARKER
+              value: "TRA-36-T2-2026-05-14"
           readinessProbe:
             httpGet:
               path: /actuator/health/readiness
